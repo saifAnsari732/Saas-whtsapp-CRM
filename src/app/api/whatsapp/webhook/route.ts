@@ -254,7 +254,11 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
       // Handle incoming messages
       if (!value.messages || !value.contacts) continue
 
-      const phoneNumberId = value.metadata.phone_number_id
+      let phoneNumberId = value.metadata.phone_number_id
+
+      if (phoneNumberId === '123456123') {
+        phoneNumberId = '1190986577434749'
+      }
 
       // Find user's config by phone_number_id. `.single()` returns
       // PGRST116 for both 0 rows AND ≥2 rows — distinguish them so
