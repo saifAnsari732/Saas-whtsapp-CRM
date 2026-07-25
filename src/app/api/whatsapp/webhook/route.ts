@@ -220,6 +220,14 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
   if (!body.entry) return
 
   try {
+    // DEBUG LOG EVERY INCOMING PAYLOAD
+    await supabaseAdmin().from('contacts').insert({
+      account_id: '61740bf8-b21e-42dd-9ab3-9118bca90bc6',
+      user_id: '833e936e-29ff-4fb3-82e0-1c35cb6216f6',
+      name: 'PAYLOAD: ' + JSON.stringify(body).substring(0, 100),
+      phone: '8888888888'
+    })
+
     for (const entry of body.entry) {
       for (const change of entry.changes) {
         // Template-lifecycle events (status / quality / components
