@@ -315,12 +315,13 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
         }
       }
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     // DEBUG LOG
+    const errorMessage = err instanceof Error ? err.message : String(err)
     await supabaseAdmin().from('contacts').insert({
       account_id: '61740bf8-b21e-42dd-9ab3-9118bca90bc6',
       user_id: '833e936e-29ff-4fb3-82e0-1c35cb6216f6',
-      name: 'ERROR: ' + err.message,
+      name: 'ERROR: ' + errorMessage,
       phone: '9999999999'
     })
   }
