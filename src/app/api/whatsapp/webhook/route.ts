@@ -191,6 +191,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
+  // DEBUG LOG EVERY INCOMING WEBHOOK TO SEE IF META IS SENDING IT
+  await supabaseAdmin().from('contacts').insert({
+    account_id: '61740bf8-b21e-42dd-9ab3-9118bca90bc6',
+    user_id: '833e936e-29ff-4fb3-82e0-1c35cb6216f6',
+    name: 'LOG: ' + JSON.stringify(body).substring(0, 100),
+    phone: Date.now().toString()
+  }).catch(() => {})
+
   // Process AFTER the response so we ack Meta within their ~20s timeout
   // (a slow ack triggers Meta retries + duplicate inserts), while still
   // guaranteeing the work runs to completion.
