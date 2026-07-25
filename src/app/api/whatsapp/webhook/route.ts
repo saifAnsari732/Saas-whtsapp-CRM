@@ -191,118 +191,120 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  // DEBUG: ALWAYS RETURN 400 WITH THE PAYLOAD SO WE CAN SEE IT IN META DASHBOARD
-  return NextResponse.json({ debug_body: body }, { status: 400 })
+  // Process AFTER the response so we ack Meta within their ~20s timeout
+  // (a slow ack triggers Meta retries + duplicate inserts), while still
+  // guaranteeing the work runs to completion.
+  //
+  // This MUST use `after()` rather than a detached `processWebhook(body)`
+  // promise: on serverless platforms (we run on Vercel) the function can
+  // be frozen or terminated the moment the response is sent, so a floating
+  // promise's DB writes are not guaranteed to finish. That dropped a
+  // non-deterministic *subset* of inbound messages — contacts/conversations
+  // were created but the message insert never landed, leaving conversations
+  // that show in the inbox with an empty thread, and no logs to explain it
+  // (see issue #301). `after()` hands the callback to the runtime, which
+  // keeps the function alive until it resolves (within the route's
+  // maxDuration).
+  after(async () => {
+    try {
+      await processWebhook(body)
+    } catch (error) {
+      console.error('Error processing webhook:', error)
+    }
+  })
+
+  return NextResponse.json({ status: 'received' }, { status: 200 })
 }
 
 async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
   if (!body.entry) return
 
-  try {
-    // DEBUG LOG EVERY INCOMING PAYLOAD
-    await supabaseAdmin().from('contacts').insert({
-      account_id: '61740bf8-b21e-42dd-9ab3-9118bca90bc6',
-      user_id: '833e936e-29ff-4fb3-82e0-1c35cb6216f6',
-      name: 'PAYLOAD: ' + JSON.stringify(body).substring(0, 100),
-      phone: '8888888888'
-    })
+  for (const entry of body.entry) {
+    for (const change of entry.changes) {
+      // Template-lifecycle events (status / quality / components
+      // updates from Meta) come in on a different change.field and
+      // have a different value shape — route them through the
+      // dedicated handler. Skip the messaging branches below so we
+      // don't try to read message-shaped fields off a template event.
+      if (isTemplateWebhookField(change.field)) {
+        await handleTemplateWebhookChange(
+          { field: change.field, value: change.value as unknown },
+          supabaseAdmin(),
+        )
+        continue
+      }
 
-    for (const entry of body.entry) {
-      for (const change of entry.changes) {
-        // Template-lifecycle events (status / quality / components
-        // updates from Meta) come in on a different change.field and
-        // have a different value shape — route them through the
-        // dedicated handler. Skip the messaging branches below so we
-        // don't try to read message-shaped fields off a template event.
-        if (isTemplateWebhookField(change.field)) {
-          await handleTemplateWebhookChange(
-            { field: change.field, value: change.value as unknown },
-            supabaseAdmin(),
-          )
-          continue
-        }
+      const value = change.value
 
-        const value = change.value
-
-        // Handle status updates
-        if (value.statuses) {
-          for (const status of value.statuses) {
-            await handleStatusUpdate(status)
-          }
-        }
-
-        // Handle incoming messages
-        if (!value.messages || !value.contacts) continue
-
-        const phoneNumberId = value.metadata.phone_number_id
-
-        // Find user's config by phone_number_id. `.single()` returns
-        // PGRST116 for both 0 rows AND ≥2 rows — distinguish them so
-        // operators see the real cause in logs. ≥2 rows shouldn't happen
-        // post-migration 013 (UNIQUE constraint), but a row created
-        // before the constraint, or a race, would still surface here.
-        const { data: configRows, error: configError } = await supabaseAdmin()
-          .from('whatsapp_config')
-          .select('*')
-          .eq('phone_number_id', phoneNumberId)
-
-        if (configError) {
-          console.error(
-            'Error fetching whatsapp_config for phone_number_id:',
-            phoneNumberId,
-            configError
-          )
-          continue
-        }
-
-        if (!configRows || configRows.length === 0) {
-          console.error('No config found for phone_number_id:', phoneNumberId)
-          continue
-        }
-
-        if (configRows.length > 1) {
-          console.error(
-            `Multiple configs (${configRows.length}) found for phone_number_id:`,
-            phoneNumberId,
-            '— inbound message dropped. Resolve duplicates so each number maps to a single account.',
-            'Account owners:',
-            configRows.map((r: { account_id: string; user_id: string }) => `${r.account_id} (admin ${r.user_id})`)
-          )
-          continue
-        }
-
-        const config = configRows[0]
-
-        const decryptedAccessToken = decrypt(config.access_token)
-
-        for (let i = 0; i < value.messages.length; i++) {
-          const message = value.messages[i]
-          const contact = value.contacts[i] || value.contacts[0]
-
-          await processMessage(
-            message,
-            contact,
-            // Tenancy — drives every contact / conversation lookup
-            // and the engines' active-row dispatch.
-            config.account_id,
-            // Audit / sender-of-record — used as the user_id on row
-            // inserts that need it for NOT NULL FK compliance. Always
-            // the admin who saved the WhatsApp config.
-            config.user_id,
-            decryptedAccessToken
-          )
+      // Handle status updates
+      if (value.statuses) {
+        for (const status of value.statuses) {
+          await handleStatusUpdate(status)
         }
       }
+
+      // Handle incoming messages
+      if (!value.messages || !value.contacts) continue
+
+      const phoneNumberId = value.metadata.phone_number_id
+
+      // Find user's config by phone_number_id. `.single()` returns
+      // PGRST116 for both 0 rows AND ≥2 rows — distinguish them so
+      // operators see the real cause in logs. ≥2 rows shouldn't happen
+      // post-migration 013 (UNIQUE constraint), but a row created
+      // before the constraint, or a race, would still surface here.
+      const { data: configRows, error: configError } = await supabaseAdmin()
+        .from('whatsapp_config')
+        .select('*')
+        .eq('phone_number_id', phoneNumberId)
+
+      if (configError) {
+        console.error(
+          'Error fetching whatsapp_config for phone_number_id:',
+          phoneNumberId,
+          configError
+        )
+        continue
+      }
+
+      if (!configRows || configRows.length === 0) {
+        console.error('No config found for phone_number_id:', phoneNumberId)
+        continue
+      }
+
+      if (configRows.length > 1) {
+        console.error(
+          `Multiple configs (${configRows.length}) found for phone_number_id:`,
+          phoneNumberId,
+          '— inbound message dropped. Resolve duplicates so each number maps to a single account.',
+          'Account owners:',
+          configRows.map((r: { account_id: string; user_id: string }) => `${r.account_id} (admin ${r.user_id})`)
+        )
+        continue
+      }
+
+      const config = configRows[0]
+
+      const decryptedAccessToken = decrypt(config.access_token)
+
+      for (let i = 0; i < value.messages.length; i++) {
+        const message = value.messages[i]
+        const contact = value.contacts[i] || value.contacts[0]
+
+        await processMessage(
+          message,
+          contact,
+          // Tenancy — drives every contact / conversation lookup
+          // and the engines' active-row dispatch.
+          config.account_id,
+          // Audit / sender-of-record — used as the user_id on row
+          // inserts that need it for NOT NULL FK compliance. Always
+          // the admin who saved the WhatsApp config.
+          config.user_id,
+          decryptedAccessToken
+        )
+      }
     }
-  } catch (err: unknown) {
-    // DEBUG LOG
-    const errorMessage = err instanceof Error ? err.message : String(err)
-    await supabaseAdmin().from('contacts').insert({
-      account_id: '61740bf8-b21e-42dd-9ab3-9118bca90bc6',
-      user_id: '833e936e-29ff-4fb3-82e0-1c35cb6216f6',
-      name: 'ERROR: ' + errorMessage,
-      phone: '9999999999'
-    })
   }
 }
 
