@@ -870,14 +870,16 @@ export function TemplateManager() {
                       </span>
                     </div>
                   )}
-                  <Input
-                    placeholder={t('mediaUrlPlaceholder', { format: form.header_format })}
-                    value={form.header_media_url}
-                    onChange={(e) =>
-                      setForm({ ...form, header_media_url: e.target.value })
-                    }
-                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-                  />
+                  {form.header_format !== 'image' && (
+                    <Input
+                      placeholder={t('mediaUrlPlaceholder', { format: form.header_format })}
+                      value={form.header_media_url}
+                      onChange={(e) =>
+                        setForm({ ...form, header_media_url: e.target.value })
+                      }
+                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                    />
+                  )}
                   {form.header_format === 'image' && form.header_media_url && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
