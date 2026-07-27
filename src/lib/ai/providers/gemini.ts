@@ -1,11 +1,11 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { AiError } from '../types'
+import { AiError, type AiUsage } from '../types'
 import { type GenerateArgs } from '../generate'
 
 export async function generateGemini(
   args: Omit<GenerateArgs, 'config'> & { apiKey: string; model: string; timeoutMs?: number },
-): Promise<{ text: string; usage: any }> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs } = args
+): Promise<{ text: string; usage: AiUsage }> {
+  const { apiKey, model, systemPrompt, messages } = args
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
@@ -41,18 +41,16 @@ export async function generateGemini(
     }
 
     return { text, usage }
-  } catch (err: any) {
-    if (err.status === 401 || err.message?.includes('API key not valid')) {
+  } catch (err: unknown) {
+    if (err instanceof Error && (err.message?.includes('API key not valid') || (err as {status?: number}).status === 401)) {
       throw new AiError('Invalid Gemini API key', {
         code: 'provider_auth',
         status: 401,
-        cause: err,
       })
     }
     throw new AiError('Gemini generation failed', {
       code: 'provider_error',
       status: 500,
-      cause: err,
     })
   }
 }
