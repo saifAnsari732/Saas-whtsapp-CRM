@@ -391,6 +391,31 @@ export function Step2SelectAudience({
         </div>
       )}
 
+      {audience.type === 'csv' && (
+        <div className="space-y-3 rounded-xl border border-border bg-card/50 p-4">
+          <p className="text-sm font-medium text-foreground">Paste Phone Numbers</p>
+          <p className="text-xs text-muted-foreground">
+            Enter one phone number per line, including the country code (e.g. 919511450924). 
+            Optionally, add a name separated by a comma (e.g. 919511450924,Rahul).
+          </p>
+          <textarea
+            className="w-full h-32 rounded-lg border border-border bg-muted p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
+            placeholder="919876543210,Rahul&#10;919876543211,Amit"
+            value={audience.csvContacts?.map(c => `${c.phone}${c.name ? `,${c.name}` : ''}`).join('\n') ?? ''}
+            onChange={(e) => {
+              const lines = e.target.value.split('\n');
+              const contacts = lines
+                .filter(l => l.trim() !== '')
+                .map(line => {
+                  const [phone, ...nameParts] = line.split(',');
+                  return { phone: phone.trim(), name: nameParts.join(',').trim() || undefined };
+                });
+              onUpdate({ ...audience, csvContacts: contacts });
+            }}
+          />
+        </div>
+      )}
+
       {/* Exclude list — applies regardless of audience type */}
       <div className="rounded-xl border border-border bg-card/50 p-4">
         <div className="mb-3 flex items-center gap-2">
