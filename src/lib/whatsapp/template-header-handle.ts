@@ -14,30 +14,13 @@ import type { TemplatePayload } from '@/lib/whatsapp/template-validators'
  * the same shape.
  */
 
-// Meta's image-header sample limits.
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png']
 
-export async function ensureImageHeaderHandle(
-  payload: TemplatePayload,
-  accessToken: string,
-): Promise<void> {
-  if (payload.header_type !== 'image') return
-  if (payload.header_handle) return // already have one
-  if (!payload.header_media_url) return // validator already requires url-or-handle
-
-  const appId = process.env.META_APP_ID
-  if (!appId) {
-    throw new Error(
-      'Image-header templates need META_APP_ID set (used for Meta’s Resumable Upload). Add it to your environment, or remove the image header.',
-    )
-  }
-
-  // Fetch the sample image bytes (works for our uploaded chat-media URL
-  // and for a manually-pasted public link).
+async function fetchAndUploadHandle(url: string, accessToken: string, appId: string): Promise<string> {
   let res: Response
   try {
-    res = await fetch(payload.header_media_url)
+    res = await fetch(url)
   } catch {
     throw new Error('Could not fetch the header image URL. Make sure it is publicly reachable.')
   }
@@ -70,5 +53,33 @@ export async function ensureImageHeaderHandle(
     mimeType,
     bytes,
   })
-  payload.header_handle = handle
+  
+  return handle;
+}
+
+export async function ensureImageHeaderHandle(
+  payload: TemplatePayload,
+  accessToken: string,
+): Promise<void> {
+  const appId = process.env.META_APP_ID
+  if (!appId) {
+    throw new Error(
+      'Image-header templates need META_APP_ID set (used for Meta’s Resumable Upload). Add it to your environment, or remove the image header.',
+    )
+  }
+
+  if (payload.header_type === 'CAROUSEL' && payload.cards) {
+    for (const card of payload.cards) {
+      if (card.header_format === 'IMAGE' && !card.header_handle && card.header_media_url) {
+        card.header_handle = await fetchAndUploadHandle(card.header_media_url, accessToken, appId);
+      }
+    }
+    return;
+  }
+
+  if (payload.header_type !== 'image') return
+  if (payload.header_handle) return // already have one
+  if (!payload.header_media_url) return // validator already requires url-or-handle
+
+  payload.header_handle = await fetchAndUploadHandle(payload.header_media_url, accessToken, appId);
 }

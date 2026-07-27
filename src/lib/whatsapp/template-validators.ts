@@ -34,6 +34,13 @@ export const TEMPLATE_LIMITS = {
   nameRegex: /^[a-z0-9_]{1,512}$/,
 } as const;
 
+export interface CarouselCard {
+  header_format: 'IMAGE' | 'VIDEO';
+  header_media_url?: string;
+  header_handle?: string;
+  body_text: string;
+}
+
 export interface TemplatePayload {
   name: string;
   category: MessageTemplate['category'];
@@ -45,6 +52,7 @@ export interface TemplatePayload {
   body_text: string;
   footer_text?: string;
   buttons?: TemplateButton[];
+  cards?: CarouselCard[];
   sample_values?: TemplateSampleValues;
 }
 
@@ -326,11 +334,37 @@ export function validateTemplatePayload(payload: TemplatePayload): {
   if (!payload.language?.trim()) {
     throw new Error('Language is required.');
   }
+  
   const bodyVars = validateBody(payload.body_text);
   validateFooter(payload.footer_text);
-  const headerResult = validateHeader(payload);
-  validateButtons(payload.buttons);
-  validateSampleValues(payload, bodyVars.length, headerResult.variableCount);
+  
+  let headerResult = { variableCount: 0 };
+  
+  if (payload.header_type === 'CAROUSEL') {
+    if (!payload.cards || payload.cards.length < 2 || payload.cards.length > 10) {
+      throw new Error('Carousel templates must have between 2 and 10 cards.');
+    }
+    // Meta requires all cards to have identical buttons (type & sequence).
+    // Our UI enforces global buttons for the carousel, so validateButtons runs once on payload.buttons.
+    validateButtons(payload.buttons);
+    
+    // Each card must be validated
+    payload.cards.forEach((card, idx) => {
+      if (!card.header_media_url && !card.header_handle) {
+        throw new Error(`Card #${idx + 1} is missing a header image or video.`);
+      }
+      try {
+        validateBody(card.body_text || ' '); // Validate card body text if any
+      } catch (e: any) {
+        throw new Error(`Card #${idx + 1} Body: ${e.message}`);
+      }
+    });
+  } else {
+    headerResult = validateHeader(payload);
+    validateButtons(payload.buttons);
+    validateSampleValues(payload, bodyVars.length, headerResult.variableCount);
+  }
+
   return {
     bodyVarCount: bodyVars.length,
     headerVarCount: headerResult.variableCount,

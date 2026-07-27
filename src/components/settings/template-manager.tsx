@@ -67,6 +67,7 @@ const categoryColors: Record<string, string> = {
 interface TemplateFormData {
   name: string;
   category: MessageTemplate['category'];
+  template_type: 'STANDARD' | 'CAROUSEL';
   language: string;
   header_format: HeaderFormat;
   header_content: string;
@@ -76,11 +77,13 @@ interface TemplateFormData {
   body_samples: string[];
   footer_text: string;
   buttons: TemplateButton[];
+  cards: { header_format: 'IMAGE' | 'VIDEO'; header_media_url: string; body_text: string }[];
 }
 
 const emptyForm: TemplateFormData = {
   name: '',
   category: 'Marketing',
+  template_type: 'STANDARD',
   language: 'en_US',
   header_format: 'none',
   header_content: '',
@@ -90,6 +93,7 @@ const emptyForm: TemplateFormData = {
   body_samples: [],
   footer_text: '',
   buttons: [],
+  cards: [],
 };
 
 const COMMON_LANGUAGE_CODES = [
@@ -219,16 +223,23 @@ export function TemplateManager() {
       name: form.name.trim(),
       category: form.category,
       language: form.language.trim() || 'en_US',
-      header_type: form.header_format === 'none' ? undefined : form.header_format,
+      header_type: form.template_type === 'CAROUSEL' 
+        ? 'CAROUSEL' 
+        : (form.header_format === 'none' ? undefined : form.header_format),
       header_content:
-        form.header_format === 'text' ? form.header_content.trim() : undefined,
+        form.header_format === 'text' && form.template_type !== 'CAROUSEL' ? form.header_content.trim() : undefined,
       header_media_url:
-        form.header_format !== 'none' && form.header_format !== 'text'
+        form.header_format !== 'none' && form.header_format !== 'text' && form.template_type !== 'CAROUSEL'
           ? form.header_media_url.trim() || undefined
           : undefined,
       body_text: form.body_text.trim(),
-      footer_text: form.footer_text.trim() || undefined,
+      footer_text: form.template_type === 'CAROUSEL' ? undefined : (form.footer_text.trim() || undefined),
       buttons: form.buttons.length > 0 ? form.buttons : undefined,
+      cards: form.template_type === 'CAROUSEL' && form.cards.length > 0 ? form.cards.map(c => ({
+        header_format: c.header_format,
+        header_media_url: c.header_media_url.trim() || undefined,
+        body_text: c.body_text.trim(),
+      })) : undefined,
       sample_values:
         Object.keys(sample_values).length > 0 ? sample_values : undefined,
     };
@@ -239,8 +250,9 @@ export function TemplateManager() {
     setForm({
       name: template.name,
       category: template.category,
+      template_type: template.header_type === 'CAROUSEL' ? 'CAROUSEL' : 'STANDARD',
       language: template.language || 'en_US',
-      header_format: (template.header_type ?? 'none') as HeaderFormat,
+      header_format: (template.header_type === 'CAROUSEL' ? 'none' : (template.header_type ?? 'none')) as HeaderFormat,
       header_content: template.header_content ?? '',
       header_media_url: template.header_media_url ?? '',
       header_sample: template.sample_values?.header?.[0] ?? '',
@@ -248,6 +260,7 @@ export function TemplateManager() {
       body_samples: template.sample_values?.body ?? [],
       footer_text: template.footer_text ?? '',
       buttons: template.buttons ?? [],
+      cards: (template.cards as any[]) ?? [],
     });
     setDialogOpen(true);
   }
@@ -732,7 +745,29 @@ export function TemplateManager() {
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 mt-4">
+              <Label className="text-muted-foreground">Template Type *</Label>
+              <Select
+                value={form.template_type}
+                onValueChange={(val) =>
+                  setForm({
+                    ...form,
+                    template_type: val as 'STANDARD' | 'CAROUSEL',
+                  })
+                }
+              >
+                <SelectTrigger className="w-full bg-muted border-border text-foreground">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border">
+                  <SelectItem value="STANDARD" className="text-popover-foreground">Standard (Text/Image/Video)</SelectItem>
+                  <SelectItem value="CAROUSEL" className="text-popover-foreground">Carousel (Multi-Image Cards)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {form.template_type === 'STANDARD' && (
+            <div className="space-y-2 mt-4">
               <Label className="text-muted-foreground">{t('header')}</Label>
               <Select
                 value={form.header_format}
@@ -863,8 +898,9 @@ export function TemplateManager() {
                 </div>
               )}
             </div>
+            )}
 
-            <div className="space-y-2">
+            <div className="space-y-2 mt-4">
               <Label className="text-muted-foreground">{t('bodyText')}</Label>
               <Textarea
                 placeholder={t('bodyPlaceholder')}
@@ -907,6 +943,7 @@ export function TemplateManager() {
               )}
             </div>
 
+            {form.template_type === 'STANDARD' && (
             <div className="space-y-2">
               <Label className="text-muted-foreground">{t('footer')}</Label>
               <Input
@@ -919,6 +956,90 @@ export function TemplateManager() {
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
               />
             </div>
+            )}
+
+            {form.template_type === 'CAROUSEL' && (
+              <div className="space-y-4 bg-muted/20 p-4 rounded-lg border border-border">
+                <div className="flex items-center justify-between">
+                  <Label className="text-muted-foreground font-semibold">Carousel Cards</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (form.cards.length >= 10) {
+                        toast.error('Maximum 10 cards allowed');
+                        return;
+                      }
+                      setForm({
+                        ...form,
+                        cards: [
+                          ...form.cards,
+                          { header_format: 'IMAGE', header_media_url: '', body_text: '' },
+                        ],
+                      });
+                    }}
+                    className="h-7 text-xs"
+                  >
+                    <Plus className="size-3 mr-1" /> Add Card
+                  </Button>
+                </div>
+                {form.cards.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Add at least 2 cards for a carousel.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {form.cards.map((card, idx) => (
+                      <div key={idx} className="space-y-3 rounded border border-border bg-background p-3 relative">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-2 top-2 h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            const next = [...form.cards];
+                            next.splice(idx, 1);
+                            setForm({ ...form, cards: next });
+                          }}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                        <h4 className="text-sm font-medium">Card {idx + 1}</h4>
+                        
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Header Image URL (Optional)</Label>
+                          <Input
+                            placeholder="https://example.com/image.jpg"
+                            value={card.header_media_url}
+                            onChange={(e) => {
+                              const next = [...form.cards];
+                              next[idx] = { ...card, header_media_url: e.target.value };
+                              setForm({ ...form, cards: next });
+                            }}
+                            className="bg-muted border-border h-8 text-xs text-foreground placeholder:text-muted-foreground"
+                          />
+                        </div>
+                        
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Card Body Text</Label>
+                          <Textarea
+                            placeholder="Card description..."
+                            value={card.body_text}
+                            onChange={(e) => {
+                              const next = [...form.cards];
+                              next[idx] = { ...card, body_text: e.target.value };
+                              setForm({ ...form, cards: next });
+                            }}
+                            rows={2}
+                            maxLength={160}
+                            className="bg-muted border-border text-foreground placeholder:text-muted-foreground resize-none text-xs"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">

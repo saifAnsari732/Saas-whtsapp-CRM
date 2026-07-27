@@ -14,16 +14,21 @@ import type { TemplatePayload } from './template-validators';
 import type { TemplateButton } from '@/types';
 
 export interface MetaComponent {
-  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
+  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS' | 'CAROUSEL';
   format?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
   text?: string;
   buttons?: MetaButtonPayload[];
+  cards?: MetaCarouselCard[];
   example?: {
     header_text?: string[];
     header_url?: string[];
     header_handle?: string[];
     body_text?: string[][];
   };
+}
+
+export interface MetaCarouselCard {
+  components: MetaComponent[];
 }
 
 interface MetaButtonPayload {
@@ -130,6 +135,37 @@ const CATEGORY_TO_META: Record<
   Authentication: 'AUTHENTICATION',
 };
 
+function buildCarouselComponent(payload: TemplatePayload): MetaComponent | null {
+  if (payload.header_type !== 'CAROUSEL' || !payload.cards || payload.cards.length === 0) return null;
+
+  return {
+    type: 'CAROUSEL',
+    cards: payload.cards.map((card) => {
+      const cardComponents: MetaComponent[] = [];
+      const header: MetaComponent = { type: 'HEADER', format: card.header_format };
+      if (card.header_handle) {
+        header.example = { header_handle: [card.header_handle] };
+      } else if (card.header_media_url) {
+        header.example = { header_url: [card.header_media_url] };
+      }
+      cardComponents.push(header);
+
+      if (card.body_text?.trim()) {
+        cardComponents.push({ type: 'BODY', text: card.body_text });
+      }
+
+      if (payload.buttons && payload.buttons.length > 0) {
+        cardComponents.push({
+          type: 'BUTTONS',
+          buttons: payload.buttons.map(buildButtonPayload),
+        });
+      }
+
+      return { components: cardComponents };
+    }),
+  };
+}
+
 /**
  * Assemble the full submit payload (name + category + language +
  * components in canonical order: HEADER → BODY → FOOTER → BUTTONS).
@@ -138,13 +174,22 @@ export function buildMetaTemplatePayload(
   payload: TemplatePayload,
 ): MetaTemplateSubmitPayload {
   const components: MetaComponent[] = [];
-  const header = buildHeaderComponent(payload);
-  if (header) components.push(header);
-  components.push(buildBodyComponent(payload));
-  const footer = buildFooterComponent(payload);
-  if (footer) components.push(footer);
-  const buttons = buildButtonsComponent(payload);
-  if (buttons) components.push(buttons);
+  
+  if (payload.header_type === 'CAROUSEL') {
+    if (payload.body_text?.trim()) {
+      components.push(buildBodyComponent(payload));
+    }
+    const carousel = buildCarouselComponent(payload);
+    if (carousel) components.push(carousel);
+  } else {
+    const header = buildHeaderComponent(payload);
+    if (header) components.push(header);
+    components.push(buildBodyComponent(payload));
+    const footer = buildFooterComponent(payload);
+    if (footer) components.push(footer);
+    const buttons = buildButtonsComponent(payload);
+    if (buttons) components.push(buttons);
+  }
 
   return {
     name: payload.name,

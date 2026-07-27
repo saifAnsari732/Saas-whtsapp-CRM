@@ -7,6 +7,7 @@ import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe'
 import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
+import { dispatchKeywordFlow } from '@/lib/keyword-flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
 import {
@@ -747,14 +748,31 @@ async function processMessage(
           },
     isFirstInboundMessage,
   })
-  const flowConsumed = flowResult.consumed
+  let flowConsumed = flowResult.consumed
+
+  const inboundText = contentText ?? message.text?.body ?? ''
+
+  // Keyword Flow Dispatch
+  // We run this only if the visual Flow runner didn't consume it.
+  if (!flowConsumed && !interactiveReplyId) {
+    const kfResult = await dispatchKeywordFlow({
+      accountId,
+      configOwnerUserId,
+      contactId: contactRecord.id,
+      conversationId: conversation.id,
+      inboundText,
+    })
+    if (kfResult.consumed) {
+      flowConsumed = true; // Mark consumed so AI & Automations don't trigger.
+    }
+  }
 
   // Fire any automations that react to this webhook event. All dispatches
   // run here (not earlier) so the contact, conversation, and inbound
   // message all exist before any step — including send_message — runs.
   // Fire-and-forget: a slow or failing automation must not block the
   // webhook's 200 OK response to Meta.
-  const inboundText = contentText ?? message.text?.body ?? ''
+  // webhook's 200 OK response to Meta.
   const automationTriggers: (
     | 'new_contact_created'
     | 'first_inbound_message'
