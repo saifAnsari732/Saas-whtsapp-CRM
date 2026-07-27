@@ -2,6 +2,7 @@ import {
   AiError,
   type AiConfig,
   type AiUsage,
+  type AiProvider,
   type ChatMessage,
   type GenerateResult,
 } from './types'
