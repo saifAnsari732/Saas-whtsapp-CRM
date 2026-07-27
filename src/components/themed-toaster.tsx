@@ -37,15 +37,9 @@ export function ThemedToaster() {
   const isClient = useIsClient();
   return (
     <Toaster
+      richColors
       theme={isClient ? mode : DEFAULT_MODE}
       position="top-right"
-      toastOptions={{
-        style: {
-          background: "var(--popover)",
-          border: "1px solid var(--border)",
-          color: "var(--popover-foreground)",
-        },
-      }}
     />
   );
 }
