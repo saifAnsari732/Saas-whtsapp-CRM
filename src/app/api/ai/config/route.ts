@@ -96,11 +96,11 @@ export async function POST(request: Request) {
         ? body.system_prompt.trim()
         : null
     const isActive = body.is_active === true
-    const autoReplyEnabled = body.auto_reply_enabled === true
+    const autoReplyEnabled = Boolean(body.auto_reply_enabled)
 
-    let maxPer = Number(body.auto_reply_max_per_conversation)
-    if (!Number.isFinite(maxPer)) maxPer = 3
-    maxPer = Math.min(20, Math.max(1, Math.floor(maxPer)))
+    let maxAutoReplies = typeof body.auto_reply_max_per_conversation === 'number' ? body.auto_reply_max_per_conversation : 3
+    if (!Number.isFinite(maxAutoReplies)) maxAutoReplies = 3
+    maxAutoReplies = Math.min(20, Math.max(1, Math.floor(maxAutoReplies)))
 
     // Handoff routing target for auto-reply. A non-empty string must be a
     // member of this account (else the conversation would be assigned to a
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
           systemPrompt,
           isActive,
           autoReplyEnabled,
-          autoReplyMaxPerConversation: maxPer,
+          autoReplyMaxPerConversation: maxAutoReplies,
           handoffAgentId: null,
           embeddingsApiKey: null,
         })
@@ -217,7 +217,7 @@ export async function POST(request: Request) {
       system_prompt: systemPrompt,
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
-      auto_reply_max_per_conversation: maxPer,
+      auto_reply_max_per_conversation: maxAutoReplies,
     }
     // Only touch the handoff target when the form actually sent the field,
     // so a partial save (e.g. flipping a toggle) doesn't wipe it.
