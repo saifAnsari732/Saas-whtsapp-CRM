@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent } from '@/components/ui/card';
 import { SettingsPanelHead } from './settings-panel-head';
+import { TemplatePreview } from './template-preview';
 import {
   Dialog,
   DialogContent,
@@ -638,7 +639,7 @@ export function TemplateManager() {
           }
         }}
       >
-        <DialogContent className="bg-popover border-border sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-popover border-border sm:max-w-5xl max-h-[90vh] overflow-y-auto w-[90vw]">
           <DialogHeader>
             <DialogTitle className="text-popover-foreground">
               {editingId ? t('dialogEditTitle') : t('dialogNewTitle')}
@@ -657,7 +658,8 @@ export function TemplateManager() {
             </div>
           )}
 
-          <div className="space-y-4 py-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-4">
+            <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label className="text-muted-foreground">{t('templateName')}</Label>
               <Input
@@ -1050,6 +1052,16 @@ export function TemplateManager() {
                   ))}
                 </div>
               )}
+            </div>
+            
+            <div className="pt-2">
+              <TemplatePreview
+                bodyText={form.body_text}
+                headerType={form.header_format}
+                headerMediaUrl={form.header_media_url}
+                footerText={form.footer_text}
+                buttons={form.buttons}
+              />
             </div>
           </div>
 

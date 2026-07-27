@@ -242,6 +242,16 @@ export function Step3Personalize({
         </p>
       </div>
 
+      {template.header_type === 'CAROUSEL' && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <h3 className="text-sm font-semibold text-amber-500">Carousel Template Detected</h3>
+          <p className="mt-2 text-sm text-amber-400">
+            Broadcasting dynamic CAROUSEL templates (with up to 10 unique product cards) requires advanced API mapping. 
+            Currently, the CRM UI only supports flat templates. You can sync Carousel templates, but to send them, please use the API directly or a Catalog link.
+          </p>
+        </div>
+      )}
+
       {mediaHeaderType && (
         <div className="rounded-xl border border-border bg-card/50 p-4">
           <div className="mb-3 flex items-center gap-2">

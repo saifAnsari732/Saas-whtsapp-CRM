@@ -33,6 +33,7 @@ interface MetaTemplateComponent {
   text?: string
   format?: string
   buttons?: MetaButton[]
+  cards?: any[]
   example?: {
     header_text?: string[]
     header_handle?: string[]
@@ -223,14 +224,21 @@ export async function POST() {
       const parsedButtons = parseButtons(buttons?.buttons)
       const sampleValues = extractSampleValues(body, header)
 
+      const carousel = (t.components ?? []).find((c) => c.type === 'CAROUSEL')
+      const isCarousel = !!carousel
+
       const headerFormat = header?.format?.toUpperCase()
-      const headerType =
+      let headerType: string | null = null
+      if (isCarousel) {
+        headerType = 'carousel'
+      } else if (
         headerFormat === 'TEXT' ||
         headerFormat === 'IMAGE' ||
         headerFormat === 'VIDEO' ||
         headerFormat === 'DOCUMENT'
-          ? headerFormat.toLowerCase()
-          : null
+      ) {
+        headerType = headerFormat.toLowerCase()
+      }
 
       const row = {
         // Account tenancy + user audit, same split as the submit
@@ -247,6 +255,7 @@ export async function POST() {
         body_text: body?.text ?? '',
         footer_text: footer?.text ?? null,
         buttons: parsedButtons.length ? parsedButtons : null,
+        cards: isCarousel ? carousel.cards : null,
         sample_values: sampleValues,
         status: normalizeStatus(t.status),
         meta_template_id: t.id,

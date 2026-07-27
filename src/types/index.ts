@@ -318,13 +318,14 @@ export interface MessageTemplate {
   name: string;
   category: 'Marketing' | 'Utility' | 'Authentication';
   language?: string;
-  header_type?: 'text' | 'image' | 'video' | 'document';
+  header_type?: 'text' | 'image' | 'video' | 'document' | 'CAROUSEL';
   header_content?: string;
   header_handle?: string;
   header_media_url?: string;
   body_text: string;
   footer_text?: string;
   buttons?: TemplateButton[];
+  cards?: any[];
   sample_values?: TemplateSampleValues;
   status?: MessageTemplateStatus;
   meta_template_id?: string;
