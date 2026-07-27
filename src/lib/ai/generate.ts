@@ -26,16 +26,23 @@ export interface GenerateArgs {
 export async function generateReply(args: GenerateArgs): Promise<GenerateResult> {
   const { config, systemPrompt, messages } = args
   const timeoutMs = aiRequestTimeoutMs()
+  let providerToUse = config.provider
+  let modelToUse = config.model
+  if (providerToUse === 'openai' && modelToUse.startsWith('gemini|')) {
+    providerToUse = 'gemini' as AiProvider
+    modelToUse = modelToUse.replace('gemini|', '')
+  }
+
   const providerArgs = {
     apiKey: config.apiKey,
-    model: config.model,
+    model: modelToUse,
     systemPrompt,
     messages,
     timeoutMs,
   }
 
   let result: { text: string; usage: AiUsage | null }
-  switch (config.provider) {
+  switch (providerToUse) {
     case 'openai':
       result = await generateOpenAi(providerArgs)
       break

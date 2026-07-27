@@ -46,11 +46,18 @@ export async function GET() {
     if (!data) return NextResponse.json({ configured: false })
     // The keys are selected only to derive the has_* flags; neither is
     // returned to the client.
-    const { api_key, embeddings_api_key, ...safe } = data
+    let { provider, model } = data
+    if (provider === 'openai' && model.startsWith('gemini|')) {
+      provider = 'gemini'
+      model = model.replace('gemini|', '')
+    }
+    const { api_key, embeddings_api_key, provider: _p, model: _m, ...safe } = data
     return NextResponse.json({
       configured: true,
       has_key: !!api_key,
       has_embeddings_key: !!embeddings_api_key,
+      provider,
+      model,
       ...safe,
     })
   } catch (err) {
@@ -198,9 +205,15 @@ export async function POST(request: Request) {
     }
 
     const encryptedKey = rawKey ? encrypt(rawKey) : null
+    let dbProvider = provider
+    let dbModel = model
+    if (provider === 'gemini') {
+      dbProvider = 'openai'
+      dbModel = 'gemini|' + model
+    }
     const shared: Record<string, unknown> = {
-      provider,
-      model,
+      provider: dbProvider,
+      model: dbModel,
       system_prompt: systemPrompt,
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
