@@ -75,7 +75,7 @@ export function TemplatePreview({
                     <div className="flex flex-col border-t border-black/5 bg-white">
                       {buttons.map((btn, bIdx) => (
                         <div key={bIdx} className="w-full py-[10px] border-b border-black/5 last:border-0 text-center text-[14.2px] text-[#00a884] bg-white hover:bg-black/5 font-medium cursor-pointer transition-colors">
-                          {btn.text}
+                          {btn.text || (btn.type === 'URL' ? 'Visit Website' : btn.type === 'PHONE_NUMBER' ? 'Call Phone' : btn.type === 'COPY_CODE' ? 'Copy Offer Code' : 'Button')}
                         </div>
                       ))}
                     </div>
@@ -115,10 +115,10 @@ export function TemplatePreview({
             </div>
 
             {buttons && buttons.length > 0 && (
-              <div className="mt-1 flex flex-col border-t border-black/5">
+              <div className="mt-1 flex flex-col border-t border-black/5 bg-white">
                 {buttons.map((btn, idx) => (
                   <div key={idx} className="w-full py-[10px] border-b border-black/5 last:border-0 text-center text-[14.2px] text-[#00a884] bg-white hover:bg-black/5 font-medium cursor-pointer transition-colors">
-                    {btn.text}
+                    {btn.text || (btn.type === 'URL' ? 'Visit Website' : btn.type === 'PHONE_NUMBER' ? 'Call Phone' : btn.type === 'COPY_CODE' ? 'Copy Offer Code' : 'Button')}
                   </div>
                 ))}
               </div>

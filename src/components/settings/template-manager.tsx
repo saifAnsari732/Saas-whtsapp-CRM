@@ -154,6 +154,7 @@ export function TemplateManager() {
   // chat-media bucket and stores the public URL in header_media_url; the
   // submit route turns that into a Meta Resumable-Upload handle.
   const [uploadingHeader, setUploadingHeader] = useState(false);
+  const [uploadingCardIdx, setUploadingCardIdx] = useState<number | null>(null);
   const headerFileRef = useRef<HTMLInputElement>(null);
 
   // Body variable indices — `[1, 2, 3]` for "{{1}} {{2}} {{3}}". We
@@ -495,6 +496,33 @@ export function TemplateManager() {
     }
   }
 
+  async function handleCardImageFile(index: number, file: File) {
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      toast.error(t('toastInvalidImage'));
+      return;
+    }
+    if (file.size > MEDIA_MAX_BYTES_BY_KIND.image) {
+      toast.error(
+        t('toastImageTooLarge', { size: (file.size / 1024 / 1024).toFixed(1) }),
+      );
+      return;
+    }
+    setUploadingCardIdx(index);
+    try {
+      const { publicUrl } = await uploadAccountMedia('chat-media', file);
+      setForm((f) => {
+        const next = [...f.cards];
+        next[index] = { ...next[index], header_media_url: publicUrl };
+        return { ...f, cards: next };
+      });
+      toast.success(t('toastUploadSuccess'));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('toastUploadFailed'));
+    } finally {
+      setUploadingCardIdx(null);
+    }
+  }
+
   return (
     <section className="animate-in fade-in-50 space-y-4 duration-200">
       <SettingsPanelHead
@@ -652,8 +680,8 @@ export function TemplateManager() {
           }
         }}
       >
-        <DialogContent className="bg-popover border-border sm:max-w-5xl max-h-[90vh] overflow-y-auto w-[90vw]">
-          <DialogHeader>
+        <DialogContent className="bg-popover border-border sm:max-w-6xl max-h-[95vh] overflow-y-hidden w-[95vw] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="text-popover-foreground">
               {editingId ? t('dialogEditTitle') : t('dialogNewTitle')}
             </DialogTitle>
@@ -665,14 +693,14 @@ export function TemplateManager() {
           </DialogHeader>
 
           {form.category === 'Authentication' && (
-            <div className="flex items-start gap-2 rounded border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
+            <div className="flex items-start gap-2 rounded border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-300 shrink-0">
               <AlertCircle className="size-4 mt-0.5 shrink-0" />
               <p>{t.rich('authWarning', { bold: (chunks) => <strong>{chunks}</strong> })}</p>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-4">
-            <div className="space-y-4 py-2">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 pb-4 flex-1 overflow-hidden min-h-0">
+            <div className="space-y-4 py-2 overflow-y-auto pr-2 custom-scrollbar">
             <div className="space-y-2">
               <Label className="text-muted-foreground">{t('templateName')}</Label>
               <Input
@@ -1008,17 +1036,60 @@ export function TemplateManager() {
                         <h4 className="text-sm font-medium">Card {idx + 1}</h4>
                         
                         <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">Header Image URL (Optional)</Label>
-                          <Input
-                            placeholder="https://example.com/image.jpg"
-                            value={card.header_media_url}
-                            onChange={(e) => {
-                              const next = [...form.cards];
-                              next[idx] = { ...card, header_media_url: e.target.value };
-                              setForm({ ...form, cards: next });
-                            }}
-                            className="bg-muted border-border h-8 text-xs text-foreground placeholder:text-muted-foreground"
-                          />
+                          <Label className="text-xs text-muted-foreground">Header Image (Optional)</Label>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                id={`card-image-${idx}`}
+                                type="file"
+                                accept="image/jpeg,image/png"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) void handleCardImageFile(idx, f);
+                                  e.target.value = '';
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={uploadingCardIdx === idx}
+                                onClick={() => document.getElementById(`card-image-${idx}`)?.click()}
+                                className="w-full text-xs"
+                              >
+                                {uploadingCardIdx === idx ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                                ) : (
+                                  <Upload className="h-3.5 w-3.5 mr-2" />
+                                )}
+                                Choose Image
+                              </Button>
+                            </div>
+                            {card.header_media_url && (
+                              <div className="relative rounded-md overflow-hidden border border-border h-24">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={card.header_media_url}
+                                  alt={`Card ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="icon"
+                                  className="absolute top-1 right-1 h-6 w-6 opacity-80 hover:opacity-100"
+                                  onClick={() => {
+                                    const next = [...form.cards];
+                                    next[idx] = { ...card, header_media_url: '' };
+                                    setForm({ ...form, cards: next });
+                                  }}
+                                >
+                                  <X className="size-3" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         
                         <div className="space-y-1.5">
