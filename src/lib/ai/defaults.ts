@@ -13,7 +13,7 @@ import type { AiProvider } from './types'
 export const AI_PROVIDER_DEFAULT_MODEL: Record<AiProvider, string> = {
   openai: 'gpt-4o-mini',
   anthropic: 'claude-3-haiku-20240307',
-  gemini: 'gemini-1.5-flash',
+  gemini: 'gemini-3.5-flash',
 }
 
 /**

@@ -10,8 +10,8 @@ export async function generateGemini(
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
     
-    // Default to gemini-1.5-flash if model string is generic
-    const modelName = model === 'gemini' ? 'gemini-1.5-flash' : model
+    // Default to gemini-3.5-flash if model string is generic
+    const modelName = model === 'gemini' ? 'gemini-3.5-flash' : model
     
     const generativeModel = genAI.getGenerativeModel({
       model: modelName,
