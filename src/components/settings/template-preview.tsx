@@ -38,7 +38,7 @@ export function TemplatePreview({
                 {card.header_media_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={card.header_media_url}
+                    src={card.header_media_url as string}
                     alt={`Card ${idx + 1}`}
                     className="w-full h-32 object-cover rounded-md"
                   />
