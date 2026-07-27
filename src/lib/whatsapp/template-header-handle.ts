@@ -61,17 +61,20 @@ export async function ensureImageHeaderHandle(
   payload: TemplatePayload,
   accessToken: string,
 ): Promise<void> {
-  const appId = process.env.META_APP_ID
-  if (!appId) {
-    throw new Error(
-      'Image-header templates need META_APP_ID set (used for Meta’s Resumable Upload). Add it to your environment, or remove the image header.',
-    )
+  const getAppId = () => {
+    const appId = process.env.META_APP_ID
+    if (!appId) {
+      throw new Error(
+        'Image-header templates need META_APP_ID set (used for Meta’s Resumable Upload). Add it to your environment, or remove the image header.',
+      )
+    }
+    return appId;
   }
 
   if (payload.header_type === 'CAROUSEL' && payload.cards) {
     for (const card of payload.cards) {
       if (card.header_format === 'IMAGE' && !card.header_handle && card.header_media_url) {
-        card.header_handle = await fetchAndUploadHandle(card.header_media_url, accessToken, appId);
+        card.header_handle = await fetchAndUploadHandle(card.header_media_url, accessToken, getAppId());
       }
     }
     return;
@@ -81,5 +84,5 @@ export async function ensureImageHeaderHandle(
   if (payload.header_handle) return // already have one
   if (!payload.header_media_url) return // validator already requires url-or-handle
 
-  payload.header_handle = await fetchAndUploadHandle(payload.header_media_url, accessToken, appId);
+  payload.header_handle = await fetchAndUploadHandle(payload.header_media_url, accessToken, getAppId());
 }
