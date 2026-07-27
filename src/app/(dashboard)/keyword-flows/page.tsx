@@ -176,7 +176,8 @@ export default function KeywordFlowsPage() {
           </p>
         </div>
         <GatedButton
-          requiredPermission="send-messages"
+          canAct={canCreate}
+          gateReason="create flows"
           onClick={() => {
             setEditingFlow(null);
             setForm({ name: "", keywords: "", template_id: "" });
@@ -244,10 +245,10 @@ export default function KeywordFlowsPage() {
                         disabled={!canCreate}
                       />
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
+                        <DropdownMenuTrigger
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[popup-open]:bg-muted"
+                        >
+                          <MoreVertical className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
@@ -339,7 +340,7 @@ export default function KeywordFlowsPage() {
               <Label>Response Template</Label>
               <Select
                 value={form.template_id}
-                onValueChange={(val) => setForm({ ...form, template_id: val })}
+                onValueChange={(val) => setForm({ ...form, template_id: val || "" })}
               >
                 <SelectTrigger className="bg-muted border-border">
                   <SelectValue placeholder="Select a template" />

@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { sendTemplateMessage } from '@/lib/whatsapp/send';
+import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
+import { decrypt } from '@/lib/whatsapp/encryption';
+import { sanitizePhoneForMeta, isValidE164 } from '@/lib/whatsapp/phone-utils';
 
 let _adminClient: any = null;
 function supabaseAdmin() {
@@ -42,7 +44,7 @@ export async function dispatchKeywordFlow({
   }
 
   // Find the first flow whose keywords array contains an exact match (case-insensitive) for the inbound text
-  const matchedFlow = flows.find(flow =>
+  const matchedFlow = flows.find((flow: any) =>
     flow.keywords.map((k: string) => k.toLowerCase()).includes(text)
   );
 
@@ -73,29 +75,45 @@ export async function dispatchKeywordFlow({
     return { consumed: false };
   }
 
-  // We are assuming the template doesn't require complex sample parameters (or we just send empty arrays if required)
-  // For basic Keyword Flows, standard templates with no variables are recommended.
-  const payload: any = {
-    template: template.name,
-    language: { code: template.language || 'en_US' },
-  };
+  const phone = sanitizePhoneForMeta(contact.phone);
+  if (!isValidE164(phone)) {
+    console.error('[keyword-flow] contact phone invalid:', contact.phone);
+    return { consumed: false };
+  }
 
-  // If the template needs header variables or body variables, we pass empty arrays if we can't fulfill them,
-  // though Meta API might reject if it strictly requires them.
-  // We will assume 0-variable templates for the simple Keyword Flow feature.
+  // Fetch whatsapp config for access token
+  const { data: config, error: configErr } = await supabaseAdmin()
+    .from('whatsapp_config')
+    .select('*')
+    .eq('account_id', accountId)
+    .single();
+
+  if (configErr || !config) {
+    console.error('[keyword-flow] whatsapp config not found');
+    return { consumed: false };
+  }
+
+  const accessToken = decrypt(config.access_token);
 
   try {
-    await sendTemplateMessage(
-      accountId,
-      configOwnerUserId,
-      contact.phone,
+    const r = await sendTemplateMessage({
+      phoneNumberId: config.phone_number_id,
+      accessToken,
+      to: phone,
+      templateName: template.name,
+      language: template.language || 'en_US',
       template,
-      {},
-      conversationId
-    );
+      messageParams: {},
+    });
+
+    // Optionally insert the outbound message to the messages table here,
+    // or let the webhook's message status update handle it later.
+    // For now we just return consumed.
+    
     return { consumed: true };
   } catch (err) {
     console.error('[keyword-flow] failed to send template message:', err);
     return { consumed: false };
   }
 }
+
