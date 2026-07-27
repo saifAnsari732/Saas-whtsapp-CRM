@@ -355,8 +355,8 @@ export function validateTemplatePayload(payload: TemplatePayload): {
       }
       try {
         validateBody(card.body_text || ' '); // Validate card body text if any
-      } catch (e: any) {
-        throw new Error(`Card #${idx + 1} Body: ${e.message}`);
+      } catch (e: unknown) {
+        throw new Error(`Card #${idx + 1} Body: ${e instanceof Error ? e.message : String(e)}`);
       }
     });
   } else {

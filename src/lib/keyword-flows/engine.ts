@@ -1,9 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { sanitizePhoneForMeta, isValidE164 } from '@/lib/whatsapp/phone-utils';
 
-let _adminClient: any = null;
+let _adminClient: SupabaseClient | null = null;
 function supabaseAdmin() {
   if (!_adminClient) {
     _adminClient = createClient(
@@ -26,7 +26,6 @@ export async function dispatchKeywordFlow({
   accountId,
   configOwnerUserId,
   contactId,
-  conversationId,
   inboundText,
 }: DispatchKeywordFlowArgs): Promise<{ consumed: boolean }> {
   const text = inboundText.trim().toLowerCase();
@@ -44,7 +43,7 @@ export async function dispatchKeywordFlow({
   }
 
   // Find the first flow whose keywords array contains an exact match (case-insensitive) for the inbound text
-  const matchedFlow = flows.find((flow: any) =>
+  const matchedFlow = flows.find((flow: { keywords: string[], template_id: string }) =>
     flow.keywords.map((k: string) => k.toLowerCase()).includes(text)
   );
 
@@ -96,7 +95,7 @@ export async function dispatchKeywordFlow({
   const accessToken = decrypt(config.access_token);
 
   try {
-    const r = await sendTemplateMessage({
+    await sendTemplateMessage({
       phoneNumberId: config.phone_number_id,
       accessToken,
       to: phone,

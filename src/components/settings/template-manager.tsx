@@ -260,7 +260,7 @@ export function TemplateManager() {
       body_samples: template.sample_values?.body ?? [],
       footer_text: template.footer_text ?? '',
       buttons: template.buttons ?? [],
-      cards: (template.cards as any[]) ?? [],
+      cards: (template.cards as Record<string, unknown>[]) ?? [],
     });
     setDialogOpen(true);
   }
