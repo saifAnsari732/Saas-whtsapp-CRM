@@ -1,12 +1,13 @@
 import { Eye } from 'lucide-react';
+import type { TemplateButton } from '@/types';
 
 interface TemplatePreviewProps {
   bodyText: string;
   headerType: string;
   headerMediaUrl?: string;
   footerText?: string;
-  buttons?: any[];
-  cards?: any[];
+  buttons?: TemplateButton[];
+  cards?: Record<string, unknown>[];
 }
 
 export function TemplatePreview({
@@ -47,11 +48,11 @@ export function TemplatePreview({
                   </div>
                 )}
                 <p className="whitespace-pre-wrap text-sm text-primary">
-                  {card.body_text?.replace(/\{\{\d+\}\}/g, (m: string) => `[${m}]`) || ''}
+                  {(card.body_text as string)?.replace(/\{\{\d+\}\}/g, (m: string) => `[${m}]`) || ''}
                 </p>
-                {card.buttons?.map((btn: any, bIdx: number) => (
+                {(card.buttons as Record<string, unknown>[])?.map((btn: Record<string, unknown>, bIdx: number) => (
                   <div key={bIdx} className="w-full py-1.5 mt-1 border-t border-primary/20 text-center text-[13px] text-blue-400 font-medium">
-                    {btn.text}
+                    {btn.text as string}
                   </div>
                 ))}
               </div>

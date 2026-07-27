@@ -1064,6 +1064,7 @@ export function TemplateManager() {
               />
             </div>
           </div>
+        </div>
 
           <DialogFooter className="bg-popover border-border">
             <Button

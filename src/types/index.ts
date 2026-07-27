@@ -325,7 +325,7 @@ export interface MessageTemplate {
   body_text: string;
   footer_text?: string;
   buttons?: TemplateButton[];
-  cards?: any[];
+  cards?: Record<string, unknown>[];
   sample_values?: TemplateSampleValues;
   status?: MessageTemplateStatus;
   meta_template_id?: string;
