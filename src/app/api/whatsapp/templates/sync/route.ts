@@ -33,7 +33,7 @@ interface MetaTemplateComponent {
   text?: string
   format?: string
   buttons?: MetaButton[]
-  cards?: any[]
+  cards?: Record<string, unknown>[]
   example?: {
     header_text?: string[]
     header_handle?: string[]
