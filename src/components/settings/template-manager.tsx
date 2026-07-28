@@ -683,7 +683,10 @@ export function TemplateManager() {
           }
         }}
       >
-        <DialogContent className="w-[95vw] max-w-6xl h-[90vh] flex flex-col bg-popover border-border p-0 gap-0 overflow-hidden">
+        <DialogContent
+          className="flex flex-col bg-popover border-border p-0 gap-0 overflow-hidden"
+          style={{ width: '95vw', maxWidth: '1200px', height: '90vh', maxHeight: '90vh' }}
+        >
           <div className="px-6 pt-5 pb-4 border-b border-border shrink-0">
             <DialogHeader>
               <DialogTitle className="text-popover-foreground">
