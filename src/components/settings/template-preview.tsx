@@ -1,5 +1,15 @@
-import { Eye, ImageIcon } from 'lucide-react';
+import { Eye, ImageIcon, ExternalLink, Phone, Undo2, Copy } from 'lucide-react';
 import type { TemplateButton } from '@/types';
+
+const renderButtonIcon = (type: TemplateButton['type']) => {
+  switch (type) {
+    case 'QUICK_REPLY': return <Undo2 className="h-3.5 w-3.5 mr-2" />;
+    case 'URL': return <ExternalLink className="h-3.5 w-3.5 mr-2" />;
+    case 'PHONE_NUMBER': return <Phone className="h-3.5 w-3.5 mr-2" />;
+    case 'COPY_CODE': return <Copy className="h-3.5 w-3.5 mr-2" />;
+    default: return null;
+  }
+};
 
 interface TemplatePreviewProps {
   bodyText: string;
@@ -90,8 +100,9 @@ export function TemplatePreview({
                       {buttons && buttons.length > 0 && (
                         <div className="flex flex-col border-t border-black/5 bg-white">
                           {buttons.map((btn, bIdx) => (
-                            <div key={bIdx} className="w-full py-2 border-b border-black/5 last:border-0 text-center text-[12px] text-[#00a884] font-medium cursor-pointer">
-                              {btn.text || 'Button'}
+                            <div key={bIdx} className="w-full flex items-center justify-center py-2 border-b border-black/5 last:border-0 text-[12px] text-[#00a884] font-medium cursor-pointer">
+                              {renderButtonIcon(btn.type)}
+                              <span>{btn.text || 'Button'}</span>
                             </div>
                           ))}
                         </div>
@@ -152,8 +163,9 @@ export function TemplatePreview({
               {buttons && buttons.length > 0 && (
                 <div className="mt-1 flex flex-col border-t border-black/5 bg-white rounded-b-lg">
                   {buttons.map((btn, idx) => (
-                    <div key={idx} className="w-full py-2.5 border-b border-black/5 last:border-0 text-center text-[13px] text-[#00a884] font-medium cursor-pointer hover:bg-black/5 transition-colors">
-                      {btn.text || (btn.type === 'URL' ? 'Visit Website' : btn.type === 'PHONE_NUMBER' ? 'Call Phone' : btn.type === 'COPY_CODE' ? 'Copy Offer Code' : 'Button')}
+                    <div key={idx} className="w-full flex items-center justify-center py-2.5 border-b border-black/5 last:border-0 text-[13px] text-[#00a884] font-medium cursor-pointer hover:bg-black/5 transition-colors">
+                      {renderButtonIcon(btn.type)}
+                      <span>{btn.text || (btn.type === 'URL' ? 'Visit Website' : btn.type === 'PHONE_NUMBER' ? 'Call Phone' : btn.type === 'COPY_CODE' ? 'Copy Offer Code' : 'Button')}</span>
                     </div>
                   ))}
                 </div>
