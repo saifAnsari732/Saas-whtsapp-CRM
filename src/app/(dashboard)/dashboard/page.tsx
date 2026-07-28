@@ -215,7 +215,6 @@ export default function DashboardPage() {
               ]
             }}
             loading={false}
-            currency={defaultCurrency}
           />
         </div>
       </div>
