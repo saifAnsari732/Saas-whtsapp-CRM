@@ -82,7 +82,7 @@ interface TemplateFormData {
 }
 
 const emptyForm: TemplateFormData = {
-  name: '',
+  name: 'my_template',
   category: 'Marketing',
   template_type: 'STANDARD',
   language: 'en_US',
@@ -90,10 +90,13 @@ const emptyForm: TemplateFormData = {
   header_content: '',
   header_media_url: '',
   header_sample: '',
-  body_text: '',
-  body_samples: [],
-  footer_text: '',
-  buttons: [],
+  body_text: 'Hello {{1}}, your order {{2}} has been confirmed! 🎉',
+  body_samples: ['John', 'ORD-1234'],
+  footer_text: 'Reply STOP to unsubscribe',
+  buttons: [
+    { type: 'QUICK_REPLY', text: 'Track Order' },
+    { type: 'URL', text: 'View Details', url: 'https://example.com/orders/{{1}}', example: 'https://example.com/orders/12345' },
+  ],
   cards: [],
   ui_template_type: 'Text Template',
 };
@@ -121,13 +124,13 @@ const COMMON_LANGUAGE_CODES = [
 function emptyButton(type: TemplateButton['type']): TemplateButton {
   switch (type) {
     case 'QUICK_REPLY':
-      return { type: 'QUICK_REPLY', text: '' };
+      return { type: 'QUICK_REPLY', text: 'Quick Reply' };
     case 'URL':
-      return { type: 'URL', text: '', url: '' };
+      return { type: 'URL', text: 'Visit Website', url: 'https://example.com' };
     case 'PHONE_NUMBER':
-      return { type: 'PHONE_NUMBER', text: '', phone_number: '' };
+      return { type: 'PHONE_NUMBER', text: 'Call Now', phone_number: '' };
     case 'COPY_CODE':
-      return { type: 'COPY_CODE', text: '', example: '' };
+      return { type: 'COPY_CODE', text: 'Copy Code', example: 'PROMO10' };
   }
 }
 
