@@ -53,9 +53,14 @@ describe('ensureImageHeaderHandle', () => {
     expect(p.header_handle).toBe('existing');
   });
 
-  it('throws an actionable error when META_APP_ID is unset', async () => {
+  it('logs a warning and returns early when META_APP_ID is unset', async () => {
     const p = payload();
-    await expect(ensureImageHeaderHandle(p, 'tok')).rejects.toThrow(/META_APP_ID/);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await ensureImageHeaderHandle(p, 'tok');
+    expect(uploadResumableMedia).not.toHaveBeenCalled();
+    expect(p.header_handle).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('META_APP_ID'));
+    warnSpy.mockRestore();
   });
 
   it('derives + sets header_handle from a valid image URL', async () => {
