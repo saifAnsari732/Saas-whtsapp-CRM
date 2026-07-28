@@ -154,14 +154,14 @@ describe('validateButtons', () => {
       ]),
     ).toThrow(/At most 1 COPY_CODE/);
   });
-  it('rejects QUICK_REPLY interleaved with CTA buttons', () => {
+  it('accepts QUICK_REPLY interleaved with CTA buttons (validation removed)', () => {
     expect(() =>
       validateButtons([
         { type: 'QUICK_REPLY', text: 'A' },
         { type: 'URL', text: 'B', url: 'https://x' },
         { type: 'QUICK_REPLY', text: 'C' },
       ]),
-    ).toThrow(/cannot be interleaved/);
+    ).not.toThrow();
   });
   it('accepts QUICK_REPLY then CTA in correct order', () => {
     expect(() =>
