@@ -59,7 +59,7 @@ export function TemplatePreview({
                     <img
                       src={card.header_media_url as string}
                       alt={`Card ${idx + 1}`}
-                      className="w-full h-32 object-cover bg-black/5"
+                      className="w-full h-32 object-contain bg-white"
                     />
                   ) : (
                     <div className="w-full h-32 bg-black/5 flex items-center justify-center text-xs text-[#667781]">
@@ -90,7 +90,7 @@ export function TemplatePreview({
               <div className="w-full h-40 bg-black/5 flex items-center justify-center text-xs text-[#667781] overflow-hidden p-1 pb-0">
                 {headerMediaUrl ? (
                    // eslint-disable-next-line @next/next/no-img-element
-                  <img src={headerMediaUrl} alt="Header preview" className="w-full h-full object-cover rounded-t-md" />
+                  <img src={headerMediaUrl} alt="Header preview" className="w-full h-full object-contain bg-white rounded-t-md" />
                 ) : (
                   <span>{headerType.toUpperCase()}</span>
                 )}

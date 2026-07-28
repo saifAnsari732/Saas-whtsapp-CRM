@@ -93,8 +93,8 @@
       "timeD": "{day}d ago"
     },
     "conversationsChart": {
-      "title": "Conversations Over Time",
-      "description": "Daily message volume by direction",
+      "title": "Messages Overview",
+      "description": "",
       "days": "{count} days",
       "noActivity": "No message activity in this range",
       "noActivityHint": "Send or receive messages to start populating this chart.",
@@ -105,8 +105,8 @@
       "ariaLabel": "Conversations per day"
     },
     "pipelineDonut": {
-      "title": "Pipeline Value",
-      "description": "Open deals by stage",
+      "title": "Message Types",
+      "description": "",
       "noOpenDeals": "No open deals yet",
       "noOpenDealsHint": "Create deals in Pipelines to see stage breakdowns here.",
       "dealCount": "{count} {count, plural, =1 {deal} other {deals}}",

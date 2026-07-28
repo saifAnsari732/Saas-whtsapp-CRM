@@ -55,8 +55,8 @@ import {
 } from '@/lib/whatsapp/template-validators';
 
 const CATEGORIES = ['Marketing', 'Utility', 'Authentication'] as const;
-type HeaderFormat = 'none' | 'text' | 'image' | 'video' | 'document';
-const HEADER_FORMATS: HeaderFormat[] = ['none', 'text', 'image', 'video', 'document'];
+type HeaderFormat = 'none' | 'text' | 'image' | 'video' | 'document' | 'audio' | 'location';
+const HEADER_FORMATS: HeaderFormat[] = ['none', 'text', 'image', 'video', 'document', 'audio', 'location'];
 
 const categoryColors: Record<string, string> = {
   Marketing: 'bg-purple-600/20 text-purple-400 border-purple-600/30',
@@ -78,6 +78,7 @@ interface TemplateFormData {
   footer_text: string;
   buttons: TemplateButton[];
   cards: { header_format: 'IMAGE' | 'VIDEO'; header_media_url: string; body_text: string }[];
+  ui_template_type: string;
 }
 
 const emptyForm: TemplateFormData = {
@@ -94,6 +95,7 @@ const emptyForm: TemplateFormData = {
   footer_text: '',
   buttons: [],
   cards: [],
+  ui_template_type: 'Text Template',
 };
 
 const COMMON_LANGUAGE_CODES = [
@@ -262,6 +264,7 @@ export function TemplateManager() {
       footer_text: template.footer_text ?? '',
       buttons: template.buttons ?? [],
       cards: (template.cards as { header_format: 'IMAGE' | 'VIDEO'; header_media_url: string; body_text: string }[]) ?? [],
+      ui_template_type: template.header_type === 'CAROUSEL' ? 'Text + Carousel' : (template.header_type === 'image' ? 'Text + Image' : template.header_type === 'video' ? 'Text + Video' : template.header_type === 'document' ? 'Text + Document' : 'Text Template'),
     });
     setDialogOpen(true);
   }
@@ -776,68 +779,57 @@ export function TemplateManager() {
             <div className="space-y-2 mt-4">
               <Label className="text-muted-foreground">Template Type *</Label>
               <Select
-                value={form.template_type}
-                onValueChange={(val) =>
+                value={form.ui_template_type}
+                onValueChange={(val: string | null) => {
+                  const safeVal = val || 'Text Template';
+                  let tType: 'STANDARD' | 'CAROUSEL' = 'STANDARD';
+                  let hFormat: HeaderFormat = 'none';
+                  if (safeVal.includes('Image')) hFormat = 'image';
+                  else if (safeVal.includes('Video')) hFormat = 'video';
+                  else if (safeVal.includes('Document')) hFormat = 'document';
+                  else if (safeVal.includes('Audio')) hFormat = 'audio';
+                  else if (safeVal.includes('Location')) hFormat = 'location';
+                  else if (safeVal.includes('Carousel')) tType = 'CAROUSEL';
+                  
                   setForm({
                     ...form,
-                    template_type: val as 'STANDARD' | 'CAROUSEL',
-                  })
-                }
+                    ui_template_type: safeVal,
+                    template_type: tType,
+                    header_format: hFormat,
+                  });
+                }}
               >
                 <SelectTrigger className="w-full bg-muted border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-popover border-border">
-                  <SelectItem value="STANDARD" className="text-popover-foreground">Standard (Text/Image/Video)</SelectItem>
-                  <SelectItem value="CAROUSEL" className="text-popover-foreground">Carousel (Multi-Image Cards)</SelectItem>
+                <SelectContent className="bg-popover border-border max-h-[300px]">
+                  {[
+                    'Text Template',
+                    'Text + Image',
+                    'Text + Document',
+                    'Text + Audio',
+                    'Text + Video',
+                    'Text + Buttons',
+                    'Text + Lists',
+                    'Text + Poll',
+                    'Text + Interactive Buttons (5)',
+                    'Text + Carousel',
+                    'Text + Contact (vCard)',
+                    'Text + Location'
+                  ].map((type) => (
+                    <SelectItem key={type} value={type} className="text-popover-foreground">
+                      {type}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             {form.template_type === 'STANDARD' && (
-            <div className="space-y-2 mt-4">
-              <Label className="text-muted-foreground">{t('header')}</Label>
-              <Select
-                value={form.header_format}
-                onValueChange={(val) =>
-                  // Preserve header_content, header_media_url, and
-                  // header_sample across format switches. The submit
-                  // payload builder only reads the field that matches
-                  // the active format, so an orphan value on a hidden
-                  // field is harmless — and keeping it lets the user
-                  // switch formats to compare without losing typing.
-                  setForm({
-                    ...form,
-                    header_format: (val || 'none') as HeaderFormat,
-                  })
-                }
-              >
-                <SelectTrigger className="w-full bg-muted border-border text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border">
-                  {HEADER_FORMATS.map((type) => (
-                    <SelectItem
-                      key={type}
-                      value={type}
-                      className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
-                    >
-                      {type === 'none'
-                        ? t('headerNone')
-                        : type === 'text'
-                          ? t('headerText')
-                          : type === 'image'
-                            ? t('headerImage')
-                            : type === 'video'
-                              ? t('headerVideo')
-                              : t('headerDocument')}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
+              <>
               {form.header_format === 'text' && (
                 <div className="space-y-2 mt-2">
+                  <Label className="text-muted-foreground">{t('headerTextPlaceholder')}</Label>
                   <Input
                     id="template-header-text"
                     aria-label="Header text"
@@ -927,7 +919,7 @@ export function TemplateManager() {
                   </p>
                 </div>
               )}
-            </div>
+              </>
             )}
 
             <div className="space-y-2 mt-4">

@@ -34,8 +34,8 @@ describe("buildMediaPath", () => {
 });
 
 describe("MEDIA_MAX_BYTES_BY_KIND", () => {
-  it("caps images at Meta's tighter 5 MB limit", () => {
-    expect(MEDIA_MAX_BYTES_BY_KIND.image).toBe(5 * 1024 * 1024);
+  it("caps images at 10 MB limit", () => {
+    expect(MEDIA_MAX_BYTES_BY_KIND.image).toBe(10 * 1024 * 1024);
   });
 
   it("caps video/audio/document at the 16 MB bucket limit", () => {

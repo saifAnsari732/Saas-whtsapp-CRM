@@ -6,10 +6,14 @@ import { useAuth } from '@/hooks/use-auth'
 import { formatCurrency } from '@/lib/currency'
 import {
   MessageSquare,
-  UserPlus,
-  DollarSign,
   Send,
+  FileText,
+  Zap,
+  Users,
+  Smartphone,
+  PieChart,
 } from 'lucide-react'
+import Link from 'next/link'
 
 import {
   loadActivity,
@@ -26,9 +30,6 @@ import type {
   ResponseTimeSummary,
 } from '@/lib/dashboard/types'
 
-import { MetricCard } from '@/components/dashboard/metric-card'
-import { SkeletonCard } from '@/components/dashboard/skeleton'
-import { QuickActions } from '@/components/dashboard/quick-actions'
 import { ConversationsChart } from '@/components/dashboard/conversations-chart'
 import { PipelineDonut } from '@/components/dashboard/pipeline-donut'
 import { ResponseTimeChart } from '@/components/dashboard/response-time-chart'
@@ -131,65 +132,63 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Metric cards */}
+      {/* New Action Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {metricsLoading || !metrics ? (
-          Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
-        ) : (
-          <>
-            <MetricCard
-              title={t('activeConversations')}
-              value={metrics.activeConversations.current.toLocaleString()}
-              icon={MessageSquare}
-              delta={{
-                sign: metrics.activeConversations.previous,
-                label: deltaLabel(
-                  metrics.activeConversations.previous, 
-                  t('newTodayVsYesterday'), 
-                  t('noChange', { suffix: t('newTodayVsYesterday') })
-                ),
-              }}
-            />
-            <MetricCard
-              title={t('newContactsToday')}
-              value={metrics.newContactsToday.current.toLocaleString()}
-              icon={UserPlus}
-              delta={{
-                sign:
-                  metrics.newContactsToday.current - metrics.newContactsToday.previous,
-                label: deltaLabel(
-                  metrics.newContactsToday.current - metrics.newContactsToday.previous,
-                  t('vsYesterday'),
-                  t('noChange', { suffix: t('vsYesterday') })
-                ),
-              }}
-            />
-            <MetricCard
-              title={t('openDealsValue')}
-              value={formatCurrency(metrics.openDealsValue, defaultCurrency)}
-              icon={DollarSign}
-              subtitle={t('openDeals', { count: metrics.openDealsCount })}
-            />
-            <MetricCard
-              title={t('messagesSentToday')}
-              value={metrics.messagesSentToday.current.toLocaleString()}
-              icon={Send}
-              delta={{
-                sign:
-                  metrics.messagesSentToday.current - metrics.messagesSentToday.previous,
-                label: deltaLabel(
-                  metrics.messagesSentToday.current - metrics.messagesSentToday.previous,
-                  t('vsYesterday'),
-                  t('noChange', { suffix: t('vsYesterday') })
-                ),
-              }}
-            />
-          </>
-        )}
-      </div>
+        {/* Plan Card */}
+        <div className="rounded-xl bg-gradient-to-br from-purple-600 to-fuchsia-600 p-5 text-white shadow-md relative overflow-hidden flex flex-col justify-between h-40">
+          <div>
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs text-white/80 font-medium">Kisan Groups</p>
+                <h3 className="text-2xl font-bold mt-1">Base</h3>
+                <p className="text-xs text-white/70 mt-1">Expires: Jan 11, 2027</p>
+              </div>
+              <div className="w-12 h-12 rounded-full border-4 border-yellow-400 flex items-center justify-center bg-yellow-400 text-purple-900 font-bold text-xs">
+                0%
+                <br />
+                <span className="text-[8px] leading-none">Used</span>
+              </div>
+            </div>
+            <div className="flex gap-4 mt-3">
+              <div>
+                <p className="text-[10px] text-white/70 uppercase">Sent</p>
+                <p className="font-semibold text-sm">498</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-white/70 uppercase">Remaining</p>
+                <p className="font-semibold text-sm">999,502</p>
+              </div>
+            </div>
+          </div>
+          <button className="w-full mt-3 rounded-md bg-white/20 hover:bg-white/30 transition-colors py-1.5 text-xs font-semibold backdrop-blur-sm">
+            View Plan
+          </button>
+        </div>
 
-      {/* Quick actions */}
-      <QuickActions />
+        {/* Action Cards */}
+        {[
+          { icon: Send, label: 'Send Message', href: '/broadcasts', color: 'bg-blue-500' },
+          { icon: FileText, label: 'Templates', href: '/settings?tab=whatsapp', color: 'bg-purple-500' },
+          { icon: Zap, label: 'Keyword Flow', href: '/keyword-flows', color: 'bg-green-500' },
+          { icon: Users, label: 'WhatsApp Group', href: '/contacts', color: 'bg-pink-500' },
+          { icon: PieChart, label: 'Reports', href: '/dashboard', color: 'bg-orange-500' },
+          { icon: Smartphone, label: 'Devices', href: '/settings?tab=whatsapp', color: 'bg-teal-500' },
+          { icon: Users, label: 'Contacts Group', href: '/contacts', color: 'bg-green-600' },
+        ].map((action, i) => (
+          <Link
+            key={i}
+            href={action.href}
+            className="flex flex-col items-center justify-center gap-3 rounded-xl bg-card p-6 shadow-sm border border-border hover:border-primary/50 hover:shadow-md transition-all h-40 group"
+          >
+            <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${action.color} text-white shadow-sm group-hover:scale-105 transition-transform`}>
+              <action.icon className="h-5 w-5" />
+            </div>
+            <span className="text-sm font-medium text-foreground text-center">
+              {action.label}
+            </span>
+          </Link>
+        ))}
+      </div>
 
       {/* Charts row */}
       {/* items-stretch (the grid default) stretches the two columns to
@@ -209,8 +208,13 @@ export default function DashboardPage() {
         </div>
         <div className="h-full lg:col-span-2">
           <PipelineDonut
-            data={pipeline}
-            loading={pipelineLoading}
+            data={{
+              totalValue: 236,
+              stages: [
+                { id: '1', name: 'Text', totalValue: 236, dealCount: 236, color: '#3b82f6' }
+              ]
+            }}
+            loading={false}
             currency={defaultCurrency}
           />
         </div>

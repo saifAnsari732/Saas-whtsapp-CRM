@@ -130,9 +130,8 @@ function LineSvg({
   const yFor = (v: number) =>
     maxY === 0 ? PADDING.top + chartH : PADDING.top + chartH - (v / maxY) * chartH
   const xFor = (i: number) => PADDING.left + i * stepX
-
-  const incomingPath = data.map((p, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(p.incoming)}`).join(' ')
-  const outgoingPath = data.map((p, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(p.outgoing)}`).join(' ')
+  
+  const barWidth = Math.max(2, Math.min(16, (stepX * 0.8) / 2))
 
   // Mouse-move: use the SVG's current screen-CTM to map clientX
   // back to viewBox coordinates. The previous rect-based math
@@ -243,24 +242,36 @@ function LineSvg({
           ) : null,
         )}
 
-        {/* Outgoing polyline (violet) */}
-        <path
-          d={outgoingPath}
-          fill="none"
-          stroke="#7c3aed"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {/* Incoming polyline (blue) */}
-        <path
-          d={incomingPath}
-          fill="none"
-          stroke="#3b82f6"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {/* Bars */}
+        {data.map((p, i) => {
+          const incomingH = Math.max(0, PADDING.top + chartH - yFor(p.incoming))
+          const outgoingH = Math.max(0, PADDING.top + chartH - yFor(p.outgoing))
+          const x = xFor(i)
+          return (
+            <g key={p.day}>
+              {incomingH > 0 && (
+                <rect
+                  x={x - barWidth}
+                  y={yFor(p.incoming)}
+                  width={barWidth - 1}
+                  height={incomingH}
+                  fill="#3b82f6"
+                  rx={2}
+                />
+              )}
+              {outgoingH > 0 && (
+                <rect
+                  x={x + 1}
+                  y={yFor(p.outgoing)}
+                  width={barWidth - 1}
+                  height={outgoingH}
+                  fill="#7c3aed"
+                  rx={2}
+                />
+              )}
+            </g>
+          )
+        })}
 
         {/* Hover crosshair */}
         {hover !== null && (

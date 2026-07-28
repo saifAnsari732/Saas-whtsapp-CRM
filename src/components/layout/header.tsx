@@ -57,18 +57,18 @@ export function Header({ onOpenSidebar }: HeaderProps) {
     "U";
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-6">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-none bg-[#2ecc71] px-4 lg:px-6">
       <div className="flex min-w-0 items-center gap-2">
         {/* Hamburger — mobile only. 44×44 hit target per Apple HIG. */}
         <button
           type="button"
           onClick={onOpenSidebar}
           aria-label={t("openMenu")}
-          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+          className="flex h-10 w-10 items-center justify-center rounded-md text-white/80 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
         >
           <Menu className="h-5 w-5" />
         </button>
-        <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">
+        <h1 className="truncate text-base font-semibold text-white sm:text-lg">
           {t(titleKey as string)}
         </h1>
       </div>
@@ -78,7 +78,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
 
         <DropdownMenu>
         <DropdownMenuTrigger
-          className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted/70 focus:bg-muted/70 focus:outline-none data-popup-open:bg-muted/70 sm:gap-3 sm:pl-1 sm:pr-3"
+          className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-white/10 focus:bg-white/10 focus:outline-none data-popup-open:bg-white/10 sm:gap-3 sm:pl-1 sm:pr-3"
           aria-label={t("openAccountMenu")}
         >
           <Avatar className="size-8">
@@ -92,7 +92,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
               {initial}
             </AvatarFallback>
           </Avatar>
-          <span className="hidden text-sm font-medium text-foreground sm:inline">
+          <span className="hidden text-sm font-medium text-white sm:inline">
             {profile?.full_name ?? t("defaultUser")}
           </span>
         </DropdownMenuTrigger>
