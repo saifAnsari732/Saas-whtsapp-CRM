@@ -683,28 +683,43 @@ export function TemplateManager() {
           }
         }}
       >
-        <DialogContent className="bg-popover border-border sm:max-w-6xl max-h-[95vh] overflow-y-hidden w-[95vw] flex flex-col">
-          <DialogHeader className="shrink-0">
-            <DialogTitle className="text-popover-foreground">
-              {editingId ? t('dialogEditTitle') : t('dialogNewTitle')}
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              {editingId
-                ? t('dialogEditDesc')
-                : t('dialogNewDesc')}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col bg-popover border-border px-0 pb-0">
+          <div className="px-6">
+            <DialogHeader>
+              <DialogTitle className="text-popover-foreground">
+                {editingId ? t('editTitle') : t('newTitle')}
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                {t('description')}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
 
-          {form.category === 'Authentication' && (
-            <div className="flex items-start gap-2 rounded border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-300 shrink-0">
-              <AlertCircle className="size-4 mt-0.5 shrink-0" />
-              <p>{t.rich('authWarning', { bold: (chunks) => <strong>{chunks}</strong> })}</p>
+          <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden border-t border-border mt-4">
+            
+            {/* Left side: Preview */}
+            <div className="w-full lg:w-[400px] shrink-0 bg-muted/30 p-6 overflow-y-auto border-r border-border">
+              <TemplatePreview
+                bodyText={form.body_text}
+                headerType={form.template_type === 'CAROUSEL' ? 'CAROUSEL' : form.header_format}
+                headerMediaUrl={form.header_media_url}
+                footerText={form.footer_text}
+                buttons={form.buttons}
+                cards={form.cards}
+              />
             </div>
-          )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 pb-4 flex-1 overflow-hidden min-h-0">
-            <div className="space-y-4 py-2 overflow-y-auto pr-2 custom-scrollbar">
-            <div className="space-y-2">
+            {/* Right side: Form */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {form.category === 'Authentication' && (
+                <div className="flex items-start gap-2 rounded border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-300 shrink-0">
+                  <AlertCircle className="size-4 mt-0.5 shrink-0" />
+                  <p>{t.rich('authWarning', { bold: (chunks) => <strong>{chunks}</strong> })}</p>
+                </div>
+              )}
+
+              <div className="space-y-4">
+              <div className="space-y-2">
               <Label className="text-muted-foreground">{t('templateName')}</Label>
               <Input
                 placeholder={t('namePlaceholder')}
@@ -1064,7 +1079,7 @@ export function TemplateManager() {
                                 <img
                                   src={card.header_media_url}
                                   alt={`Card ${idx + 1}`}
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-contain bg-muted"
                                 />
                                 <Button
                                   type="button"
@@ -1239,20 +1254,11 @@ export function TemplateManager() {
                 </div>
               )}
             </div>
-            
-            <div className="pt-2">
-              <TemplatePreview
-                bodyText={form.body_text}
-                headerType={form.header_format}
-                headerMediaUrl={form.header_media_url}
-                footerText={form.footer_text}
-                buttons={form.buttons}
-              />
             </div>
           </div>
-        </div>
+          </div>
 
-          <DialogFooter className="bg-popover border-border">
+          <DialogFooter className="bg-popover border-t border-border px-6 py-4">
             <Button
               variant="outline"
               onClick={() => setDialogOpen(false)}
