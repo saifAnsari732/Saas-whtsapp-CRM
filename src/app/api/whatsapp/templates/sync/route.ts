@@ -255,7 +255,7 @@ export async function POST() {
         body_text: body?.text ?? '',
         footer_text: footer?.text ?? null,
         buttons: parsedButtons.length ? parsedButtons : null,
-        cards: isCarousel ? carousel.cards : null,
+        ...(isCarousel ? { cards: carousel.cards } : {}),
         sample_values: sampleValues,
         status: normalizeStatus(t.status),
         meta_template_id: t.id,
@@ -272,6 +272,7 @@ export async function POST() {
         .maybeSingle()
 
       if (lookupErr) {
+        console.error('Lookup error for', t.name, lookupErr);
         errors.push({
           name: t.name,
           language: t.language,
@@ -286,6 +287,7 @@ export async function POST() {
           .update(row)
           .eq('id', existing.id)
         if (updErr) {
+          console.error('Update error for', t.name, updErr);
           errors.push({
             name: t.name,
             language: t.language,
@@ -299,6 +301,7 @@ export async function POST() {
           .from('message_templates')
           .insert(row)
         if (insErr) {
+          console.error('Insert error for', t.name, insErr);
           errors.push({
             name: t.name,
             language: t.language,

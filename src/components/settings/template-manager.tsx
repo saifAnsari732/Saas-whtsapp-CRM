@@ -1053,7 +1053,6 @@ export function TemplateManager() {
                           <div className="flex flex-col gap-2">
                             <div className="flex items-center gap-2">
                               <input
-                                id={`card-image-${idx}`}
                                 type="file"
                                 accept="image/jpeg,image/png"
                                 className="hidden"
@@ -1068,7 +1067,7 @@ export function TemplateManager() {
                                 variant="outline"
                                 size="sm"
                                 disabled={uploadingCardIdx === idx}
-                                onClick={() => document.getElementById(`card-image-${idx}`)?.click()}
+                                onClick={(e) => (e.currentTarget.previousElementSibling as HTMLInputElement)?.click()}
                                 className="w-full text-xs"
                               >
                                 {uploadingCardIdx === idx ? (
