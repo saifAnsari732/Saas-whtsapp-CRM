@@ -12,8 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, ArrowRight, Eye, ImageIcon, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, ImageIcon, Loader2, Upload } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { uploadAccountMedia } from '@/lib/storage/upload-media';
+import { toast } from 'sonner';
 
 type VariableType = 'static' | 'field' | 'custom_field';
 
@@ -264,13 +266,46 @@ export function Step3Personalize({
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
             {t('personalize.imageUrl')}
           </label>
-          <Input
-            type="url"
-            value={headerMediaUrl}
-            onChange={(e) => onHeaderMediaUrlChange(e.target.value)}
-            placeholder={t('personalize.imageUrlPlaceholder')}
-            className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              type="url"
+              value={headerMediaUrl}
+              onChange={(e) => onHeaderMediaUrlChange(e.target.value)}
+              placeholder={t('personalize.imageUrlPlaceholder')}
+              className="border-border bg-muted text-foreground placeholder:text-muted-foreground flex-1"
+            />
+            {mediaHeaderType === 'image' && (
+              <>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const { publicUrl } = await uploadAccountMedia('chat-media', file);
+                      onHeaderMediaUrlChange(publicUrl);
+                      toast.success('Image uploaded successfully');
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : 'Upload failed');
+                    }
+                  }}
+                />
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={(e) => {
+                    const fileInput = e.currentTarget.previousElementSibling as HTMLInputElement;
+                    fileInput?.click();
+                  }}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload
+                </Button>
+              </>
+            )}
+          </div>
           <p className="mt-1.5 text-xs text-muted-foreground">
             {t('personalize.headerImageDesc')}
           </p>
