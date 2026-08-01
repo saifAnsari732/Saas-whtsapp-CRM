@@ -13,10 +13,7 @@ import {
   Smartphone,
   Globe,
   Users,
-  ChevronRight,
-  Github,
-  Twitter,
-  Linkedin
+  ChevronRight
 } from "lucide-react";
 
 const fadeIn = {
@@ -274,17 +271,6 @@ export function LandingPageClient() {
               <p className="text-slate-400 max-w-sm text-sm leading-relaxed">
                 The most advanced, self-hostable CRM for WhatsApp. Built for modern businesses that value speed, automation, and reliability.
               </p>
-              <div className="flex gap-4">
-                <a href="#" className="h-10 w-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-slate-400 hover:text-white">
-                  <Twitter className="h-4 w-4" />
-                </a>
-                <a href="#" className="h-10 w-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-slate-400 hover:text-white">
-                  <Github className="h-4 w-4" />
-                </a>
-                <a href="#" className="h-10 w-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-slate-400 hover:text-white">
-                  <Linkedin className="h-4 w-4" />
-                </a>
-              </div>
             </div>
             
             <div className="space-y-4">
