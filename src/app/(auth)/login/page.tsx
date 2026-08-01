@@ -55,7 +55,11 @@ function LoginPageInner() {
     });
 
     if (error) {
-      setError(error.message);
+      if (error.message.includes("Failed to fetch")) {
+        setError("Network error. Please check your internet connection.");
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
       return;
     }
