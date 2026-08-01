@@ -5,6 +5,7 @@ import { HeroSection } from "@/components/landing/HeroSection";
 import { StatsBar } from "@/components/landing/StatsBar";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { FeaturesGrid } from "@/components/landing/FeaturesGrid";
+import { TechServices } from "@/components/landing/TechServices";
 import { EmbeddedSignup } from "@/components/landing/EmbeddedSignup";
 import { MetaBadge } from "@/components/landing/MetaBadge";
 import { PricingSection } from "@/components/landing/PricingSection";
@@ -30,6 +31,7 @@ export default async function LandingPage() {
         <StatsBar />
         <HowItWorks />
         <FeaturesGrid />
+        <TechServices />
         <EmbeddedSignup />
         <MetaBadge />
         <PricingSection />
