@@ -235,7 +235,7 @@ function SignupPageInner() {
       {/* Image Column */}
       <div className="hidden lg:block relative bg-[var(--color-navy)] overflow-hidden">
         <Image
-          src="/auth-bg.jpg"
+          src="/auth-signup-bg.jpg"
           alt="WaCRM Authentication Background"
           fill
           className="object-cover object-center opacity-90"
