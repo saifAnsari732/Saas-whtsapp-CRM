@@ -16,8 +16,8 @@ export function Navbar() {
   ];
 
   return (
-    <header className="w-full bg-white border-b border-border/40 relative z-50">
-      <div className="container mx-auto px-4 md:px-8 py-4">
+    <header className="fixed top-0 left-0 w-full bg-white/90 backdrop-blur-md border-b border-border/40 z-50">
+      <div className="container mx-auto px-4 md:px-8 py-3.5">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
