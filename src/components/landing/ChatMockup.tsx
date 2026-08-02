@@ -80,10 +80,18 @@ export function ChatMockup() {
       </motion.div>
 
       {/* Phone Frame */}
-      <div className="relative overflow-hidden rounded-[3rem] border-[10px] border-white bg-[#efeae2] shadow-2xl ring-1 ring-gray-200">
+      <div className="relative overflow-hidden rounded-[3rem] border-[12px] border-gray-900 bg-[#efeae2] shadow-[0_24px_80px_rgba(7,94,84,0.2)] ring-1 ring-black/5">
         
+        {/* Dynamic Island Notch */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[110px] h-[28px] bg-gray-900 rounded-b-3xl z-50 flex justify-center items-center gap-2 shadow-sm">
+          <div className="w-12 h-1.5 rounded-full bg-black/40"></div>
+          <div className="w-3 h-3 rounded-full bg-[#111] border border-white/5 relative flex items-center justify-center">
+             <div className="w-1 h-1 bg-blue-500/40 rounded-full blur-[0.5px]"></div>
+          </div>
+        </div>
+
         {/* Header - Authentic WhatsApp Green */}
-        <div className="bg-[#008069] px-4 py-3.5 text-white flex items-center justify-between shadow-sm relative z-20">
+        <div className="bg-[#008069] px-4 pt-8 pb-3.5 text-white flex items-center justify-between shadow-sm relative z-20">
           <div className="flex items-center gap-3">
             <div className="flex items-center -ml-1 cursor-pointer">
               <ChevronLeft className="h-6 w-6" />
