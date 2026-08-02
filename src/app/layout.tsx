@@ -105,11 +105,9 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <script
-          id="theme-boot"
-          suppressHydrationWarning
-          dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }}
-        />
+        <script id="theme-boot" suppressHydrationWarning>
+          {THEME_BOOT_SCRIPT}
+        </script>
       </head>
       <body className="min-h-full bg-background text-foreground font-sans">
         <NextIntlClientProvider messages={messages} locale={locale}>
