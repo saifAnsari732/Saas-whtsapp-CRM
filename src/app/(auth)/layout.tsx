@@ -19,6 +19,20 @@ export const metadata: Metadata = {
   },
 };
 
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+
 export default function AuthLayout({ children }: { children: ReactNode }) {
-  return children;
+  return (
+    <div className="relative min-h-screen">
+      <Link 
+        href="/" 
+        className="absolute top-6 left-6 md:top-8 md:left-8 z-50 flex items-center gap-2 rounded-full bg-white/80 backdrop-blur-md px-5 py-2.5 text-[14px] font-bold text-navy shadow-sm border border-border hover:bg-white hover:text-[var(--color-green-deep)] hover:shadow-md transition-all hover:-translate-y-0.5 group"
+      >
+        <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+        Back to Home
+      </Link>
+      {children}
+    </div>
+  );
 }
