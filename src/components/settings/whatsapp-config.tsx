@@ -390,39 +390,41 @@ export function WhatsAppConfig() {
 
     setFbLoading(true);
     window.FB.login(
-      async (response) => {
+      (response) => {
         if (response.authResponse) {
-          try {
-            const accessToken = response.authResponse.accessToken;
-            
-            // Exchange token and get WABA / Phone Number IDs
-            const res = await fetch('/api/whatsapp/auth/exchange', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ accessToken }),
-            });
-            
-            const data = await res.json();
-            
-            if (!res.ok) {
-              throw new Error(data.error || 'Failed to exchange token');
+          const accessToken = response.authResponse.accessToken;
+          // Wrap async logic so FB SDK doesn't throw "Expression is of type asyncfunction"
+          (async () => {
+            try {
+              // Exchange token and get WABA / Phone Number IDs
+              const res = await fetch('/api/whatsapp/auth/exchange', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accessToken }),
+              });
+              
+              const data = await res.json();
+              
+              if (!res.ok) {
+                throw new Error(data.error || 'Failed to exchange token');
+              }
+              
+              // Pre-fill the form with returned data
+              setWabaId(data.wabaId);
+              setPhoneNumberId(data.phoneNumberId);
+              setAccessToken(data.accessToken);
+              setTokenEdited(true);
+              setShowAdvanced(true);
+              
+              toast.success('Successfully connected to Facebook. Please click Save to finalize.');
+              
+            } catch (err: any) {
+              console.error('Exchange error:', err);
+              toast.error(err.message || 'Failed to fetch WhatsApp account details.');
+            } finally {
+              setFbLoading(false);
             }
-            
-            // Pre-fill the form with returned data
-            setWabaId(data.wabaId);
-            setPhoneNumberId(data.phoneNumberId);
-            setAccessToken(data.accessToken);
-            setTokenEdited(true);
-            setShowAdvanced(true);
-            
-            toast.success('Successfully connected to Facebook. Please click Save to finalize.');
-            
-          } catch (err: any) {
-            console.error('Exchange error:', err);
-            toast.error(err.message || 'Failed to fetch WhatsApp account details.');
-          } finally {
-            setFbLoading(false);
-          }
+          })();
         } else {
           setFbLoading(false);
           toast.error('Facebook login was cancelled or failed.');
