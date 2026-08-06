@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
       },
     }
   )
-
+// fskn
   const { data: { user } } = await supabase.auth.getUser()
 
   // getUser() transparently refreshes an expired access token, which
