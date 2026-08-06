@@ -4,12 +4,9 @@ import { motion } from "framer-motion";
 import { 
   Globe, 
   Search, 
-  TrendingUp, 
   Megaphone, 
-  Share2, 
   Palette, 
   Users, 
-  Image as ImageIcon, 
   Smartphone, 
   Cpu, 
   MessageSquare, 
@@ -18,6 +15,7 @@ import {
 } from "lucide-react";
 
 export function TechServices() {
+  // Removed Google Ads, Social Media, and Graphic Design
   const services = [
     {
       icon: Globe,
@@ -34,25 +32,11 @@ export function TechServices() {
       shadow: "shadow-indigo-500/20"
     },
     {
-      icon: TrendingUp,
-      title: "Google Ads",
-      desc: "Highly targeted PPC campaigns that maximize your ROI.",
-      color: "from-sky-500 to-blue-600",
-      shadow: "shadow-sky-500/20"
-    },
-    {
       icon: Megaphone,
       title: "Meta Ads",
       desc: "Data-driven advertising across Facebook & Instagram.",
       color: "from-purple-500 to-pink-500",
       shadow: "shadow-purple-500/20"
-    },
-    {
-      icon: Share2,
-      title: "Social Media",
-      desc: "Managing your brand presence to engage your audience.",
-      color: "from-pink-500 to-rose-500",
-      shadow: "shadow-pink-500/20"
     },
     {
       icon: Palette,
@@ -67,13 +51,6 @@ export function TechServices() {
       desc: "Strategic funnels and lead magnets to fill your pipeline.",
       color: "from-teal-500 to-emerald-500",
       shadow: "shadow-teal-500/20"
-    },
-    {
-      icon: ImageIcon,
-      title: "Graphic Design",
-      desc: "Stunning visual assets that elevate your professional image.",
-      color: "from-orange-500 to-amber-500",
-      shadow: "shadow-orange-500/20"
     },
     {
       icon: Smartphone,
@@ -105,8 +82,24 @@ export function TechServices() {
     }
   ];
 
+  // Duplicate for infinite marquee
+  const duplicatedServices = [...services, ...services];
+
   return (
     <section className="bg-white py-32 relative overflow-hidden">
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes scroll-left {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-scroll-left {
+          animation: scroll-left 40s linear infinite;
+        }
+        .animate-scroll-left:hover {
+          animation-play-state: paused;
+        }
+      `}} />
+
       {/* Decorative Wavy Background Lines */}
       <svg className="absolute inset-0 w-full h-full stroke-gray-100/50 [mask-image:radial-gradient(100%_100%_at_top_center,white,transparent)] z-0" aria-hidden="true">
         <defs>
@@ -119,7 +112,7 @@ export function TechServices() {
       
       <div className="container mx-auto px-4 md:px-8 relative z-10 max-w-[1400px]">
         
-        {/* Header Section in a Flex Layout for Desktop */}
+        {/* Header Section */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-20 gap-8">
           <div className="max-w-2xl">
             <motion.div
@@ -167,53 +160,55 @@ export function TechServices() {
              </button>
           </motion.div>
         </div>
+      </div>
 
-        {/* Distinctive Horizontal Card Grid */}
-        <div className="grid gap-x-6 gap-y-5 md:grid-cols-2 xl:grid-cols-3">
-          {services.map((service, i) => (
-            <motion.div
+      {/* Infinite Scrolling Slider */}
+      <div className="relative w-full overflow-hidden py-10 z-10 flex">
+        {/* Left/Right Fade Gradients */}
+        <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-white to-transparent z-20 pointer-events-none"></div>
+        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-white to-transparent z-20 pointer-events-none"></div>
+        
+        <div className="flex w-max animate-scroll-left gap-8 px-4">
+          {duplicatedServices.map((service, i) => (
+            <div
               key={i}
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              whileInView={{ opacity: 1, scale: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.1 }}
-              transition={{ delay: (i % 3) * 0.05, duration: 0.4 }}
-              className="group relative flex items-start gap-5 rounded-[24px] bg-white p-5 pr-6 border border-gray-100 hover:border-gray-200 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-default"
+              className="group relative flex w-[420px] shrink-0 items-center gap-6 rounded-[32px] bg-white p-6 pr-8 border border-gray-100 shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 cursor-default"
             >
               {/* Colorful Gradient Icon Box */}
-              <div className={`relative flex h-[64px] w-[64px] shrink-0 items-center justify-center rounded-[18px] bg-gradient-to-br ${service.color} ${service.shadow} shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3`}>
-                <service.icon className="h-7 w-7 text-white relative z-10" />
+              <div className={`relative flex h-[80px] w-[80px] shrink-0 items-center justify-center rounded-[24px] bg-gradient-to-br ${service.color} ${service.shadow} shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3`}>
+                <service.icon className="h-8 w-8 text-white relative z-10" />
                 {/* Glow behind icon inside box */}
-                <div className="absolute inset-0 bg-white/20 blur-md rounded-[18px] opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="absolute inset-0 bg-white/20 blur-md rounded-[24px] opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </div>
               
-              <div className="flex flex-col py-1">
-                <h3 className="text-[17px] font-bold text-navy mb-1.5 font-heading group-hover:text-[var(--color-green-deep)] transition-colors">
+              <div className="flex flex-col py-2">
+                <h3 className="text-[20px] font-bold text-navy mb-2 font-heading group-hover:text-[var(--color-green-deep)] transition-colors">
                   {service.title}
                 </h3>
-                <p className="text-[14px] text-gray leading-snug font-medium">
+                <p className="text-[15px] text-gray leading-relaxed font-medium">
                   {service.desc}
                 </p>
               </div>
               
               {/* Subtle hover arrow */}
-              <div className="absolute top-5 right-5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-                <ArrowRight className="h-4 w-4 text-gray-300" />
+              <div className="absolute top-6 right-6 opacity-0 -translate-x-3 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 bg-gray-50 p-2 rounded-full">
+                <ArrowRight className="h-4 w-4 text-[var(--color-green-deep)]" />
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
-        
-        {/* Mobile CTA */}
-        <div className="mt-10 flex justify-center lg:hidden">
-          <button className="group flex items-center gap-2 text-base font-bold text-[var(--color-green-deep)] hover:text-[var(--color-green-vivid)] transition-colors">
-             Explore All Services 
-             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-green-light)] group-hover:bg-[var(--color-green-vivid)]/20 transition-colors">
-               <ArrowRight className="h-4 w-4" />
-             </span>
-          </button>
-        </div>
-
       </div>
+        
+      {/* Mobile CTA */}
+      <div className="mt-10 flex justify-center lg:hidden relative z-10">
+        <button className="group flex items-center gap-2 text-base font-bold text-[var(--color-green-deep)] hover:text-[var(--color-green-vivid)] transition-colors">
+            Explore All Services 
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-green-light)] group-hover:bg-[var(--color-green-vivid)]/20 transition-colors">
+              <ArrowRight className="h-4 w-4" />
+            </span>
+        </button>
+      </div>
+
     </section>
   );
 }
