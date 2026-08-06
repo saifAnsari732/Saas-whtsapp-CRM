@@ -65,8 +65,16 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
   const [activityLoading, setActivityLoading] = useState(true)
 
+  const [waConfig, setWaConfig] = useState<{ connected?: boolean; reason?: string } | null>(null)
+
   const loadAll = useCallback(() => {
     const db = createClient()
+
+    // Fetch WhatsApp config status so we can show a CTA banner if disconnected
+    fetch('/api/whatsapp/config')
+      .then((res) => res.json())
+      .then((data) => setWaConfig(data))
+      .catch((err) => console.error('[dashboard] wa_config failed:', err))
 
     // Kick everything off in parallel. Each block has its own
     // setState + finally so a slow query doesn't hold up faster
@@ -131,6 +139,31 @@ export default function DashboardPage() {
           {t('description')}
         </p>
       </div>
+
+      {waConfig && waConfig.connected === false && (
+        <div className="relative overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 p-8 shadow-sm">
+          <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-blue-500/10 blur-3xl rounded-full pointer-events-none"></div>
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#25D366] to-[#128C7E] shadow-lg shrink-0">
+                <svg viewBox="0 0 24 24" className="h-8 w-8 text-white fill-current" xmlns="http://www.w3.org/2000/svg"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Connect WhatsApp Business</h2>
+                <p className="mt-1 text-sm text-muted-foreground max-w-lg leading-relaxed">
+                  You haven't connected your WhatsApp account yet. Use our official Meta Embedded Signup to start sending messages in just a few clicks.
+                </p>
+              </div>
+            </div>
+            <Link href="/settings?tab=whatsapp" className="w-full md:w-auto shrink-0">
+              <button className="flex items-center justify-center w-full md:w-auto h-12 px-8 rounded-xl bg-[#1877F2] hover:bg-[#1877F2]/90 text-white font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
+                <svg viewBox="0 0 24 24" className="mr-2 h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                Setup with Facebook
+              </button>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* New Action Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
