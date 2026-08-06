@@ -396,6 +396,9 @@ async function handleStatusUpdate(status: {
     isValidStatusTransition(recipient.status, status.status)
   ) {
     const update: Record<string, unknown> = { status: status.status }
+    if (status.status === 'failed' && status.errors && status.errors.length > 0) {
+      update.error_message = status.errors[0].message || status.errors[0].title || JSON.stringify(status.errors[0]);
+    }
     if (status.status === 'sent' && !('sent_at' in update)) update.sent_at = tsIso
     if (status.status === 'delivered') update.delivered_at = tsIso
     if (status.status === 'read') update.read_at = tsIso
