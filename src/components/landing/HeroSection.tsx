@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Play, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { ChatMockup } from "./ChatMockup";
 
 export function HeroSection() {
@@ -100,9 +100,10 @@ export function HeroSection() {
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
-              <Link href="#demo" className="w-full sm:w-auto group">
-                <Button variant="outline" className="w-full sm:w-auto h-14 px-8 text-base font-bold bg-white/80 backdrop-blur-sm border-border text-navy rounded-full hover:bg-white hover:-translate-y-1 transition-all shadow-sm">
-                  <Play className="mr-2 h-5 w-5 fill-navy" /> Watch Demo
+              <Link href="/signup?redirect=%2Fsettings%3Ftab%3Dwhatsapp" className="w-full sm:w-auto group">
+                <Button className="w-full sm:w-auto h-14 px-8 text-base font-bold bg-[#1877F2] hover:bg-[#1877F2]/90 text-white rounded-full hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20">
+                  <svg viewBox="0 0 24 24" className="mr-2 h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                  Connect with Facebook
                 </Button>
               </Link>
             </motion.div>
