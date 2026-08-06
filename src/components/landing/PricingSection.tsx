@@ -8,15 +8,16 @@ export function PricingSection() {
   const plans = [
     {
       name: "Starter",
-      price: "Free",
+      price: ",499",
+      period: "/mo",
       desc: "Perfect for testing the waters and small businesses.",
       features: [
         "1 WhatsApp Number",
         "1,000 Messages / month",
         "Basic CRM Templates",
-        "Community Support"
+        "Basic AI Chatbot"
       ],
-      buttonText: "Get Started Free",
+      buttonText: "Start 14-Day Trial",
       featured: false,
     },
     {
@@ -27,8 +28,8 @@ export function PricingSection() {
       features: [
         "2 WhatsApp Numbers",
         "10,000 Messages / month",
-        "Basic Social Media Marketing",
-        "Graphic Design Support",
+        "Advanced AI Chatbot",
+        "Website Development Support",
         "Standard Email Support"
       ],
       buttonText: "Start Essential",
@@ -42,8 +43,8 @@ export function PricingSection() {
       features: [
         "3 WhatsApp Numbers",
         "25,000 Messages / month",
-        "AI Auto-Replies & Broadcasts",
-        "Meta Ads Management",
+        "Custom AI Agents & Workflows",
+        "E-Commerce Website Integration",
         "Lead Generation Funnels",
         "Priority Support"
       ],
@@ -58,10 +59,9 @@ export function PricingSection() {
       desc: "Complete tech & growth services included in one.",
       features: [
         "Unlimited WhatsApp Numbers",
-        "Unlimited Messages",
-        "Website & WordPress Dev",
+        "Full AI Automation Suite",
+        "Custom Website & App Dev",
         "SEO Optimization & Google Ads",
-        "Complete AI Automation",
         "Dedicated Account Manager"
       ],
       buttonText: "Get All Services",
