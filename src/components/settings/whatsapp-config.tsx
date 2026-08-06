@@ -189,6 +189,54 @@ export function WhatsAppConfig() {
     fetchConfig(accountId);
   }, [authLoading, profileLoading, user?.id, accountId, fetchConfig]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const tokenParam = url.searchParams.get('accessToken');
+    const errorParam = url.searchParams.get('oauth_error');
+
+    if (errorParam) {
+      toast.error(`Facebook Login Error: ${errorParam}`);
+      url.searchParams.delete('oauth_error');
+      window.history.replaceState({}, '', url.toString());
+    }
+
+    if (tokenParam) {
+      setFbLoading(true);
+      url.searchParams.delete('accessToken');
+      window.history.replaceState({}, '', url.toString());
+
+      (async () => {
+        try {
+          const res = await fetch('/api/whatsapp/auth/exchange', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accessToken: tokenParam }),
+          });
+          
+          const data = await res.json();
+          
+          if (!res.ok) {
+            throw new Error(data.error || 'Failed to fetch WhatsApp account details');
+          }
+          
+          setWabaId(data.wabaId);
+          setPhoneNumberId(data.phoneNumberId);
+          setAccessToken(data.accessToken);
+          setTokenEdited(true);
+          setShowAdvanced(true);
+          
+          toast.success('Successfully connected to Facebook. Please click Save to finalize.');
+        } catch (err: any) {
+          console.error('Exchange error:', err);
+          toast.error(err.message || 'Failed to fetch WhatsApp account details.');
+        } finally {
+          setFbLoading(false);
+        }
+      })();
+    }
+  }, []);
+
   async function handleSave() {
     if (!phoneNumberId.trim()) {
       toast.error('Phone Number ID is required');
@@ -379,68 +427,17 @@ export function WhatsAppConfig() {
   }
 
   function handleConnectWithFacebook() {
-    if (!window.FB) {
-      toast.error('Facebook SDK is still loading. Please try again in a moment.');
-      return;
-    }
     if (!fbAppId) {
       toast.error('Facebook App ID is missing from environment variables.');
       return;
     }
 
     setFbLoading(true);
-    window.FB.login(
-      (response) => {
-        if (response.authResponse) {
-          const accessToken = response.authResponse.accessToken;
-          // Wrap async logic so FB SDK doesn't throw "Expression is of type asyncfunction"
-          (async () => {
-            try {
-              // Exchange token and get WABA / Phone Number IDs
-              const res = await fetch('/api/whatsapp/auth/exchange', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accessToken }),
-              });
-              
-              const data = await res.json();
-              
-              if (!res.ok) {
-                throw new Error(data.error || 'Failed to exchange token');
-              }
-              
-              // Pre-fill the form with returned data
-              setWabaId(data.wabaId);
-              setPhoneNumberId(data.phoneNumberId);
-              setAccessToken(data.accessToken);
-              setTokenEdited(true);
-              setShowAdvanced(true);
-              
-              toast.success('Successfully connected to Facebook. Please click Save to finalize.');
-              
-            } catch (err: any) {
-              console.error('Exchange error:', err);
-              toast.error(err.message || 'Failed to fetch WhatsApp account details.');
-            } finally {
-              setFbLoading(false);
-            }
-          })();
-        } else {
-          setFbLoading(false);
-          toast.error('Facebook login was cancelled or failed.');
-        }
-      },
-      {
-        config_id: fbConfigId,
-        response_type: 'code,token',
-        override_default_response_type: true,
-        extras: {
-          setup: {},
-          featureType: '',
-          sessionInfoVersion: '3',
-        },
-      } as any
-    );
+    const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/api/whatsapp/auth/callback` : '';
+    const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&config_id=${fbConfigId}&response_type=code`;
+    
+    // Redirect to Facebook OAuth to bypass Meta's buggy JSSDK toggle requirement
+    window.location.href = oauthUrl;
   }
 
   if (loading) {
