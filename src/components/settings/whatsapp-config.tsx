@@ -23,6 +23,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { SettingsPanelHead } from './settings-panel-head';
+import Script from 'next/script';
+import { Facebook } from 'lucide-react';
 import {
   Accordion,
   AccordionItem,
@@ -88,6 +90,12 @@ export function WhatsAppConfig() {
   };
   const [registrationProbe, setRegistrationProbe] =
     useState<RegistrationProbe | null>(null);
+
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [fbLoading, setFbLoading] = useState(false);
+
+  const fbAppId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '';
+  const fbConfigId = process.env.NEXT_PUBLIC_FACEBOOK_CONFIG_ID || '';
 
   const webhookUrl =
     typeof window !== 'undefined'
@@ -371,6 +379,69 @@ export function WhatsAppConfig() {
     toast.success('Webhook URL copied to clipboard');
   }
 
+  function handleConnectWithFacebook() {
+    if (!window.FB) {
+      toast.error('Facebook SDK is still loading. Please try again in a moment.');
+      return;
+    }
+    if (!fbAppId) {
+      toast.error('Facebook App ID is missing from environment variables.');
+      return;
+    }
+
+    setFbLoading(true);
+    window.FB.login(
+      async (response) => {
+        if (response.authResponse) {
+          try {
+            const accessToken = response.authResponse.accessToken;
+            
+            // Exchange token and get WABA / Phone Number IDs
+            const res = await fetch('/api/whatsapp/auth/exchange', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ accessToken }),
+            });
+            
+            const data = await res.json();
+            
+            if (!res.ok) {
+              throw new Error(data.error || 'Failed to exchange token');
+            }
+            
+            // Pre-fill the form with returned data
+            setWabaId(data.wabaId);
+            setPhoneNumberId(data.phoneNumberId);
+            setAccessToken(data.accessToken);
+            setTokenEdited(true);
+            setShowAdvanced(true);
+            
+            toast.success('Successfully connected to Facebook. Please click Save to finalize.');
+            
+          } catch (err: any) {
+            console.error('Exchange error:', err);
+            toast.error(err.message || 'Failed to fetch WhatsApp account details.');
+          } finally {
+            setFbLoading(false);
+          }
+        } else {
+          setFbLoading(false);
+          toast.error('Facebook login was cancelled or failed.');
+        }
+      },
+      {
+        config_id: fbConfigId,
+        response_type: 'code,token',
+        override_default_response_type: true,
+        extras: {
+          setup: {},
+          featureType: '',
+          sessionInfoVersion: '3',
+        },
+      } as any
+    );
+  }
+
   if (loading) {
     return (
       <section className="animate-in fade-in-50 duration-200">
@@ -389,11 +460,67 @@ export function WhatsAppConfig() {
 
   return (
     <section className="animate-in fade-in-50 duration-200">
+      <Script
+        src="https://connect.facebook.net/en_US/sdk.js"
+        strategy="lazyOnload"
+        onLoad={() => {
+          if (window.FB) {
+            window.FB.init({
+              appId: fbAppId,
+              autoLogAppEvents: true,
+              xfbml: true,
+              version: 'v20.0',
+            });
+          }
+        }}
+      />
       <SettingsPanelHead
         title={t("title")}
         description={t("description")}
       />
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+      
+      {!config && !showAdvanced ? (
+        <div className="space-y-6">
+          <Card className="border-border">
+            <CardHeader className="text-center pb-8 pt-12">
+              <div className="mx-auto mb-6 flex size-20 items-center justify-center rounded-2xl bg-gradient-to-br from-[#25D366] to-[#128C7E] shadow-lg">
+                <Facebook className="size-10 text-white" />
+              </div>
+              <CardTitle className="text-2xl text-foreground mb-2">Connect WhatsApp Business</CardTitle>
+              <CardDescription className="text-base text-muted-foreground max-w-md mx-auto">
+                Securely connect your WhatsApp Business account using Meta's Embedded Signup. This takes just a few clicks.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center pb-12 space-y-6">
+              <Button 
+                onClick={handleConnectWithFacebook} 
+                disabled={fbLoading}
+                className="bg-[#1877F2] hover:bg-[#1877F2]/90 text-white w-full max-w-sm h-12 text-base font-semibold shadow-md transition-all"
+              >
+                {fbLoading ? (
+                  <Loader2 className="mr-2 size-5 animate-spin" />
+                ) : (
+                  <Facebook className="mr-2 size-5 fill-current" />
+                )}
+                {fbLoading ? 'Connecting...' : 'Connect with Facebook'}
+              </Button>
+              <div className="flex items-center w-full max-w-sm">
+                <div className="flex-1 border-t border-border"></div>
+                <span className="px-4 text-xs text-muted-foreground uppercase tracking-widest font-medium">Or</span>
+                <div className="flex-1 border-t border-border"></div>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={() => setShowAdvanced(true)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Use Advanced Manual Setup
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
       {/* Main config form */}
       <div className="space-y-6">
         {/* Corrupted-token reset banner */}
@@ -737,8 +864,18 @@ export function WhatsAppConfig() {
               )}
             </Button>
           )}
+          {!config && showAdvanced && (
+            <Button
+              variant="ghost"
+              onClick={() => setShowAdvanced(false)}
+              className="text-muted-foreground hover:text-foreground ml-auto"
+            >
+              Back to Easy Setup
+            </Button>
+          )}
         </div>
       </div>
+      )}
 
       {/* Setup Instructions Sidebar */}
       <div>
