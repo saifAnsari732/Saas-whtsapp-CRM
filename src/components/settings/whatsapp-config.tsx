@@ -434,7 +434,8 @@ export function WhatsAppConfig() {
 
     setFbLoading(true);
     const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/api/whatsapp/auth/callback` : '';
-    const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&config_id=${fbConfigId}&response_type=code`;
+    const extras = JSON.stringify({ setup: {}, featureType: '', sessionInfoVersion: '3' });
+    const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&config_id=${fbConfigId}&response_type=code&extras=${encodeURIComponent(extras)}`;
     
     // Redirect to Facebook OAuth to bypass Meta's buggy JSSDK toggle requirement
     window.location.href = oauthUrl;
