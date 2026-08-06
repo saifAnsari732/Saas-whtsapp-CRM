@@ -24,7 +24,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { SettingsPanelHead } from './settings-panel-head';
 import Script from 'next/script';
-import { Facebook } from 'lucide-react';
 import {
   Accordion,
   AccordionItem,
@@ -482,47 +481,77 @@ export function WhatsAppConfig() {
       
       {!config && !showAdvanced ? (
         <div className="space-y-6">
-          <Card className="border-border">
-            <CardHeader className="text-center pb-8 pt-12">
-              <div className="mx-auto mb-6 flex size-20 items-center justify-center rounded-2xl bg-gradient-to-br from-[#25D366] to-[#128C7E] shadow-lg">
-                <Facebook className="size-10 text-white" />
+          <Card className="border-border overflow-hidden relative">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#25D366] via-[#128C7E] to-[#1877F2]"></div>
+            <CardHeader className="text-center pb-8 pt-14 relative">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[200px] h-[100px] bg-[#25D366]/10 blur-3xl rounded-full pointer-events-none"></div>
+              <div className="mx-auto mb-6 flex size-20 items-center justify-center rounded-[1.25rem] bg-gradient-to-br from-[#25D366] to-[#128C7E] shadow-[0_10px_25px_-5px_rgba(37,211,102,0.4)] relative z-10 ring-4 ring-white dark:ring-[#0f172a]">
+                <svg viewBox="0 0 24 24" className="size-10 text-white fill-current" xmlns="http://www.w3.org/2000/svg"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
               </div>
-              <CardTitle className="text-2xl text-foreground mb-2">Connect WhatsApp Business</CardTitle>
-              <CardDescription className="text-base text-muted-foreground max-w-md mx-auto">
-                Securely connect your WhatsApp Business account using Meta's Embedded Signup. This takes just a few clicks.
+              <CardTitle className="text-[28px] font-bold text-foreground mb-3 font-heading tracking-tight">Connect WhatsApp Business</CardTitle>
+              <CardDescription className="text-[15px] text-muted-foreground max-w-[460px] mx-auto leading-relaxed">
+                Connect your WhatsApp Business account in minutes using our official Meta integration. No technical setup required.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col items-center justify-center pb-12 space-y-6">
-              <Button 
-                onClick={handleConnectWithFacebook} 
-                disabled={fbLoading}
-                className="bg-[#1877F2] hover:bg-[#1877F2]/90 text-white w-full max-w-sm h-12 text-base font-semibold shadow-md transition-all"
-              >
+            <CardContent className="flex flex-col items-center justify-center pb-14 space-y-10 relative z-10">
+              
+              {/* How it works steps */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-2xl px-4">
+                <div className="flex flex-col items-center text-center space-y-3">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 font-bold text-lg shadow-sm border border-blue-100 dark:border-blue-900/50">1</div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">Login to Meta</h4>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Authenticate with your Facebook Business account securely.</p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-center text-center space-y-3">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 font-bold text-lg shadow-sm border border-green-100 dark:border-green-900/50">2</div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">Pick Number</h4>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Select or create a new WhatsApp Business phone number.</p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-center text-center space-y-3">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 font-bold text-lg shadow-sm border border-purple-100 dark:border-purple-900/50">3</div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">Start Messaging</h4>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Your WABA ID and tokens are configured automatically.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center w-full space-y-6 pt-4 border-t border-border/50 max-w-sm">
+                <Button 
+                  onClick={handleConnectWithFacebook} 
+                  disabled={fbLoading}
+                  className="bg-[#1877F2] hover:bg-[#1877F2]/90 hover:-translate-y-0.5 hover:shadow-lg text-white w-full h-14 rounded-xl text-base font-bold shadow-md transition-all duration-200"
+                >
                 {fbLoading ? (
                   <Loader2 className="mr-2 size-5 animate-spin" />
                 ) : (
-                  <Facebook className="mr-2 size-5 fill-current" />
+                  <svg viewBox="0 0 24 24" className="mr-2 size-5 fill-current" xmlns="http://www.w3.org/2000/svg"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 )}
                 {fbLoading ? 'Connecting...' : 'Connect with Facebook'}
               </Button>
-              <div className="flex items-center w-full max-w-sm">
-                <div className="flex-1 border-t border-border"></div>
-                <span className="px-4 text-xs text-muted-foreground uppercase tracking-widest font-medium">Or</span>
-                <div className="flex-1 border-t border-border"></div>
+                <div className="flex items-center w-full mt-2">
+                  <div className="flex-1 border-t border-border"></div>
+                  <span className="px-4 text-[11px] text-muted-foreground uppercase tracking-widest font-bold">or</span>
+                  <div className="flex-1 border-t border-border"></div>
+                </div>
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowAdvanced(true)}
+                  className="text-muted-foreground hover:text-foreground text-sm font-medium hover:bg-muted/50 rounded-lg h-10 w-full"
+                >
+                  I already have my API tokens (Advanced)
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                onClick={() => setShowAdvanced(true)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                Use Advanced Manual Setup
-              </Button>
             </CardContent>
           </Card>
         </div>
       ) : (
-      {/* Main config form */}
       <div className="space-y-6">
+      {/* Main config form */}
         {/* Corrupted-token reset banner */}
         {showResetBanner && (
           <Alert className="bg-amber-950/40 border-amber-600/40">
