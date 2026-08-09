@@ -30,9 +30,9 @@ export interface AiConfig {
    *  null, retrieval falls back to lexical full-text search. */
   embeddingsApiKey: string | null
   /** 'all' to reply to all inbound messages; 'assigned_templates' to reply only to specific templates. */
-  autoReplyScope: 'all' | 'assigned_templates'
+  autoReplyScope?: 'all' | 'assigned_templates'
   /** Template names the AI is allowed to auto-reply to when scope is 'assigned_templates'. */
-  assignedTemplates: string[]
+  assignedTemplates?: string[]
 }
 
 /** A single conversation turn in the shape both providers accept. */
