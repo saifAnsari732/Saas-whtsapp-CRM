@@ -268,8 +268,8 @@ export default function BroadcastDetailPage() {
       const newBroadcastId = await createAndSendBroadcast({
         name: `${broadcast.name} (Copy)`,
         template: template,
-        audience: broadcast.audience_filter,
-        variables: broadcast.template_variables,
+        audience: broadcast.audience_filter as any,
+        variables: broadcast.template_variables as any,
       });
       
       toast.success(t('toastResent', { fallback: 'Broadcast duplicated and sent successfully' }));
