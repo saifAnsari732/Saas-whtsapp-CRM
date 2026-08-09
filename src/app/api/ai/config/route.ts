@@ -29,9 +29,7 @@ export async function GET() {
       .from('ai_configs')
       // `api_key` is selected only to derive `has_key` — it is stripped
       // out below and never returned to the client.
-      .select(
-        'provider, model, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, api_key, embeddings_api_key',
-      )
+      .select('*')
       .eq('account_id', accountId)
       .maybeSingle()
 
@@ -51,6 +49,23 @@ export async function GET() {
       provider = 'gemini'
       model = model.replace('gemini|', '')
     }
+
+    let auto_reply_scope = data.auto_reply_scope === 'assigned_templates' ? 'assigned_templates' : 'all'
+    let assigned_templates = Array.isArray(data.assigned_templates) ? data.assigned_templates : []
+    let system_prompt = data.system_prompt ?? ''
+
+    if (system_prompt && system_prompt.includes('<!-- AI_TEMPLATE_SCOPE:')) {
+      try {
+        const match = system_prompt.match(/<!-- AI_TEMPLATE_SCOPE:(.*?) -->/)
+        if (match && match[1]) {
+          const meta = JSON.parse(match[1])
+          if (meta.scope) auto_reply_scope = meta.scope
+          if (Array.isArray(meta.templates)) assigned_templates = meta.templates
+        }
+      } catch {}
+      system_prompt = system_prompt.replace(/<!-- AI_TEMPLATE_SCOPE:.*? -->/g, '').trim()
+    }
+
     const { api_key, embeddings_api_key, provider: _p, model: _m, ...safe } = data
     return NextResponse.json({
       configured: true,
@@ -59,6 +74,9 @@ export async function GET() {
       provider,
       model,
       ...safe,
+      system_prompt,
+      auto_reply_scope,
+      assigned_templates,
     })
   } catch (err) {
     return toErrorResponse(err)
@@ -204,6 +222,19 @@ export async function POST(request: Request) {
       }
     }
 
+    const autoReplyScope = body.auto_reply_scope === 'assigned_templates' ? 'assigned_templates' : 'all'
+    const assignedTemplates = Array.isArray(body.assigned_templates)
+      ? body.assigned_templates.filter((t: unknown) => typeof t === 'string' && (t as string).trim()).map((t: unknown) => (t as string).trim())
+      : []
+
+    let cleanPrompt =
+      typeof body.system_prompt === 'string' && body.system_prompt.trim()
+        ? body.system_prompt.replace(/<!-- AI_TEMPLATE_SCOPE:.*? -->/g, '').trim()
+        : ''
+
+    const metaTag = `<!-- AI_TEMPLATE_SCOPE:${JSON.stringify({ scope: autoReplyScope, templates: assignedTemplates })} -->`
+    const finalSystemPrompt = cleanPrompt ? `${cleanPrompt}\n\n${metaTag}` : metaTag
+
     const encryptedKey = rawKey ? encrypt(rawKey) : null
     let dbProvider = provider
     let dbModel = model
@@ -214,10 +245,12 @@ export async function POST(request: Request) {
     const shared: Record<string, unknown> = {
       provider: dbProvider,
       model: dbModel,
-      system_prompt: systemPrompt,
+      system_prompt: finalSystemPrompt,
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
       auto_reply_max_per_conversation: maxAutoReplies,
+      auto_reply_scope: autoReplyScope,
+      assigned_templates: assignedTemplates,
     }
     // Only touch the handoff target when the form actually sent the field,
     // so a partial save (e.g. flipping a toggle) doesn't wipe it.
@@ -229,10 +262,23 @@ export async function POST(request: Request) {
     }
 
     if (existing) {
-      const { error: upErr } = await supabase
+      const payload = encryptedKey ? { ...shared, api_key: encryptedKey } : { ...shared }
+      let { error: upErr } = await supabase
         .from('ai_configs')
-        .update(encryptedKey ? { ...shared, api_key: encryptedKey } : shared)
+        .update(payload)
         .eq('account_id', accountId)
+
+      if (upErr && (upErr.message.includes('column') || upErr.code === '42703')) {
+        // Retry without newly added columns if migration hasn't been run yet
+        delete payload.auto_reply_scope
+        delete payload.assigned_templates
+        const retry = await supabase
+          .from('ai_configs')
+          .update(payload)
+          .eq('account_id', accountId)
+        upErr = retry.error
+      }
+
       if (upErr) {
         console.error('[ai/config POST] update error:', upErr)
         return NextResponse.json(
@@ -241,12 +287,22 @@ export async function POST(request: Request) {
         )
       }
     } else {
-      const { error: insErr } = await supabase.from('ai_configs').insert({
+      const payload: Record<string, unknown> = {
         account_id: accountId,
         created_by: userId,
         api_key: encryptedKey, // guaranteed non-null: rawKey required when no existing row
         ...shared,
-      })
+      }
+      let { error: insErr } = await supabase.from('ai_configs').insert(payload)
+
+      if (insErr && (insErr.message.includes('column') || insErr.code === '42703')) {
+        // Retry without newly added columns if migration hasn't been run yet
+        delete payload.auto_reply_scope
+        delete payload.assigned_templates
+        const retry = await supabase.from('ai_configs').insert(payload)
+        insErr = retry.error
+      }
+
       if (insErr) {
         console.error('[ai/config POST] insert error:', insErr)
         return NextResponse.json(

@@ -79,6 +79,42 @@ export async function dispatchInboundToAiReply(
     // below (this read can race a concurrent inbound).
     if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return
 
+    // Template Assignment Scope Gate: If configured to only auto-reply to assigned templates,
+    // verify that this conversation is linked to one of the assigned templates.
+    if (config.autoReplyScope === 'assigned_templates') {
+      if (!config.assignedTemplates || config.assignedTemplates.length === 0) {
+        // Scope is set to assigned templates, but none are selected -> skip
+        return
+      }
+
+      // Check recent outbound messages to find the active template for this conversation
+      const { data: recentOutbound } = await db
+        .from('messages')
+        .select('template_name, content_type')
+        .eq('conversation_id', conversationId)
+        .neq('sender_type', 'customer')
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      const activeTemplate = recentOutbound?.find(
+        (m) => m.content_type === 'template' && m.template_name,
+      )
+
+      if (!activeTemplate || !activeTemplate.template_name) {
+        // No outbound template message exists in this thread -> skip
+        return
+      }
+
+      const isAssigned = config.assignedTemplates.some(
+        (t) => t.trim().toLowerCase() === activeTemplate.template_name.trim().toLowerCase(),
+      )
+
+      if (!isAssigned) {
+        // The conversation's active template is not in the assigned list -> skip
+        return
+      }
+    }
+
     const messages = await buildConversationContext(db, conversationId)
     if (messages.length === 0) return
 

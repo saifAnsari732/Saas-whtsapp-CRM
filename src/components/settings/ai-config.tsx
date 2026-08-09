@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Sparkles, CheckCircle2, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Sparkles, CheckCircle2, Trash2, Eye, EyeOff, FileText, X } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { createClient } from '@/lib/supabase/client';
 import { canEditSettings } from '@/lib/auth/roles';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -74,6 +75,10 @@ export function AiConfig() {
   const [isActive, setIsActive] = useState(false);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
   const [maxPerConversation, setMaxPerConversation] = useState(3);
+  const [autoReplyScope, setAutoReplyScope] = useState<'all' | 'assigned_templates'>('all');
+  const [assignedTemplates, setAssignedTemplates] = useState<string[]>([]);
+  const [availableTemplates, setAvailableTemplates] = useState<{ id: string; name: string; category?: string; language?: string }[]>([]);
+  const [templateSearch, setTemplateSearch] = useState('');
   // Empty string = leave unassigned (shared queue).
   const [handoffAgentId, setHandoffAgentId] = useState('');
   const [members, setMembers] = useState<AccountMember[]>([]);
@@ -101,6 +106,8 @@ export function AiConfig() {
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
         setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
+        setAutoReplyScope(data.auto_reply_scope === 'assigned_templates' ? 'assigned_templates' : 'all');
+        setAssignedTemplates(Array.isArray(data.assigned_templates) ? data.assigned_templates : []);
         setHandoffAgentId(data.handoff_agent_id ?? '');
         setHasStoredKey(Boolean(data.has_key));
         setApiKey(data.has_key ? MASKED_KEY : '');
@@ -114,16 +121,30 @@ export function AiConfig() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!accountId || loadedAccountIdRef.current === accountId) return;
     loadedAccountIdRef.current = accountId;
     void fetchConfig();
-    // Members populate the handoff-target picker. Best-effort — on an
-    // older deployment without the endpoint the picker just shows the
-    // queue option.
+    // Members populate the handoff-target picker.
     void fetchAccountMembers().then(setMembers);
+
+    // Load available WhatsApp message templates
+    async function loadTemplates() {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from('message_templates')
+          .select('id, name, category, language')
+          .eq('status', 'APPROVED')
+          .order('name');
+        if (data) setAvailableTemplates(data);
+      } catch (err) {
+        console.error('Failed to load message templates:', err);
+      }
+    }
+    void loadTemplates();
   }, [accountId, fetchConfig]);
 
   // Swap the model default when the provider changes, unless the user
@@ -153,6 +174,8 @@ export function AiConfig() {
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
     handoff_agent_id: handoffAgentId || null,
+    auto_reply_scope: autoReplyScope,
+    assigned_templates: assignedTemplates,
   });
 
   const handleTest = async () => {
@@ -437,6 +460,191 @@ export function AiConfig() {
                 disabled={disabled || !isActive}
               />
             </div>
+
+            {/* Template-Specific Trigger Scope */}
+            {autoReplyEnabled && (
+              <div className="space-y-3 rounded-lg border border-border/80 bg-muted/20 p-4">
+                <div className="space-y-1">
+                  <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    Template Auto-Reply Filter
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Choose whether AI auto-replies to all messages or only to responses from specific assigned templates.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <div
+                    onClick={() => !disabled && setAutoReplyScope('all')}
+                    className={`cursor-pointer rounded-md border p-3 transition-all ${
+                      autoReplyScope === 'all'
+                        ? 'border-primary bg-primary/10 text-foreground font-medium shadow-sm'
+                        : 'border-border bg-card text-muted-foreground hover:border-border/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="autoReplyScope"
+                        checked={autoReplyScope === 'all'}
+                        onChange={() => setAutoReplyScope('all')}
+                        disabled={disabled}
+                        className="text-primary accent-primary"
+                      />
+                      <span className="text-sm font-medium">All Inbound Messages</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground pl-5">
+                      AI replies to all customer inquiries and button clicks across any chat.
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => !disabled && setAutoReplyScope('assigned_templates')}
+                    className={`cursor-pointer rounded-md border p-3 transition-all ${
+                      autoReplyScope === 'assigned_templates'
+                        ? 'border-primary bg-primary/10 text-foreground font-medium shadow-sm'
+                        : 'border-border bg-card text-muted-foreground hover:border-border/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="autoReplyScope"
+                        checked={autoReplyScope === 'assigned_templates'}
+                        onChange={() => setAutoReplyScope('assigned_templates')}
+                        disabled={disabled}
+                        className="text-primary accent-primary"
+                      />
+                      <span className="text-sm font-medium">Only Assigned Templates</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground pl-5">
+                      AI replies ONLY when a customer responds to selected templates.
+                    </p>
+                  </div>
+                </div>
+
+                {autoReplyScope === 'assigned_templates' && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-foreground">
+                        Assigned Templates ({assignedTemplates.length} selected)
+                      </Label>
+                      {assignedTemplates.length > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => setAssignedTemplates([])}
+                          disabled={disabled}
+                        >
+                          Clear all
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Search box if templates > 3 */}
+                    {availableTemplates.length > 3 && (
+                      <Input
+                        type="text"
+                        placeholder="Search approved templates..."
+                        value={templateSearch}
+                        onChange={(e) => setTemplateSearch(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                        disabled={disabled}
+                      />
+                    )}
+
+                    {/* Template Selection List */}
+                    <div className="max-h-48 overflow-y-auto space-y-1 rounded-md border border-border bg-background p-2">
+                      {availableTemplates.length === 0 ? (
+                        <p className="p-3 text-center text-xs text-muted-foreground">
+                          No approved templates found in your WhatsApp account.
+                        </p>
+                      ) : availableTemplates.filter((t) =>
+                          t.name.toLowerCase().includes(templateSearch.trim().toLowerCase())
+                        ).length === 0 ? (
+                        <p className="p-3 text-center text-xs text-muted-foreground">
+                          No templates matching &quot;{templateSearch}&quot;
+                        </p>
+                      ) : (
+                        availableTemplates
+                          .filter((t) =>
+                            t.name.toLowerCase().includes(templateSearch.trim().toLowerCase())
+                          )
+                          .map((tmpl) => {
+                            const isSelected = assignedTemplates.includes(tmpl.name);
+                            return (
+                              <div
+                                key={tmpl.id}
+                                onClick={() => {
+                                  if (disabled) return;
+                                  setAssignedTemplates((prev) =>
+                                    isSelected
+                                      ? prev.filter((name) => name !== tmpl.name)
+                                      : [...prev, tmpl.name]
+                                  );
+                                }}
+                                className={`flex cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-xs transition-colors ${
+                                  isSelected
+                                    ? 'bg-primary/15 text-primary font-medium'
+                                    : 'hover:bg-muted text-foreground'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {}}
+                                    className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 accent-primary"
+                                  />
+                                  <span className="font-mono text-[12px]">{tmpl.name}</span>
+                                </div>
+                                {tmpl.category && (
+                                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded">
+                                    {tmpl.category}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })
+                      )}
+                    </div>
+
+                    {/* Selected Badges */}
+                    {assignedTemplates.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {assignedTemplates.map((name) => (
+                          <span
+                            key={name}
+                            className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-xs font-medium text-primary"
+                          >
+                            <span className="font-mono text-[11px]">{name}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!disabled) {
+                                  setAssignedTemplates((prev) => prev.filter((n) => n !== name));
+                                }
+                              }}
+                              className="hover:text-destructive text-primary/70 transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-amber-500 font-medium">
+                        ⚠️ Please select at least one template. With 0 templates selected, AI will not reply to any inbound messages.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center justify-between gap-4">
               <div>

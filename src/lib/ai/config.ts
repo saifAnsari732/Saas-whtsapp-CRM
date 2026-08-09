@@ -12,6 +12,8 @@ interface AiConfigRow {
   auto_reply_max_per_conversation: number
   handoff_agent_id: string | null
   embeddings_api_key: string | null
+  auto_reply_scope?: 'all' | 'assigned_templates' | null
+  assigned_templates?: string[] | null
 }
 
 const CONFIG_COLUMNS =
@@ -36,7 +38,7 @@ export async function loadAiConfig(
   const { requireActive = true } = opts
   const { data, error } = await db
     .from('ai_configs')
-    .select(CONFIG_COLUMNS)
+    .select('*')
     .eq('account_id', accountId)
     .maybeSingle()
 
@@ -69,16 +71,33 @@ export async function loadAiConfig(
     }
   }
 
+  let autoReplyScope: 'all' | 'assigned_templates' = row.auto_reply_scope === 'assigned_templates' ? 'assigned_templates' : 'all'
+  let assignedTemplates: string[] = Array.isArray(row.assigned_templates) ? row.assigned_templates : []
+
+  // Check metadata tag in system_prompt as fallback if column not yet set
+  if (row.system_prompt && row.system_prompt.includes('<!-- AI_TEMPLATE_SCOPE:')) {
+    try {
+      const match = row.system_prompt.match(/<!-- AI_TEMPLATE_SCOPE:(.*?) -->/)
+      if (match && match[1]) {
+        const meta = JSON.parse(match[1])
+        if (meta.scope) autoReplyScope = meta.scope
+        if (Array.isArray(meta.templates)) assignedTemplates = meta.templates
+      }
+    } catch {}
+  }
+
   return {
     provider: row.provider,
     model: row.model,
     apiKey: decrypt(row.api_key),
-    systemPrompt: row.system_prompt,
+    systemPrompt: row.system_prompt ? row.system_prompt.replace(/<!-- AI_TEMPLATE_SCOPE:.*? -->/g, '').trim() : null,
     isActive: row.is_active,
     autoReplyEnabled: row.auto_reply_enabled,
     autoReplyMaxPerConversation: row.auto_reply_max_per_conversation,
     handoffAgentId: row.handoff_agent_id,
     embeddingsApiKey,
+    autoReplyScope,
+    assignedTemplates,
   }
 }
 
