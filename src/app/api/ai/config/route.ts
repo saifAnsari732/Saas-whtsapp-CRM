@@ -262,7 +262,7 @@ export async function POST(request: Request) {
     }
 
     if (existing) {
-      const payload = encryptedKey ? { ...shared, api_key: encryptedKey } : { ...shared }
+      const payload: Record<string, unknown> = encryptedKey ? { ...shared, api_key: encryptedKey } : { ...shared }
       let { error: upErr } = await supabase
         .from('ai_configs')
         .update(payload)
