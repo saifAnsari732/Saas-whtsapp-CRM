@@ -191,7 +191,14 @@ export default function NewBroadcastPage() {
           {currentStep === 0 && (
             <Step1ChooseTemplate
               selectedTemplate={template}
-              onSelect={setTemplate}
+              onSelect={(tpl) => {
+                setTemplate(tpl);
+                if (tpl?.header_media_url) {
+                  setHeaderMediaUrl(tpl.header_media_url);
+                } else {
+                  setHeaderMediaUrl('');
+                }
+              }}
               onNext={() => setCurrentStep(1)}
               onBack={() => router.push('/broadcasts')}
             />

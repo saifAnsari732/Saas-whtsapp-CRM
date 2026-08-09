@@ -32,7 +32,9 @@ import {
   Download,
   ChevronDown,
   Trash2,
+  RefreshCcw,
 } from 'lucide-react';
+import { useBroadcastSending } from '@/hooks/use-broadcast-sending';
 import { toast } from 'sonner';
 import {
   getBroadcastStatus,
@@ -158,6 +160,8 @@ export default function BroadcastDetailPage() {
   );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [resending, setResending] = useState(false);
+  const { createAndSendBroadcast } = useBroadcastSending();
 
   useEffect(() => {
     async function fetchData() {
@@ -244,6 +248,39 @@ export default function BroadcastDetailPage() {
     router.push('/broadcasts');
   }
 
+  async function handleResend() {
+    if (!broadcast) return;
+    setResending(true);
+    try {
+      const supabase = createClient();
+      
+      const { data: template, error: templateError } = await supabase
+        .from('message_templates')
+        .select('*')
+        .eq('name', broadcast.template_name)
+        .eq('language', broadcast.template_language)
+        .single();
+        
+      if (templateError || !template) {
+        throw new Error('Original template not found. Cannot resend.');
+      }
+
+      const newBroadcastId = await createAndSendBroadcast({
+        name: `${broadcast.name} (Copy)`,
+        template: template,
+        audience: broadcast.audience_filter,
+        variables: broadcast.template_variables,
+      });
+      
+      toast.success(t('toastResent', { fallback: 'Broadcast duplicated and sent successfully' }));
+      router.push(`/broadcasts/${newBroadcastId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to resend broadcast');
+    } finally {
+      setResending(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -304,48 +341,67 @@ export default function BroadcastDetailPage() {
           </div>
         </div>
 
-        {/* Delete — inline-confirm pattern matches the pipeline-settings
-            "Delete Pipeline" flow. Mid-send broadcasts can't be deleted
-            because orphaning in-flight Meta messages would leave the
-            funnel inconsistent. */}
-        {confirmDelete ? (
-          <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm">
-            <span className="text-red-300">{t('deletePrompt')}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setConfirmDelete(false)}
-              disabled={deleting}
-              className="h-7 border-border bg-transparent text-muted-foreground hover:bg-muted"
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="h-7 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-            >
-              {deleting ? t('deleting') : t('confirm')}
-            </Button>
-          </div>
-        ) : (
+        {/* Actions group */}
+        <div className="flex items-center gap-2">
+          {/* Resend button */}
           <Button
             variant="outline"
             size="sm"
-            disabled={broadcast.status === 'sending'}
-            onClick={() => setConfirmDelete(true)}
-            title={
-              broadcast.status === 'sending'
-                ? t('cannotDeleteSending')
-                : t('deleteHover')
-            }
-            className="border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10 disabled:opacity-40"
+            onClick={handleResend}
+            disabled={resending || broadcast.status === 'sending'}
+            className="border-border bg-transparent text-foreground hover:bg-muted disabled:opacity-50"
           >
-            <Trash2 className="h-3.5 w-3.5" />
-            {t('delete')}
+            {resending ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCcw className="mr-2 h-3.5 w-3.5" />
+            )}
+            {t('resend', { fallback: 'Resend' })}
           </Button>
-        )}
+
+          {/* Delete — inline-confirm pattern matches the pipeline-settings
+              "Delete Pipeline" flow. Mid-send broadcasts can't be deleted
+              because orphaning in-flight Meta messages would leave the
+              funnel inconsistent. */}
+          {confirmDelete ? (
+            <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm">
+              <span className="text-red-300">{t('deletePrompt')}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="h-7 border-border bg-transparent text-muted-foreground hover:bg-muted"
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="h-7 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? t('deleting') : t('confirm')}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={broadcast.status === 'sending'}
+              onClick={() => setConfirmDelete(true)}
+              title={
+                broadcast.status === 'sending'
+                  ? t('cannotDeleteSending')
+                  : t('deleteHover')
+              }
+              className="border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10 disabled:opacity-40"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {t('delete')}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Stats — 6 cards: Total / Sent / Delivered / Read / Replied / Failed */}

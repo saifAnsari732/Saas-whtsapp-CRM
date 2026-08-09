@@ -656,7 +656,9 @@
         "failed": "Failed"
       },
       "toastFailedDelete": "Failed to delete: {error}",
-      "toastDeleted": "Broadcast deleted"
+      "toastDeleted": "Broadcast deleted",
+      "resend": "Resend",
+      "toastResent": "Broadcast duplicated and sent successfully"
     },
     "new": {
       "title": "New Broadcast",

@@ -47,6 +47,8 @@ interface WhatsAppMessage {
   sticker?: { id: string; mime_type: string }
   location?: { latitude: number; longitude: number; name?: string; address?: string }
   reaction?: { message_id: string; emoji: string }
+  /** Present when a customer taps a QUICK_REPLY button on a template message. */
+  button?: { payload: string; text: string }
   /**
    * Set when the customer taps a button or list row on an interactive
    * message we sent. `button_reply.id` / `list_reply.id` is whatever id
@@ -757,7 +759,7 @@ async function processMessage(
 
   // Keyword Flow Dispatch
   // We run this only if the visual Flow runner didn't consume it.
-  if (!flowConsumed && !interactiveReplyId) {
+  if (!flowConsumed) {
     const kfResult = await dispatchKeywordFlow({
       accountId,
       configOwnerUserId,
@@ -823,7 +825,7 @@ async function processMessage(
   // the account has enabled it. Awaited inside `after()` (same reason as
   // the webhook dispatch below); `dispatchInboundToAiReply` owns its
   // eligibility gates + try/catch and never throws.
-  if (!flowConsumed && !interactiveReplyId && inboundText.trim()) {
+  if (!flowConsumed && inboundText.trim()) {
     await dispatchInboundToAiReply({
       accountId,
       conversationId: conversation.id,
@@ -983,6 +985,18 @@ async function parseMessageContent(
         }
       }
       return { ...empty, contentText: '[Interactive reply]' }
+    }
+
+    case 'button': {
+      // Tapped a QUICK_REPLY button from a template message.
+      if (message.button) {
+        return {
+          ...empty,
+          contentText: message.button.text || message.button.payload || '[Button reply]',
+          interactiveReplyId: message.button.payload,
+        }
+      }
+      return { ...empty, contentText: '[Button reply]' }
     }
 
     default:
