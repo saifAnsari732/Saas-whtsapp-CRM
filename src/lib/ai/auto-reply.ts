@@ -79,6 +79,19 @@ export async function dispatchInboundToAiReply(
     // below (this read can race a concurrent inbound).
     if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return
 
+    // Fetch recent outbound messages to find the active template for this conversation
+    const { data: recentOutbound } = await db
+      .from('messages')
+      .select('template_name, content_type')
+      .eq('conversation_id', conversationId)
+      .neq('sender_type', 'customer')
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    const activeTemplate = recentOutbound?.find(
+      (m) => m.content_type === 'template' && m.template_name,
+    )
+
     // Template Assignment Scope Gate: If configured to only auto-reply to assigned templates,
     // verify that this conversation is linked to one of the assigned templates.
     if (config.autoReplyScope === 'assigned_templates') {
@@ -87,31 +100,51 @@ export async function dispatchInboundToAiReply(
         return
       }
 
-      // Check recent outbound messages to find the active template for this conversation
-      const { data: recentOutbound } = await db
-        .from('messages')
-        .select('template_name, content_type')
-        .eq('conversation_id', conversationId)
-        .neq('sender_type', 'customer')
-        .order('created_at', { ascending: false })
-        .limit(10)
-
-      const activeTemplate = recentOutbound?.find(
-        (m) => m.content_type === 'template' && m.template_name,
-      )
-
       if (!activeTemplate || !activeTemplate.template_name) {
         // No outbound template message exists in this thread -> skip
         return
       }
 
       const isAssigned = config.assignedTemplates.some(
-        (t) => t.trim().toLowerCase() === activeTemplate.template_name.trim().toLowerCase(),
+        (t) => t.trim().toLowerCase() === activeTemplate.template_name!.trim().toLowerCase(),
       )
 
       if (!isAssigned) {
         // The conversation's active template is not in the assigned list -> skip
         return
+      }
+    }
+
+    // Load full template details to ground the AI's reply directly in what the template offered
+    let templateContext: string | null = null
+    if (activeTemplate?.template_name) {
+      const { data: tmplRecord } = await db
+        .from('message_templates')
+        .select('name, body_text, header_content, buttons, category')
+        .eq('name', activeTemplate.template_name)
+        .maybeSingle()
+
+      if (tmplRecord && tmplRecord.body_text) {
+        let buttonsInfo = ''
+        if (Array.isArray(tmplRecord.buttons) && tmplRecord.buttons.length > 0) {
+          const btnLabels = tmplRecord.buttons
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((b: any) => b.text || b.title)
+            .filter(Boolean)
+          if (btnLabels.length > 0) {
+            buttonsInfo = `\n- Options / Buttons in template: ${btnLabels.join(' | ')}`
+          }
+        }
+
+        templateContext = `### ACTIVE WHATSAPP TEMPLATE CONTEXT (Crucial Instructions)
+The business previously sent the customer this WhatsApp Template:
+- Template Name: ${tmplRecord.name}${tmplRecord.header_content ? `\n- Header: ${tmplRecord.header_content}` : ''}
+- Template Message Body:
+${tmplRecord.body_text}${buttonsInfo}
+
+CRITICAL INSTRUCTION:
+The customer is responding directly to this template or tapped one of its buttons/options. 
+You MUST provide an accurate, helpful reply specifically tailored to what was offered in this template and the exact service/option the customer tapped or asked about. Address their inquiry directly with relevant info, pricing/steps, and a warm call to action.`
       }
     }
 
@@ -146,6 +179,7 @@ export async function dispatchInboundToAiReply(
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      templateContext,
     })
 
     const { text, handoff, usage } = await generateReply({
