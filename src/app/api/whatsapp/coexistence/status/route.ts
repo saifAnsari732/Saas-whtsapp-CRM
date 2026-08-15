@@ -1,35 +1,23 @@
 import { NextResponse } from "next/server";
+import { getStatus } from "@/lib/whatsapp/baileys";
+import QRCode from "qrcode";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { serverUrl, globalApiKey, instanceName } = body;
+    const { status, qr } = getStatus();
 
-    if (!serverUrl || !globalApiKey || !instanceName) {
-      return NextResponse.json(
-        { error: "Missing required Evolution API parameters" },
-        { status: 400 }
-      );
+    let base64Qr = null;
+    if (qr) {
+      base64Qr = await QRCode.toDataURL(qr);
     }
 
-    const statusRes = await fetch(`${serverUrl}/instance/connectionState/${instanceName}`, {
-      method: "GET",
-      headers: {
-        apikey: globalApiKey,
-      },
+    return NextResponse.json({
+      success: true,
+      state: status === "connected" ? "open" : status,
+      qr: base64Qr
     });
-
-    if (!statusRes.ok) {
-      const errorText = await statusRes.text();
-      throw new Error(`Failed to fetch status: ${errorText}`);
-    }
-
-    const data = await statusRes.json();
-    
-    // Check if the state is "open" or "connecting"
-    return NextResponse.json({ success: true, state: data?.instance?.state || "unknown" });
   } catch (error: any) {
-    console.error("Evolution API Status Error:", error);
+    console.error("Native Baileys Status Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

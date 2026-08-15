@@ -10,6 +10,7 @@ export default function CoexistenceSetupPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // QR State
+  const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string>("disconnected");
 
@@ -29,15 +30,49 @@ export default function CoexistenceSetupPage() {
     return () => ctx.revert();
   }, []);
 
-  const generateQR = () => {
+  const generateQR = async () => {
     setLoading(true);
     setStatus("generating");
 
-    // Simulate backend QR generation delay
-    setTimeout(() => {
-      setStatus("waiting_scan");
+    try {
+      const res = await fetch("/api/whatsapp/coexistence/create-instance", { method: "POST" });
+      const data = await res.json();
+      
+      if (data.data?.qrcode?.base64) {
+        setQrCodeBase64(data.data.qrcode.base64);
+        setStatus("waiting_scan");
+      }
+      // Start polling regardless, as QR might take a few more seconds to generate on the backend
+      startPolling();
+    } catch (err) {
+      console.error(err);
+      setStatus("error");
+    } finally {
       setLoading(false);
-    }, 2500);
+    }
+  };
+
+  const startPolling = () => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/whatsapp/coexistence/status", { method: "POST" });
+        const data = await res.json();
+        
+        if (data.qr && data.state !== "open") {
+          setQrCodeBase64(data.qr);
+          setStatus("waiting_scan");
+        }
+        
+        if (data.state === "open") {
+          setStatus("connected");
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.error("Polling error", err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
   };
 
   return (
@@ -109,13 +144,15 @@ export default function CoexistenceSetupPage() {
                   </div>
                   Connected!
                 </div>
-              ) : (
+              ) : qrCodeBase64 ? (
                 <>
-                  <QrCode className="h-20 w-20 text-gray-300" />
+                  <img src={qrCodeBase64} alt="QR Code" className="h-full w-full object-contain mix-blend-multiply p-2" />
                   {status === "waiting_scan" && (
                     <div className="scanner-line absolute left-0 h-1 w-full bg-[#25D366] shadow-[0_0_20px_#25D366]" />
                   )}
                 </>
+              ) : (
+                <QrCode className="h-20 w-20 text-gray-300" />
               )}
             </div>
           </div>
