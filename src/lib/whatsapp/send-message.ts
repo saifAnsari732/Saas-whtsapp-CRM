@@ -330,6 +330,38 @@ export async function sendMessageToConversation(
   }
 
   const attempt = async (phone: string): Promise<string> => {
+    // -----------------------------------------------------
+    // NATIVE BAILEYS INTERCEPT
+    // -----------------------------------------------------
+    if (global.waSocket) {
+      try {
+        const jid = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
+        let content: any = {};
+        
+        if (messageType === 'text') {
+          content = { text: contentText };
+        } else if (isMediaKind && mediaUrl) {
+          content = { 
+            [messageType === 'audio' ? 'audio' : messageType === 'document' ? 'document' : messageType === 'video' ? 'video' : 'image']: { url: mediaUrl },
+            caption: contentText || undefined 
+          };
+        } else if (messageType === 'template') {
+          content = { text: contentText || `[Template: ${templateName}]` }; 
+        } else if (messageType === 'interactive') {
+          content = { text: interactivePayloadPreviewText(interactivePayload!) || "[Interactive Message]" };
+        }
+        
+        const sentMsg = await global.waSocket.sendMessage(jid, content);
+        if (sentMsg?.key?.id) return sentMsg.key.id;
+        // If it doesn't return an ID, proceed to fallback.
+      } catch (err: any) {
+        console.warn("[send-message] Baileys native send failed, falling back to Meta API", err);
+      }
+    }
+
+    // -----------------------------------------------------
+    // META CLOUD API FALLBACK
+    // -----------------------------------------------------
     if (messageType === 'template') {
       const result = await sendTemplateMessage({
         phoneNumberId: config.phone_number_id,
