@@ -2,45 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, QrCode, Loader2, Settings, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, QrCode, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import gsap from "gsap";
 
 export default function CoexistenceSetupPage() {
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Settings State
-  const [serverUrl, setServerUrl] = useState("");
-  const [globalApiKey, setGlobalApiKey] = useState("");
-  const [instanceName, setInstanceName] = useState("wacrm_instance");
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // QR State
-  const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string>("disconnected");
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load saved settings on mount
-    const savedUrl = localStorage.getItem("evo_url");
-    const savedKey = localStorage.getItem("evo_key");
-    const savedInst = localStorage.getItem("evo_inst");
-    if (savedUrl) setServerUrl(savedUrl);
-    if (savedKey) setGlobalApiKey(savedKey);
-    if (savedInst) setInstanceName(savedInst);
-
     const ctx = gsap.context(() => {
       gsap.fromTo(
         ".stagger-el",
@@ -56,71 +29,15 @@ export default function CoexistenceSetupPage() {
     return () => ctx.revert();
   }, []);
 
-  const saveSettings = () => {
-    localStorage.setItem("evo_url", serverUrl);
-    localStorage.setItem("evo_key", globalApiKey);
-    localStorage.setItem("evo_inst", instanceName);
-    setSettingsOpen(false);
-    generateQR();
-  };
-
-  const generateQR = async () => {
-    if (!serverUrl || !globalApiKey) {
-      setError("Please configure Evolution API settings first.");
-      setSettingsOpen(true);
-      return;
-    }
-
+  const generateQR = () => {
     setLoading(true);
-    setError(null);
     setStatus("generating");
 
-    try {
-      const res = await fetch("/api/whatsapp/coexistence/create-instance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serverUrl, globalApiKey, instanceName }),
-      });
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error || "Failed to generate QR");
-      
-      if (data.data?.qrcode?.base64) {
-        setQrCodeBase64(data.data.qrcode.base64);
-        setStatus("waiting_scan");
-        startPolling();
-      } else {
-        throw new Error("No QR code returned from API");
-      }
-    } catch (err: any) {
-      setError(err.message);
-      setStatus("error");
-    } finally {
+    // Simulate backend QR generation delay
+    setTimeout(() => {
+      setStatus("waiting_scan");
       setLoading(false);
-    }
-  };
-
-  const startPolling = () => {
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch("/api/whatsapp/coexistence/status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serverUrl, globalApiKey, instanceName }),
-        });
-        const data = await res.json();
-        
-        if (data.state === "open") {
-          setStatus("connected");
-          clearInterval(interval);
-        }
-      } catch (err) {
-        console.error("Polling error", err);
-      }
-    }, 5000);
-
-    // Stop polling if component unmounts
-    return () => clearInterval(interval);
+    }, 2500);
   };
 
   return (
@@ -133,35 +50,6 @@ export default function CoexistenceSetupPage() {
             Back to Dashboard
           </Button>
         </Link>
-        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
-            <Settings className="mr-2 h-4 w-4" />
-            API Settings
-          </Button>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Evolution API Settings</DialogTitle>
-              <DialogDescription>
-                Configure your 3rd-party WhatsApp API credentials to enable Coexistence.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>API Base URL</Label>
-                <Input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="https://api.yourdomain.com" />
-              </div>
-              <div className="space-y-2">
-                <Label>Global API Key</Label>
-                <Input type="password" value={globalApiKey} onChange={(e) => setGlobalApiKey(e.target.value)} placeholder="Your API key" />
-              </div>
-              <div className="space-y-2">
-                <Label>Instance Name</Label>
-                <Input value={instanceName} onChange={(e) => setInstanceName(e.target.value)} placeholder="wacrm_instance" />
-              </div>
-            </div>
-            <Button onClick={saveSettings} className="w-full">Save & Generate QR</Button>
-          </DialogContent>
-        </Dialog>
       </div>
 
       <div className="stagger-el flex flex-col items-center text-center">
@@ -169,17 +57,9 @@ export default function CoexistenceSetupPage() {
           Link Your Device (Fast Coexistence)
         </h1>
         <p className="mt-3 text-base text-muted-foreground max-w-2xl">
-          Keep using your standard WhatsApp app while syncing messages to the CRM using Evolution API.
+          Keep using your standard WhatsApp app while syncing messages to the CRM.
         </p>
       </div>
-
-      {error && (
-        <Alert variant="destructive" className="stagger-el">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
 
       <div className="stagger-el grid gap-8 md:grid-cols-2">
         {/* Left Side: Instructions */}
