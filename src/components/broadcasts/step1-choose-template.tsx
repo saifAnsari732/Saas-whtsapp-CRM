@@ -92,26 +92,37 @@ export function Step1ChooseTemplate({ selectedTemplate, onSelect, onNext, onBack
               <button
                 key={template.id}
                 onClick={() => onSelect(template)}
-                className={`flex flex-col gap-3 rounded-xl border p-4 text-left transition-all ${
+                className={`relative flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all duration-300 overflow-hidden group ${
                   isSelected
-                    ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
-                    : 'border-border bg-card/50 hover:border-border hover:bg-card'
+                    ? 'border-rose-500 bg-rose-500/5 ring-2 ring-rose-500/40 shadow-lg shadow-rose-500/20 scale-[1.02]'
+                    : 'border-border/60 bg-card hover:border-rose-500/40 hover:shadow-md hover:-translate-y-1 hover:bg-card/80'
                 }`}
               >
-                <div className="flex items-start justify-between">
-                  <h3 className="text-sm font-medium text-foreground">{template.name}</h3>
+                {/* Subtle gradient overlay when selected */}
+                {isSelected && (
+                  <div className="absolute inset-0 bg-gradient-to-br from-rose-500/10 to-transparent pointer-events-none" />
+                )}
+                
+                <div className="relative flex w-full items-start justify-between z-10">
+                  <h3 className={`text-sm font-bold transition-colors ${isSelected ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
+                    {template.name}
+                  </h3>
                   <span
-                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${catColor}`}
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide ${catColor}`}
                   >
                     {template.category}
                   </span>
                 </div>
-                <p className="line-clamp-3 text-xs text-muted-foreground">{template.body_text}</p>
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                  <span>{template.language ?? 'en_US'}</span>
-                  {/* Status is omitted on purpose — every template
-                      shown here is already filtered to APPROVED,
-                      so the chip carried no information. */}
+                <p className="relative z-10 line-clamp-3 text-xs leading-relaxed text-muted-foreground/90 group-hover:text-muted-foreground transition-colors">
+                  {template.body_text}
+                </p>
+                <div className="relative z-10 mt-auto flex w-full items-center justify-between text-[10px] text-muted-foreground/80">
+                  <span className="rounded bg-muted/50 px-1.5 py-0.5">{template.language ?? 'en_US'}</span>
+                  {isSelected && (
+                    <span className="flex items-center gap-1 text-rose-500 font-medium">
+                      Selected <ArrowRight className="h-3 w-3" />
+                    </span>
+                  )}
                 </div>
               </button>
             );
