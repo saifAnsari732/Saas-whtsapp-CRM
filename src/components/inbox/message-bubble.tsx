@@ -14,6 +14,11 @@ import {
   ImageOff,
   CornerDownLeft,
   Sparkles,
+  Mic,
+  Play,
+  PlayCircle,
+  Smartphone,
+  Cloud,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ReplyQuote } from "./reply-quote";
@@ -269,6 +274,8 @@ export function MessageBubble({
 
   const isAgent = message.sender_type === "agent" || message.sender_type === "bot";
   const time = format(new Date(message.created_at), "HH:mm");
+  const isCloud = isAgent && message.message_id?.startsWith("wamid.");
+  const isNative = isAgent && message.message_id && !message.message_id.startsWith("wamid.");
 
   // Row alignment + width cap are owned by <MessageActions> so its hover
   // group matches the bubble's content area, not the full row.
@@ -301,10 +308,6 @@ export function MessageBubble({
             isAgent ? "justify-end" : "justify-start",
           )}
         >
-          {/* AI badge — only on replies the auto-reply bot generated
-              (always outbound, so it sits on the primary fill). Lets
-              agents tell an AI reply from their own / a Flow's at a
-              glance. */}
           {message.ai_generated && (
             <span
               className="inline-flex items-center gap-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-primary-foreground"
@@ -314,13 +317,17 @@ export function MessageBubble({
               {t("aiBadge")}
             </span>
           )}
+          
+          {isNative && (
+            <Smartphone className="h-3 w-3 text-primary-foreground/70" title="Sent via Native Device" />
+          )}
+          {isCloud && (
+            <Cloud className="h-3 w-3 text-primary-foreground/70" title="Sent via Cloud API" />
+          )}
+
           <span
             className={cn(
               "text-[10px]",
-              // Outbound bubbles sit on the primary fill, so the
-              // timestamp must read against that (not the neutral
-              // foreground) — otherwise it goes low-contrast in light
-              // mode. Inbound bubbles use the muted surface.
               isAgent ? "text-primary-foreground/70" : "text-muted-foreground",
             )}
           >
