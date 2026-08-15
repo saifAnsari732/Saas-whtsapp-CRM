@@ -211,14 +211,31 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Main navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            <li className="mb-2">
+            <li className="mb-4 flex flex-col gap-2">
               <Link
                 href="/dashboard/coexistence"
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold text-white transition-all bg-rose-500 hover:bg-rose-600 hover:shadow-md hover:-translate-y-0.5 lg:py-2"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold text-white transition-all bg-emerald-500 hover:bg-emerald-600 hover:shadow-md hover:-translate-y-0.5"
               >
                 <Smartphone className="h-4 w-4" />
                 <span className="flex-1">Connect WhatsApp</span>
               </Link>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Link
+                  href="/inbox"
+                  className="flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-[11px] font-bold text-white transition-all bg-rose-500 hover:bg-rose-600 hover:shadow-md hover:-translate-y-0.5 text-center leading-tight"
+                >
+                  <MessageSquare className="h-3 w-3 shrink-0" />
+                  <span>Single Msg</span>
+                </Link>
+                <Link
+                  href="/broadcasts/new"
+                  className="flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-[11px] font-bold text-white transition-all bg-rose-500 hover:bg-rose-600 hover:shadow-md hover:-translate-y-0.5 text-center leading-tight"
+                >
+                  <Radio className="h-3 w-3 shrink-0" />
+                  <span>Bulk Msg</span>
+                </Link>
+              </div>
             </li>
             {navItems.map((item) => {
               const isActive =
