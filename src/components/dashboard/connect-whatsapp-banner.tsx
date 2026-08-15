@@ -1,164 +1,187 @@
-'use client'
+"use client";
 
-import { useEffect, useRef } from 'react'
-import Link from 'next/link'
-import { ArrowRight, Smartphone, Cloud, Zap, ShieldCheck } from 'lucide-react'
-import gsap from 'gsap'
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { ArrowRight, Smartphone, QrCode, CheckCircle2, Cloud, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import gsap from "gsap";
 
 export function ConnectWhatsappBanner() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const leftCardRef = useRef<HTMLDivElement>(null)
-  const rightCardRef = useRef<HTMLDivElement>(null)
-  const badgeRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mockupRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // Entrance animation
+      // Entrance animation for the banner
       gsap.fromTo(
         containerRef.current,
-        { opacity: 0, y: 30 },
-        { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out' }
-      )
+        { opacity: 0, y: 30, scale: 0.98 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "power3.out" }
+      );
 
       gsap.fromTo(
-        [leftCardRef.current, rightCardRef.current],
-        { opacity: 0, y: 40, scale: 0.95 },
-        { 
-          opacity: 1, 
-          y: 0, 
-          scale: 1, 
-          duration: 0.8, 
-          stagger: 0.15, 
-          ease: 'back.out(1.2)', 
-          delay: 0.2 
-        }
-      )
-
-      gsap.fromTo(
-        badgeRef.current,
-        { opacity: 0, scale: 0 },
-        { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(2)', delay: 0.6 }
-      )
+        ".banner-text",
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.6, stagger: 0.1, delay: 0.3, ease: "power2.out" }
+      );
       
-      // Floating animation for the background elements
-      gsap.to('.float-el', {
-        y: 'random(-15, 15)',
-        x: 'random(-15, 15)',
-        rotation: 'random(-5, 5)',
-        duration: 'random(3, 5)',
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-        stagger: 0.2
-      })
-    }, containerRef)
+      gsap.fromTo(
+        mockupRef.current,
+        { opacity: 0, x: 40 },
+        { opacity: 1, x: 0, duration: 0.8, delay: 0.4, ease: "power3.out" }
+      );
 
-    return () => ctx.revert()
-  }, [])
+      // Continuous Scanner Animation for QR in modal (runs when modal opens)
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, []);
+
+  // Use a separate effect to trigger the scanner animation when the modal opens
+  useEffect(() => {
+    if (open) {
+      const scannerCtx = gsap.context(() => {
+        gsap.fromTo(
+          ".scanner-line",
+          { top: "0%" },
+          { top: "100%", duration: 2, repeat: -1, yoyo: true, ease: "linear" }
+        );
+      });
+      return () => scannerCtx.revert();
+    }
+  }, [open]);
 
   return (
     <div 
       ref={containerRef}
-      className="relative overflow-hidden rounded-3xl border border-border/50 bg-card p-1 shadow-sm mb-8"
+      className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0f172a] to-[var(--color-navy)] mb-8 shadow-2xl"
     >
-      {/* Background Gradients & Floating Elements */}
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-blue-500/5 dark:from-indigo-500/10 dark:via-purple-500/10 dark:to-blue-500/10" />
-      <div className="float-el absolute -top-24 -left-24 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
-      <div className="float-el absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-purple-500/10 blur-3xl" />
-      <div className="float-el absolute top-1/2 left-1/2 h-32 w-32 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500/10 blur-2xl" />
+      {/* Background Decor */}
+      <div className="absolute top-0 right-0 h-[600px] w-[600px] -translate-y-1/2 translate-x-1/3 rounded-full bg-[var(--color-green-vivid)] opacity-20 blur-[100px] pointer-events-none"></div>
+      <div className="absolute bottom-0 left-0 h-[400px] w-[400px] translate-y-1/3 -translate-x-1/3 rounded-full bg-[var(--color-green-deep)] opacity-20 blur-[80px] pointer-events-none"></div>
 
-      <div className="relative z-10 flex flex-col gap-6 rounded-2xl bg-background/40 p-6 backdrop-blur-xl sm:p-8 lg:p-10">
+      <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between p-8 sm:p-12 gap-10">
         
-        <div className="flex flex-col items-center text-center max-w-2xl mx-auto mb-4">
-          <div 
-            ref={badgeRef}
-            className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-1 mb-4 text-xs font-semibold text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
-          >
-            <Zap className="h-3.5 w-3.5 fill-current" />
-            <span>Setup Required</span>
-          </div>
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Connect Your WhatsApp
-          </h2>
-          <p className="mt-3 text-base text-muted-foreground leading-relaxed">
-            Choose how you want to connect your business to our CRM. Both methods take just a few minutes to complete.
+        {/* Left Side: Text */}
+        <div className="flex-1 max-w-xl">
+          <p className="banner-text mb-3 text-xs font-bold tracking-widest text-[var(--color-green-vivid)] uppercase">
+            Seamless Onboarding
           </p>
+          <h2 className="banner-text text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl font-heading leading-tight mb-4">
+            Connect in 1-Click. <br/>
+            <span className="text-white/70">No Tech Skills Needed.</span>
+          </h2>
+          <p className="banner-text text-gray-300 text-lg mb-8 leading-relaxed">
+            Link your existing WhatsApp Business app using our Fast Coexistence flow. 
+            No complex APIs, no Facebook App IDs, and zero developer configurations required.
+          </p>
+          
+          <ul className="banner-text space-y-4 mb-8">
+            <li className="flex items-center text-gray-200">
+              <CheckCircle2 className="mr-3 h-5 w-5 text-[var(--color-green-vivid)]" />
+              Keep using your phone normally
+            </li>
+            <li className="flex items-center text-gray-200">
+              <CheckCircle2 className="mr-3 h-5 w-5 text-[var(--color-green-vivid)]" />
+              Instant setup via QR code
+            </li>
+            <li className="flex items-center text-gray-200">
+              <CheckCircle2 className="mr-3 h-5 w-5 text-[var(--color-green-vivid)]" />
+              Automate directly from the CRM
+            </li>
+          </ul>
+
+          <div className="banner-text flex flex-wrap gap-4">
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button className="h-14 px-8 text-base font-bold bg-[var(--color-green-vivid)] hover:bg-[var(--color-green-vivid)]/90 text-navy rounded-xl shadow-lg hover:-translate-y-1 transition-all">
+                  Start Fast Coexistence <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md md:max-w-2xl bg-card border-border/50 p-0 overflow-hidden rounded-2xl">
+                <div className="grid md:grid-cols-2">
+                  {/* Modal Left: Instructions */}
+                  <div className="p-8 bg-muted/30">
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl font-bold">Link Device</DialogTitle>
+                      <DialogDescription className="text-sm mt-2">
+                        Scan this QR code to connect your WhatsApp Business app instantly.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-8 space-y-6">
+                      <div className="flex gap-4">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500/10 text-green-600 font-bold">1</div>
+                        <p className="text-sm font-medium text-foreground mt-1">Open WhatsApp on your phone</p>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500/10 text-green-600 font-bold">2</div>
+                        <p className="text-sm font-medium text-foreground mt-1">Go to <strong>Settings</strong> &gt; <strong>Linked Devices</strong></p>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500/10 text-green-600 font-bold">3</div>
+                        <p className="text-sm font-medium text-foreground mt-1">Point your phone to capture the code</p>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Modal Right: QR Code Mockup */}
+                  <div className="p-8 bg-gradient-to-br from-card to-muted/20 flex flex-col items-center justify-center relative">
+                    <div className="absolute inset-0 bg-[var(--color-green-vivid)]/5" />
+                    <div className="relative mb-6 flex aspect-square w-56 items-center justify-center rounded-3xl bg-white p-4 shadow-xl border border-border">
+                      <div className="relative h-full w-full rounded-2xl bg-gray-50 flex items-center justify-center overflow-hidden border-2 border-dashed border-gray-200">
+                        <QrCode className="h-28 w-28 text-gray-300" />
+                        {/* Scanner Line */}
+                        <div className="scanner-line absolute left-0 h-1 w-full bg-[#25D366] shadow-[0_0_20px_#25D366]" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground relative z-10">
+                      <Loader2 className="h-4 w-4 animate-spin text-green-500" />
+                      Waiting for connection...
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Link href="/settings?tab=whatsapp" className="block">
+              <Button variant="outline" className="h-14 px-8 text-base font-bold border-white/20 text-white hover:bg-white/10 hover:text-white rounded-xl bg-transparent transition-all">
+                Use Cloud API (Advanced)
+              </Button>
+            </Link>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          
-          {/* Card 1: Fast Coexistence */}
-          <div 
-            ref={leftCardRef}
-            className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-b from-card to-card/50 p-6 transition-all duration-300 hover:border-green-500/30 hover:shadow-[0_8px_30px_rgba(34,197,94,0.12)] hover:-translate-y-1"
-          >
-            <div className="absolute top-0 right-0 h-32 w-32 -translate-y-8 translate-x-8 rounded-full bg-green-500/10 blur-2xl transition-all duration-500 group-hover:bg-green-500/20" />
-            
-            <div className="relative z-10">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-[#25D366] to-[#128C7E] shadow-lg shadow-green-500/20">
+        {/* Right Side: Visual Mockup */}
+        <div ref={mockupRef} className="hidden lg:block w-full max-w-sm">
+          <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-md">
+            <div className="mb-6 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#25D366] to-[#128C7E] shadow-lg">
                 <Smartphone className="h-7 w-7 text-white" />
               </div>
-              <h3 className="text-xl font-bold text-foreground">Fast Coexistence</h3>
-              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                Connect your existing WhatsApp Business app quickly. Perfect for small teams who want to keep using the mobile app alongside the CRM.
-              </p>
-              <ul className="mt-4 space-y-2">
-                <li className="flex items-center text-xs text-muted-foreground">
-                  <ShieldCheck className="mr-2 h-4 w-4 text-green-500" /> Use standard WA Business App
-                </li>
-                <li className="flex items-center text-xs text-muted-foreground">
-                  <ShieldCheck className="mr-2 h-4 w-4 text-green-500" /> Easy QR/Phone setup
-                </li>
-              </ul>
+              <h3 className="text-xl font-bold text-white">Device Status</h3>
+              <p className="mt-1 text-xs text-gray-400">Ready to pair</p>
             </div>
             
-            <div className="relative z-10 mt-8">
-              <Link href="/dashboard/coexistence" className="block">
-                <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-500/10 py-3.5 text-sm font-semibold text-green-600 transition-all hover:bg-green-500 hover:text-white dark:text-green-400 dark:hover:text-white">
-                  <span>Start Fast Setup</span>
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </button>
-              </Link>
-            </div>
-          </div>
-
-          {/* Card 2: Cloud API (Embedded Signup) */}
-          <div 
-            ref={rightCardRef}
-            className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-b from-card to-card/50 p-6 transition-all duration-300 hover:border-blue-500/30 hover:shadow-[0_8px_30px_rgba(59,130,246,0.12)] hover:-translate-y-1"
-          >
-            <div className="absolute top-0 right-0 h-32 w-32 -translate-y-8 translate-x-8 rounded-full bg-blue-500/10 blur-2xl transition-all duration-500 group-hover:bg-blue-500/20" />
-            
-            <div className="relative z-10">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-[#1877F2] to-[#0A58CA] shadow-lg shadow-blue-500/20">
-                <Cloud className="h-7 w-7 text-white" />
+            <div className="space-y-4">
+              <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                <div className="h-full w-1/3 rounded-full bg-[var(--color-green-vivid)] animate-pulse" />
               </div>
-              <h3 className="text-xl font-bold text-foreground">Cloud API Integration</h3>
-              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                Connect directly via Meta's Official Cloud API. Best for high-volume messaging, advanced automations, and official business verification.
-              </p>
-              <ul className="mt-4 space-y-2">
-                <li className="flex items-center text-xs text-muted-foreground">
-                  <ShieldCheck className="mr-2 h-4 w-4 text-blue-500" /> Embedded Meta Signup
-                </li>
-                <li className="flex items-center text-xs text-muted-foreground">
-                  <ShieldCheck className="mr-2 h-4 w-4 text-blue-500" /> Full API capabilities
-                </li>
-              </ul>
-            </div>
-            
-            <div className="relative z-10 mt-8">
-              <Link href="/settings?tab=whatsapp" className="block">
-                <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500/10 py-3.5 text-sm font-semibold text-blue-600 transition-all hover:bg-blue-500 hover:text-white dark:text-blue-400 dark:hover:text-white">
-                  <span>Connect via Facebook</span>
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </button>
-              </Link>
+              <div className="flex items-center justify-between text-xs text-gray-400">
+                <span>Waiting for QR Scan...</span>
+              </div>
             </div>
           </div>
-
         </div>
+
       </div>
     </div>
-  )
+  );
 }
