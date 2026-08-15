@@ -183,7 +183,7 @@ export default function DashboardPage() {
           { icon: Zap, label: 'Keyword Flow', href: '/keyword-flows', color: 'bg-gradient-to-br from-[#25D366] to-[#128C7E]' },
           { icon: Users, label: 'WhatsApp Group', href: '/contacts', color: 'bg-gradient-to-br from-sky-500 to-blue-600' },
           { icon: PieChart, label: 'Reports', href: '/dashboard', color: 'bg-gradient-to-br from-indigo-500 to-violet-600' },
-          { icon: Smartphone, label: 'Devices', href: '/settings?tab=whatsapp', color: 'bg-gradient-to-br from-slate-600 to-slate-800' },
+          { icon: Smartphone, label: 'Devices', href: '/dashboard/coexistence', color: 'bg-gradient-to-br from-slate-600 to-slate-800' },
           { icon: Users, label: 'Contacts Group', href: '/contacts', color: 'bg-gradient-to-br from-teal-500 to-emerald-600' },
         ].map((action, i) => (
           <Link
