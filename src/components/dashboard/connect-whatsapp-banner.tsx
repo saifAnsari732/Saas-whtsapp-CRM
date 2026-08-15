@@ -113,7 +113,7 @@ export function ConnectWhatsappBanner() {
             </div>
             
             <div className="relative z-10 mt-8">
-              <Link href="/settings?tab=whatsapp&flow=coexistence" className="block">
+              <Link href="/dashboard/coexistence" className="block">
                 <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-500/10 py-3.5 text-sm font-semibold text-green-600 transition-all hover:bg-green-500 hover:text-white dark:text-green-400 dark:hover:text-white">
                   <span>Start Fast Setup</span>
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

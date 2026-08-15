@@ -7,6 +7,7 @@ import { HowItWorks } from "@/components/landing/HowItWorks";
 import { FeaturesGrid } from "@/components/landing/FeaturesGrid";
 import { TechServices } from "@/components/landing/TechServices";
 import { EmbeddedSignup } from "@/components/landing/EmbeddedSignup";
+import { CoexistenceSection } from "@/components/landing/CoexistenceSection";
 import { MetaBadge } from "@/components/landing/MetaBadge";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { Testimonials } from "@/components/landing/Testimonials";
@@ -32,6 +33,7 @@ export default async function LandingPage() {
         <HowItWorks />
         <FeaturesGrid />
         <TechServices />
+        <CoexistenceSection />
         <EmbeddedSignup />
         <MetaBadge />
         <PricingSection />
