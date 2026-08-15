@@ -102,11 +102,9 @@ export function ConnectWhatsappBanner() {
 
           <div className="banner-text flex flex-wrap gap-4">
             <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button className="h-14 px-8 text-base font-bold bg-[var(--color-green-vivid)] hover:bg-[var(--color-green-vivid)]/90 text-navy rounded-xl shadow-lg hover:-translate-y-1 transition-all">
-                  Start Fast Coexistence <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </DialogTrigger>
+              <Button onClick={() => setOpen(true)} className="h-14 px-8 text-base font-bold bg-[var(--color-green-vivid)] hover:bg-[var(--color-green-vivid)]/90 text-navy rounded-xl shadow-lg hover:-translate-y-1 transition-all">
+                Start Fast Coexistence <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
               <DialogContent className="sm:max-w-md md:max-w-2xl bg-card border-border/50 p-0 overflow-hidden rounded-2xl">
                 <div className="grid md:grid-cols-2">
                   {/* Modal Left: Instructions */}
