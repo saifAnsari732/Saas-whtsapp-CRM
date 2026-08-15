@@ -93,6 +93,12 @@ const nextConfig: NextConfig = {
   ],
 
   /**
+   * Node modules that should not be bundled for Server Components or APIs.
+   * This is required for Baileys and Jimp which rely on native Node modules.
+   */
+  serverExternalPackages: ['@whiskeysockets/baileys', 'jimp', 'sharp', 'pino', 'pino-pretty'],
+
+  /**
    * Cache-Control policy.
    *
    * Why this exists:
