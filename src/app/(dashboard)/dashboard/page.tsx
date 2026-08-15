@@ -35,6 +35,8 @@ import { PipelineDonut } from '@/components/dashboard/pipeline-donut'
 import { ResponseTimeChart } from '@/components/dashboard/response-time-chart'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import { ConnectWhatsappBanner } from '@/components/dashboard/connect-whatsapp-banner'
+import { MessageAnalytics } from '@/components/dashboard/message-analytics'
+import { Card } from '@/components/ui/card'
 
 import { useTranslations } from 'next-intl'
 
@@ -141,7 +143,11 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <ConnectWhatsappBanner />
+      {waConfig && waConfig.connected === false ? (
+        <ConnectWhatsappBanner />
+      ) : (
+        <MessageAnalytics />
+      )}
 
       {/* New Action Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
