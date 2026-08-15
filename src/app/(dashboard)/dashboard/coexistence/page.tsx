@@ -109,13 +109,13 @@ export default function CoexistenceSetupPage() {
                   </div>
                   Connected!
                 </div>
-              ) : qrCodeBase64 ? (
-                <>
-                  <img src={qrCodeBase64} alt="QR Code" className="h-full w-full object-contain mix-blend-multiply p-2" />
-                  <div className="scanner-line absolute left-0 h-1 w-full bg-[#25D366] shadow-[0_0_20px_#25D366]" />
-                </>
               ) : (
-                <QrCode className="h-20 w-20 text-gray-300" />
+                <>
+                  <QrCode className="h-20 w-20 text-gray-300" />
+                  {status === "waiting_scan" && (
+                    <div className="scanner-line absolute left-0 h-1 w-full bg-[#25D366] shadow-[0_0_20px_#25D366]" />
+                  )}
+                </>
               )}
             </div>
           </div>
