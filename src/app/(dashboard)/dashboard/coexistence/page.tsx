@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, QrCode, Loader2, Settings, AlertCircle } from "lucide-react";
+import { ArrowLeft, QrCode, Loader2, Settings, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -134,12 +134,10 @@ export default function CoexistenceSetupPage() {
           </Button>
         </Link>
         <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Settings className="mr-2 h-4 w-4" />
-              API Settings
-            </Button>
-          </DialogTrigger>
+          <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
+            <Settings className="mr-2 h-4 w-4" />
+            API Settings
+          </Button>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Evolution API Settings</DialogTitle>
