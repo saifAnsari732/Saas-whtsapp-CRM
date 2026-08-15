@@ -99,6 +99,23 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
   }
 }
 
+// --- Message Analytics (Delivered, Read, Failed, Pending) ---
+export async function loadMessageAnalytics(db: DB) {
+  const [delivered, seen, failed, pending] = await Promise.all([
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('status', 'delivered'),
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('status', 'read'),
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('status', 'failed'),
+    db.from('messages').select('id', { count: 'exact', head: true }).in('status', ['sending', 'sent'])
+  ]);
+
+  return {
+    delivered: delivered.count ?? 0,
+    seen: seen.count ?? 0,
+    failed: failed.count ?? 0,
+    pending: pending.count ?? 0,
+  }
+}
+
 // --- 2. Conversations over time ---------------------------------------
 
 export async function loadConversationsSeries(

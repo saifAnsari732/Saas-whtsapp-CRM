@@ -18,6 +18,7 @@ import {
   Radio,
   Settings,
   Shield,
+  Smartphone,
   User,
   UserCog,
   Users,
@@ -91,6 +92,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/chats", labelKey: "chats", icon: MessageSquare },
   { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
   { href: "/notifications", labelKey: "notifications", icon: Bell },
   { href: "/contacts", labelKey: "contacts", icon: Users },
@@ -209,6 +211,15 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Main navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
+            <li className="mb-2">
+              <Link
+                href="/dashboard/coexistence"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold text-white transition-all bg-rose-500 hover:bg-rose-600 hover:shadow-md hover:-translate-y-0.5 lg:py-2"
+              >
+                <Smartphone className="h-4 w-4" />
+                <span className="flex-1">Connect WhatsApp</span>
+              </Link>
+            </li>
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href ||

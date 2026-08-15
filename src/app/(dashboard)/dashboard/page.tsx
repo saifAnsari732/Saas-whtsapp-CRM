@@ -21,6 +21,7 @@ import {
   loadMetrics,
   loadPipelineDonut,
   loadResponseTime,
+  loadMessageAnalytics,
 } from '@/lib/dashboard/queries'
 import type {
   ActivityItem,
@@ -69,6 +70,8 @@ export default function DashboardPage() {
   const [activityLoading, setActivityLoading] = useState(true)
 
   const [waConfig, setWaConfig] = useState<{ connected?: boolean; reason?: string } | null>(null)
+  
+  const [msgAnalytics, setMsgAnalytics] = useState<{ delivered: number, seen: number, failed: number, pending: number } | null>(null)
 
   const loadAll = useCallback(() => {
     const db = createClient()
@@ -86,6 +89,10 @@ export default function DashboardPage() {
       .then((m) => setMetrics(m))
       .catch((err) => console.error('[dashboard] metrics failed:', err))
       .finally(() => setMetricsLoading(false))
+
+    void loadMessageAnalytics(db)
+      .then((m) => setMsgAnalytics(m))
+      .catch((err) => console.error('[dashboard] msg analytics failed:', err))
 
     void loadConversationsSeries(db, 30)
       .then((s) => setSeries((prev) => ({ ...prev, 30: s })))
@@ -146,7 +153,7 @@ export default function DashboardPage() {
       {waConfig && waConfig.connected === false ? (
         <ConnectWhatsappBanner />
       ) : (
-        <MessageAnalytics />
+        msgAnalytics && <MessageAnalytics stats={msgAnalytics} />
       )}
 
       {/* New Action Grid */}
