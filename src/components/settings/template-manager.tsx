@@ -12,6 +12,7 @@ import {
   Pencil,
   RotateCcw,
   Upload,
+  MessageSquare,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
