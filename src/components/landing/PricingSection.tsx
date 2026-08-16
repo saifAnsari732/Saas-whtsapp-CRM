@@ -8,27 +8,38 @@ export function PricingSection() {
   const plans = [
     {
       name: "Starter",
-      price: ",499",
+      price: "₹499",
       period: "/mo",
       desc: "Perfect for testing the waters and small businesses.",
       features: [
         "1 WhatsApp Number",
         "1,000 Messages / month",
+        "1,000 Contacts",
+        "1 User",
         "Basic CRM Templates",
-        "Basic AI Chatbot"
+        "Basic AI Chatbot",
+        "Basic Broadcasts",
+        "Contact Management",
+        "Standard Analytics",
+        "Community Support"
       ],
       buttonText: "Start 14-Day Trial",
       featured: false,
     },
     {
       name: "Essential",
-      price: ",999",
+      price: "₹999",
       period: "/mo",
       desc: "Minimum plan to kickstart your messaging & branding.",
       features: [
         "2 WhatsApp Numbers",
         "10,000 Messages / month",
+        "10,000 Contacts",
+        "5 Users",
         "Advanced AI Chatbot",
+        "Unlimited Campaigns",
+        "Flow Builder (Messages)",
+        "API & Webhooks",
         "Website Development Support",
         "Standard Email Support"
       ],
@@ -37,15 +48,19 @@ export function PricingSection() {
     },
     {
       name: "Growth",
-      price: ",2,499",
+      price: "₹2,499",
       period: "/mo",
       desc: "For growing businesses ready to automate and scale.",
       features: [
         "3 WhatsApp Numbers",
         "25,000 Messages / month",
+        "Unlimited Contacts",
+        "15 Users",
         "Custom AI Agents & Workflows",
-        "E-Commerce Website Integration",
+        "Flow Builder (Advanced)",
+        "AI Template Generator",
         "Lead Generation Funnels",
+        "E-Commerce Integration",
         "Priority Support"
       ],
       buttonText: "Start 14-Day Trial",
@@ -54,14 +69,19 @@ export function PricingSection() {
     },
     {
       name: "All-In-One",
-      price: ",4,999",
+      price: "₹4,999",
       period: "/mo",
       desc: "Complete tech & growth services included in one.",
       features: [
         "Unlimited WhatsApp Numbers",
+        "Unlimited Messages",
+        "Unlimited Contacts",
+        "Unlimited Users",
         "Full AI Automation Suite",
+        "Sequence & Auto-Followups",
         "Custom Website & App Dev",
         "SEO Optimization & Google Ads",
+        "Advanced Integrations",
         "Dedicated Account Manager"
       ],
       buttonText: "Get All Services",
