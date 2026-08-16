@@ -150,11 +150,8 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {waConfig && waConfig.connected === false ? (
-        <ConnectWhatsappBanner />
-      ) : (
-        msgAnalytics && <MessageAnalytics stats={msgAnalytics} />
-      )}
+      <ConnectWhatsappBanner />
+      {msgAnalytics && <MessageAnalytics stats={msgAnalytics} />}
 
       {/* New Action Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
