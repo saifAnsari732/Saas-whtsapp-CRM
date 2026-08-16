@@ -14,7 +14,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       state: status === "connected" ? "open" : status,
-      qr: base64Qr
+      qr: base64Qr,
+      user: getStatus().user
     });
   } catch (error: any) {
     console.error("Native Baileys Status Error:", error);

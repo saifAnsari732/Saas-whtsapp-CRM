@@ -72,5 +72,6 @@ export function getStatus() {
   return {
     status: global.waStatus,
     qr: global.waQr,
+    user: global.waSocket?.user || null,
   };
 }

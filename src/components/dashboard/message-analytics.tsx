@@ -18,14 +18,19 @@ export function MessageAnalytics({
 }: AnalyticsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [deviceStatus, setDeviceStatus] = useState<"checking" | "connected" | "disconnected">("checking");
+  const [deviceUser, setDeviceUser] = useState<{ id?: string; name?: string } | null>(null);
 
   useEffect(() => {
     // Check real native socket connection status
     fetch("/api/whatsapp/coexistence/status", { method: "POST" })
       .then(res => res.json())
       .then(data => {
-        if (data.state === "open") setDeviceStatus("connected");
-        else setDeviceStatus("disconnected");
+        if (data.state === "open") {
+          setDeviceStatus("connected");
+          if (data.user) setDeviceUser(data.user);
+        } else {
+          setDeviceStatus("disconnected");
+        }
       })
       .catch(() => setDeviceStatus("disconnected"));
 
@@ -43,24 +48,32 @@ export function MessageAnalytics({
     <div ref={containerRef} className="mb-8">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-foreground">Messaging Analytics</h2>
-        {deviceStatus === "checking" && (
-          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-500/10 text-gray-600 border border-gray-500/20 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-pulse"></span>
-            Checking Status...
-          </span>
-        )}
-        {deviceStatus === "connected" && (
-          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-green-500/10 text-green-600 border border-green-500/20 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-            Device Connected
-          </span>
-        )}
-        {deviceStatus === "disconnected" && (
-          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/10 text-red-600 border border-red-500/20 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-            Device Disconnected
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {deviceUser && (
+            <div className="text-xs text-muted-foreground flex items-center gap-2 border-r pr-3">
+              <span className="font-semibold text-foreground">{deviceUser.name || "WhatsApp User"}</span>
+              <span>{deviceUser.id?.split(':')[0]}</span>
+            </div>
+          )}
+          {deviceStatus === "checking" && (
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-500/10 text-gray-600 border border-gray-500/20 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-pulse"></span>
+              Checking Status...
+            </span>
+          )}
+          {deviceStatus === "connected" && (
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-green-500/10 text-green-600 border border-green-500/20 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+              Device Connected
+            </span>
+          )}
+          {deviceStatus === "disconnected" && (
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/10 text-red-600 border border-red-500/20 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+              Device Disconnected
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
