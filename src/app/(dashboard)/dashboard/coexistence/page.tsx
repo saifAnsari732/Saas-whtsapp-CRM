@@ -15,11 +15,19 @@ export default function CoexistenceSetupPage() {
   const [status, setStatus] = useState<string>("disconnected");
 
   useEffect(() => {
+    let cleanupPolling: (() => void) | undefined;
+
     // Check initial status to see if we are already connected
     fetch("/api/whatsapp/coexistence/status", { method: "POST" })
       .then(res => res.json())
       .then(data => {
-        if (data.state === "open") setStatus("connected");
+        if (data.state === "open" || data.state === "connected") {
+          setStatus("connected");
+        } else if (data.state === "checking" || data.state === "generating" || data.state === "waiting_scan") {
+          setStatus(data.state);
+          if (data.qr) setQrCodeBase64(data.qr);
+          cleanupPolling = startPolling();
+        }
       })
       .catch(console.error);
 
@@ -35,7 +43,11 @@ export default function CoexistenceSetupPage() {
         { top: "100%", duration: 2, repeat: -1, yoyo: true, ease: "linear" }
       );
     }, containerRef);
-    return () => ctx.revert();
+    
+    return () => {
+      ctx.revert();
+      if (cleanupPolling) cleanupPolling();
+    };
   }, []);
 
   const generateQR = async () => {
@@ -184,10 +196,11 @@ export default function CoexistenceSetupPage() {
           </div>
 
           <div className="flex items-center gap-3 text-sm font-semibold text-[var(--color-navy)] bg-white/50 px-5 py-2.5 rounded-full border border-border shadow-sm backdrop-blur-md">
-            {loading && <Loader2 className="h-5 w-5 animate-spin text-blue-500" />}
+            {(loading || status === "checking") && <Loader2 className="h-5 w-5 animate-spin text-blue-500" />}
             {status === "waiting_scan" && <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span>}
             
             {status === "disconnected" && "Ready to Connect"}
+            {status === "checking" && "Reconnecting to device..."}
             {status === "generating" && "Generating Secure QR Code..."}
             {status === "waiting_scan" && "Waiting for your phone to scan..."}
             {status === "connected" && "Ready to automate messages!"}
