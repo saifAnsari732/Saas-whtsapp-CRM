@@ -118,115 +118,116 @@ export default function WhatsAppChatsPage() {
   }).sort((a, b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
-          <History className="h-8 w-8 text-rose-500" />
-          Native WhatsApp Chats
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          View and filter all historical conversations directly synced from your connected phone.
-        </p>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between rounded-xl bg-card p-4 border border-border shadow-sm">
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input 
-            placeholder="Search conversations..." 
-            className="pl-9 bg-background/50" 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8 bg-[#f0f2f5] min-h-screen">
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-border/50">
+        <div className="bg-[#f0f2f5] p-4 flex items-center justify-between border-b border-border/50">
+          <h1 className="text-xl font-semibold text-[#111b21] flex items-center gap-3">
+            <div className="bg-[#00a884] p-2 rounded-full text-white">
+              <History className="h-5 w-5" />
+            </div>
+            WhatsApp Chats
+          </h1>
+          <div className="flex items-center gap-3 text-[#54656f]">
+            <Button variant="ghost" onClick={fetchChats} size="icon" className="hover:bg-black/5 rounded-full" title="Refresh">
+              <Filter className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Button 
-            variant={filter === "all" ? "default" : "outline"} 
-            onClick={() => setFilter("all")}
-            className="flex-1 sm:flex-none"
-          >
-            All
-          </Button>
-          <Button 
-            variant={filter === "direct" ? "default" : "outline"}
-            onClick={() => setFilter("direct")}
-            className="flex-1 sm:flex-none"
-          >
-            <MessageSquare className="mr-2 h-4 w-4" /> Direct
-          </Button>
-          <Button 
-            variant={filter === "groups" ? "default" : "outline"}
-            onClick={() => setFilter("groups")}
-            className="flex-1 sm:flex-none"
-          >
-            <Users className="mr-2 h-4 w-4" /> Groups
-          </Button>
-          <Button variant="ghost" onClick={fetchChats} size="icon" title="Refresh">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-          </Button>
-        </div>
-      </div>
 
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
-            <Loader2 className="h-8 w-8 animate-spin text-rose-500 mb-4" />
-            <p>Syncing chats from WhatsApp engine...</p>
+        <div className="bg-white p-3 border-b border-border/50 flex flex-col sm:flex-row gap-3 items-center">
+          <div className="relative w-full">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-[#54656f]" />
+            </div>
+            <Input 
+              placeholder="Search or start new chat" 
+              className="pl-11 bg-[#f0f2f5] border-none rounded-lg h-9 text-[#111b21] placeholder:text-[#54656f] focus-visible:ring-0 focus-visible:ring-offset-0" 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center p-12 text-red-500">
-            <AlertCircle className="h-8 w-8 mb-4" />
-            <p className="font-semibold">Failed to load chats</p>
-            <p className="text-sm mt-1">{error}</p>
-            <p className="text-xs text-muted-foreground mt-4">Make sure your device is connected via Fast Coexistence.</p>
+          
+          <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">
+            <Button 
+              variant="ghost"
+              onClick={() => setFilter("all")}
+              className={`rounded-full h-8 px-4 text-sm font-medium ${filter === "all" ? "bg-[#d8fdd2] text-[#00a884] hover:bg-[#d8fdd2]" : "bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]"}`}
+            >
+              All
+            </Button>
+            <Button 
+              variant="ghost"
+              onClick={() => setFilter("direct")}
+              className={`rounded-full h-8 px-4 text-sm font-medium whitespace-nowrap ${filter === "direct" ? "bg-[#d8fdd2] text-[#00a884] hover:bg-[#d8fdd2]" : "bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]"}`}
+            >
+              Direct
+            </Button>
+            <Button 
+              variant="ghost"
+              onClick={() => setFilter("groups")}
+              className={`rounded-full h-8 px-4 text-sm font-medium whitespace-nowrap ${filter === "groups" ? "bg-[#d8fdd2] text-[#00a884] hover:bg-[#d8fdd2]" : "bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]"}`}
+            >
+              Groups
+            </Button>
           </div>
-        ) : filteredChats.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
-            <MessageSquare className="h-12 w-12 mb-4 opacity-20" />
-            <p>No conversations found.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {filteredChats.map((chat) => (
-              <div key={chat.id} className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-4">
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${chat.id.includes('@g.us') ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600'}`}>
-                    {chat.id.includes('@g.us') ? <Users className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" />}
+        </div>
+
+        <div className="bg-white min-h-[400px]">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-[400px] text-[#54656f]">
+              <Loader2 className="h-8 w-8 animate-spin text-[#00a884] mb-4" />
+              <p>Syncing chats...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center h-[400px] text-red-500">
+              <AlertCircle className="h-8 w-8 mb-4" />
+              <p className="font-semibold">Failed to load chats</p>
+              <p className="text-sm mt-1">{error}</p>
+            </div>
+          ) : filteredChats.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-[400px] text-[#54656f]">
+              <MessageSquare className="h-12 w-12 mb-4 opacity-20" />
+              <p>No conversations found.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-[#f0f2f5]">
+              {filteredChats.map((chat) => (
+                <div 
+                  key={chat.id} 
+                  onClick={() => openSendModal(chat)}
+                  className="flex items-center justify-between p-3 hover:bg-[#f5f6f6] cursor-pointer transition-colors group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-[49px] w-[49px] shrink-0 items-center justify-center rounded-full bg-[#dfe5e7] text-[#54656f] overflow-hidden">
+                      {chat.id.includes('@g.us') ? <Users className="h-7 w-7 opacity-70" /> : <MessageSquare className="h-7 w-7 opacity-70" />}
+                    </div>
+                    <div className="flex flex-col justify-center">
+                      <h3 className="font-normal text-[#111b21] text-[17px] leading-tight mb-0.5">
+                        {chat.name || chat.id.split('@')[0]}
+                      </h3>
+                      <p className="text-[14px] text-[#667781] leading-tight truncate max-w-[200px] sm:max-w-md">
+                        {chat.id}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground text-base">
-                      {chat.name || chat.id.split('@')[0]}
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {chat.id}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="text-right flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-2">
+                  
+                  <div className="flex flex-col items-end justify-between h-[42px]">
+                    <span className={`text-[12px] ${chat.unreadCount ? 'text-[#25D366]' : 'text-[#667781]'}`}>
+                      {chat.conversationTimestamp ? new Date(chat.conversationTimestamp * 1000).toLocaleDateString() : ''}
+                    </span>
                     {chat.unreadCount ? (
-                      <span className="inline-flex items-center justify-center rounded-full bg-rose-500 px-2.5 py-0.5 text-xs font-bold text-white">
-                        {chat.unreadCount} New
+                      <span className="inline-flex items-center justify-center rounded-full bg-[#25D366] min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold text-white mt-1">
+                        {chat.unreadCount}
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Read</span>
-                    )}
-                    {chat.conversationTimestamp && (
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(chat.conversationTimestamp * 1000).toLocaleDateString()}
-                      </p>
+                      <div className="h-[20px] w-[20px]"></div>
                     )}
                   </div>
-                  <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => openSendModal(chat)}>
-                    <Send className="mr-1 h-3 w-3" /> Send
-                  </Button>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <Dialog open={!!selectedChat} onOpenChange={(open) => !open && setSelectedChat(null)}>
