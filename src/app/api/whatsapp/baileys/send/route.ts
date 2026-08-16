@@ -13,8 +13,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { to, message, mediaUrl, mediaType } = body;
 
-    if (!to || !message) {
-      return NextResponse.json({ error: "Missing 'to' or 'message' fields" }, { status: 400 });
+    if (!to || (!message && !mediaUrl)) {
+      return NextResponse.json({ error: "Missing 'to', 'message', or 'mediaUrl' fields" }, { status: 400 });
     }
 
     const userSocket = global.waSockets?.[user.id];

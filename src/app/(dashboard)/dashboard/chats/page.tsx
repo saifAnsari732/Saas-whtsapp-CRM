@@ -76,7 +76,7 @@ export default function WhatsAppChatsPage() {
   };
 
   const handleSendMessage = async () => {
-    if (!selectedChat || !messageText.trim()) return;
+    if (!selectedChat || (!messageText.trim() && !selectedTemplateId)) return;
     setSending(true);
     try {
       const tmpl = templates.find(t => t.id === selectedTemplateId);
@@ -299,7 +299,7 @@ export default function WhatsAppChatsPage() {
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-rose-500" />
-                Message Content
+                Message Content <span className="text-muted-foreground font-normal text-xs">(Optional)</span>
               </label>
               <div className="relative">
                 <Textarea 
@@ -312,7 +312,7 @@ export default function WhatsAppChatsPage() {
                   {messageText.length} chars
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5 bg-rose-50/50 text-rose-600/80 p-2 rounded-lg border border-rose-100">
+              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5 bg-blue-50/50 text-blue-600/80 p-2 rounded-lg border border-blue-100">
                 <AlertCircle className="w-3.5 h-3.5" />
                 You can manually edit variables (like {'{{1}}'}) before sending.
               </p>
@@ -325,7 +325,7 @@ export default function WhatsAppChatsPage() {
             </Button>
             <Button 
               onClick={handleSendMessage} 
-              disabled={sending || !messageText.trim()}
+              disabled={sending || (!messageText.trim() && !selectedTemplateId)}
               className="rounded-xl bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-500/20 px-8 transition-all active:scale-95"
             >
               {sending ? (
