@@ -77,12 +77,15 @@ export default function WhatsAppChatsPage() {
     if (!selectedChat || !messageText.trim()) return;
     setSending(true);
     try {
+      const tmpl = templates.find(t => t.id === selectedTemplateId);
       const res = await fetch("/api/whatsapp/baileys/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: selectedChat.id,
-          message: messageText
+          message: messageText,
+          mediaUrl: tmpl?.header_media_url || null,
+          mediaType: tmpl?.header_format || null
         })
       });
       const data = await res.json();
