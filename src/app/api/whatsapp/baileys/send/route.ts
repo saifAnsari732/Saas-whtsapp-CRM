@@ -30,12 +30,13 @@ export async function POST(request: Request) {
     }
 
     // Send the message natively
-    if (mediaUrl && ['image', 'video', 'document'].includes(mediaType)) {
-      if (mediaType === 'image') {
+    const lowerMediaType = mediaType?.toLowerCase();
+    if (mediaUrl && ['image', 'video', 'document'].includes(lowerMediaType)) {
+      if (lowerMediaType === 'image') {
         await userSocket.sendMessage(jid, { image: { url: mediaUrl }, caption: message });
-      } else if (mediaType === 'video') {
+      } else if (lowerMediaType === 'video') {
         await userSocket.sendMessage(jid, { video: { url: mediaUrl }, caption: message });
-      } else if (mediaType === 'document') {
+      } else if (lowerMediaType === 'document') {
         await userSocket.sendMessage(jid, { document: { url: mediaUrl }, fileName: 'document', mimetype: 'application/octet-stream', caption: message });
       }
     } else {
