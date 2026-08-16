@@ -211,17 +211,29 @@ export default function WhatsAppChatsPage() {
                     </div>
                   </div>
                   
-                  <div className="flex flex-col items-end justify-between h-[42px]">
-                    <span className={`text-[12px] ${chat.unreadCount ? 'text-[#25D366]' : 'text-[#667781]'}`}>
-                      {chat.conversationTimestamp ? new Date(chat.conversationTimestamp * 1000).toLocaleDateString() : ''}
-                    </span>
-                    {chat.unreadCount ? (
-                      <span className="inline-flex items-center justify-center rounded-full bg-[#25D366] min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold text-white mt-1">
-                        {chat.unreadCount}
+                  <div className="flex flex-col items-end justify-between h-[50px]">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[12px] ${chat.unreadCount ? 'text-[#25D366]' : 'text-[#667781]'}`}>
+                        {chat.conversationTimestamp ? new Date(chat.conversationTimestamp * 1000).toLocaleDateString() : ''}
                       </span>
-                    ) : (
-                      <div className="h-[20px] w-[20px]"></div>
-                    )}
+                      {chat.unreadCount ? (
+                        <span className="inline-flex items-center justify-center rounded-full bg-[#25D366] min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold text-white">
+                          {chat.unreadCount}
+                        </span>
+                      ) : null}
+                    </div>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="h-6 text-[11px] text-[#00a884] hover:text-[#008069] hover:bg-[#00a884]/10 px-2 mt-auto"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openSendModal(chat);
+                      }}
+                    >
+                      <Send className="w-3 h-3 mr-1" />
+                      Send Template
+                    </Button>
                   </div>
                 </div>
               ))}
