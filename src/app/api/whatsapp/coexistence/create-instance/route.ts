@@ -15,19 +15,23 @@ export async function POST(request: Request) {
     // Fire and forget connection start
     connectToWhatsApp(user.id);
 
-    // Wait a brief moment to see if QR generates immediately (it usually takes 1-2s)
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const { status, qr } = getStatus(user.id);
+    // Wait for QR code to generate (up to 8 seconds) to prevent returning null too early
+    let currentStatus = getStatus(user.id);
+    let attempts = 0;
+    while (!currentStatus.qr && currentStatus.status !== 'connected' && attempts < 16) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      currentStatus = getStatus(user.id);
+      attempts++;
+    }
 
     let base64Qr = null;
-    if (qr) {
-      base64Qr = await QRCode.toDataURL(qr);
+    if (currentStatus.qr) {
+      base64Qr = await QRCode.toDataURL(currentStatus.qr);
     }
 
     return NextResponse.json({
       success: true,
-      state: status,
+      state: currentStatus.status,
       data: {
         qrcode: {
           base64: base64Qr
