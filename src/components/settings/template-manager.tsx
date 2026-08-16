@@ -730,7 +730,14 @@ export function TemplateManager() {
               <Input
                 placeholder={t('namePlaceholder')}
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => {
+                  // WhatsApp only allows lowercase, digits, and underscores.
+                  // Auto-format for better UX: convert spaces/hyphens to underscores, lowercase, strip invalid chars.
+                  let val = e.target.value.toLowerCase();
+                  val = val.replace(/[\s-]/g, '_');
+                  val = val.replace(/[^a-z0-9_]/g, '');
+                  setForm({ ...form, name: val });
+                }}
                 disabled={editingId !== null}
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground disabled:opacity-60 disabled:cursor-not-allowed"
               />
