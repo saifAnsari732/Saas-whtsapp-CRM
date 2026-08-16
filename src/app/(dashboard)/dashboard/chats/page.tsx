@@ -19,6 +19,8 @@ interface Template {
   id: string;
   name: string;
   body_text: string;
+  header_media_url?: string | null;
+  header_format?: string | null;
 }
 
 export default function WhatsAppChatsPage() {
