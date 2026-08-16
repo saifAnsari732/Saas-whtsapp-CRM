@@ -333,8 +333,9 @@ export async function sendMessageToConversation(
     // -----------------------------------------------------
     // NATIVE BAILEYS INTERCEPT
     // -----------------------------------------------------
-    if (global.waSocket) {
+    if (global.waSockets && global.waSockets[accountId]) {
       try {
+        const userSocket = global.waSockets[accountId];
         const jid = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
         let content: any = {};
         
@@ -351,11 +352,11 @@ export async function sendMessageToConversation(
           content = { text: interactivePayloadPreviewText(interactivePayload!) || "[Interactive Message]" };
         }
         
-        const sentMsg = await global.waSocket.sendMessage(jid, content);
+        const sentMsg = await userSocket.sendMessage(jid, content);
         if (sentMsg?.key?.id) return sentMsg.key.id;
         // If it doesn't return an ID, proceed to fallback.
       } catch (err: any) {
-        console.warn("[send-message] Baileys native send failed, falling back to Meta API", err);
+        console.warn(`[send-message] Baileys native send failed for user ${accountId}, falling back to Meta API`, err);
       }
     }
 

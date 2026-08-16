@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server";
 import { getStatus } from "@/lib/whatsapp/baileys";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
   try {
-    if (!global.waSocket) {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userSocket = global.waSockets?.[user.id];
+
+    if (!userSocket) {
       return NextResponse.json({ error: "WhatsApp not connected" }, { status: 400 });
     }
 
     // Since we don't use makeInMemoryStore due to Vercel memory constraints,
     // we fetch groups natively using Baileys API.
-    const groups = await global.waSocket.groupFetchAllParticipating();
+    const groups = await userSocket.groupFetchAllParticipating();
     
     // Convert object of groups to array
     const chats = Object.values(groups).map((g: any) => ({
