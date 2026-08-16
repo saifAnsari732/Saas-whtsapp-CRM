@@ -11,23 +11,39 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const store = global.waStores?.[user.id];
     const userSocket = global.waSockets?.[user.id];
 
     if (!userSocket) {
       return NextResponse.json({ error: "WhatsApp not connected" }, { status: 400 });
     }
 
-    // Since we don't use makeInMemoryStore due to Vercel memory constraints,
-    // we fetch groups natively using Baileys API.
-    const groups = await userSocket.groupFetchAllParticipating();
-    
-    // Convert object of groups to array
-    const chats = Object.values(groups).map((g: any) => ({
-      id: g.id,
-      name: g.subject,
-      unreadCount: 0,
-      conversationTimestamp: g.creation
-    }));
+    let chats = [];
+
+    if (store && store.chats) {
+      // Fetch from in-memory store which contains both DMs and Groups
+      const allChats = Object.values(store.chats);
+      chats = allChats.map((c: any) => {
+        const isGroup = c.id.endsWith('@g.us');
+        return {
+          id: c.id,
+          name: c.name || c.id,
+          unreadCount: c.unreadCount || 0,
+          conversationTimestamp: c.conversationTimestamp || Date.now() / 1000,
+          type: isGroup ? 'group' : 'direct',
+        };
+      });
+    } else {
+      // Fallback: If store fails or is not initialized, at least fetch groups
+      const groups = await userSocket.groupFetchAllParticipating();
+      chats = Object.values(groups).map((g: any) => ({
+        id: g.id,
+        name: g.subject,
+        unreadCount: 0,
+        conversationTimestamp: g.creation,
+        type: 'group'
+      }));
+    }
 
     return NextResponse.json({
       success: true,

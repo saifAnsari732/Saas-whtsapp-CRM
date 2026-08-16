@@ -8,12 +8,14 @@ declare global {
   var waSockets: Record<string, any>;
   var waQrs: Record<string, string | null>;
   var waStatuses: Record<string, string>;
+  var waStores: Record<string, any>;
 }
 
 if (!global.waSockets) {
   global.waSockets = {};
   global.waQrs = {};
   global.waStatuses = {};
+  global.waStores = {};
 }
 
 const logger = pino({ level: 'silent' });
@@ -22,6 +24,7 @@ export async function connectToWhatsApp(userId: string) {
   if (!userId) return;
 
   const authFolder = `baileys_auth_info_${userId}`;
+  const storeFile = `baileys_store_${userId}.json`;
   const { state, saveCreds } = await useMultiFileAuthState(authFolder);
 
   if (global.waSockets[userId]) {
@@ -32,6 +35,27 @@ export async function connectToWhatsApp(userId: string) {
   global.waStatuses[userId] = 'generating';
   global.waQrs[userId] = null;
 
+  // Initialize custom lightweight store
+  global.waStores[userId] = { chats: {} };
+
+  // Try to load existing store from disk
+  if (fs.existsSync(storeFile)) {
+    try {
+      global.waStores[userId] = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
+    } catch (e) {
+      console.error("Failed to read store file", e);
+    }
+  }
+
+  // Save store periodically
+  const storeInterval = setInterval(() => {
+    try {
+      fs.writeFileSync(storeFile, JSON.stringify(global.waStores[userId]));
+    } catch (e) {
+      console.error("Failed to write store to file", e);
+    }
+  }, 10_000);
+
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
@@ -39,6 +63,29 @@ export async function connectToWhatsApp(userId: string) {
   });
 
   global.waSockets[userId] = sock;
+
+  // Custom Store Event Listeners
+  sock.ev.on('messaging-history.set', (data) => {
+    for (const chat of data.chats) {
+      global.waStores[userId].chats[chat.id] = chat;
+    }
+  });
+
+  sock.ev.on('chats.upsert', (chats) => {
+    for (const chat of chats) {
+      global.waStores[userId].chats[chat.id] = chat;
+    }
+  });
+
+  sock.ev.on('chats.update', (chats) => {
+    for (const chat of chats) {
+      if (global.waStores[userId].chats[chat.id]) {
+        Object.assign(global.waStores[userId].chats[chat.id], chat);
+      } else {
+        global.waStores[userId].chats[chat.id] = chat;
+      }
+    }
+  });
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -50,6 +97,7 @@ export async function connectToWhatsApp(userId: string) {
     }
 
     if (connection === 'close') {
+      clearInterval(storeInterval);
       const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
       console.log(`Connection closed for user ${userId} due to `, lastDisconnect?.error, ', reconnecting ', shouldReconnect);
       global.waStatuses[userId] = 'disconnected';
@@ -58,10 +106,14 @@ export async function connectToWhatsApp(userId: string) {
       if (shouldReconnect) {
         connectToWhatsApp(userId);
       } else {
-        // Logged out, clean up auth folder
+        // Logged out, clean up auth folder and store file
         if (fs.existsSync(authFolder)) {
           fs.rmSync(authFolder, { recursive: true, force: true });
         }
+        if (fs.existsSync(storeFile)) {
+          fs.rmSync(storeFile, { force: true });
+        }
+        delete global.waStores[userId];
       }
     } else if (connection === 'open') {
       console.log(`Opened connection to WhatsApp for user ${userId}`);
