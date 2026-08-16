@@ -319,10 +319,14 @@ export function MessageBubble({
           )}
           
           {isNative && (
-            <Smartphone className="h-3 w-3 text-primary-foreground/70" title="Sent via Native Device" />
+            <span title="Sent via Native Device" className="flex items-center">
+              <Smartphone className="h-3 w-3 text-primary-foreground/70" />
+            </span>
           )}
           {isCloud && (
-            <Cloud className="h-3 w-3 text-primary-foreground/70" title="Sent via Cloud API" />
+            <span title="Sent via Cloud API" className="flex items-center">
+              <Cloud className="h-3 w-3 text-primary-foreground/70" />
+            </span>
           )}
 
           <span
