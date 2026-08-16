@@ -242,8 +242,9 @@ export default function WhatsAppChatsPage() {
               <Select 
                 value={selectedTemplateId} 
                 onValueChange={(val) => {
-                  setSelectedTemplateId(val);
-                  const tmpl = templates.find(t => t.id === val);
+                  const id = val || "";
+                  setSelectedTemplateId(id);
+                  const tmpl = templates.find(t => t.id === id);
                   if (tmpl) setMessageText(tmpl.body_text);
                 }}
               >
