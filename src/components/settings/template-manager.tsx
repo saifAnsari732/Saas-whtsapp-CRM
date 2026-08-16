@@ -687,24 +687,26 @@ export function TemplateManager() {
         }}
       >
         <DialogContent
-          className="flex flex-col bg-popover border-border p-0 gap-0 overflow-hidden"
+          className="flex flex-col bg-card border-0 p-0 gap-0 overflow-hidden shadow-2xl sm:rounded-2xl"
           style={{ width: '95vw', maxWidth: '1200px', height: '90vh', maxHeight: '90vh' }}
         >
-          <div className="px-6 pt-5 pb-4 border-b border-border shrink-0">
-            <DialogHeader>
-              <DialogTitle className="text-popover-foreground">
+          <div className="bg-gradient-to-r from-[#00a884] to-[#008069] px-6 py-5 shrink-0 relative overflow-hidden">
+            <div className="absolute -right-4 -top-8 opacity-10">
+              <MessageSquare className="w-32 h-32" />
+            </div>
+            <DialogHeader className="relative z-10">
+              <DialogTitle className="text-white text-2xl font-bold flex items-center gap-2">
                 {editingId ? t('dialogEditTitle') : t('dialogNewTitle')}
               </DialogTitle>
-              <DialogDescription className="text-muted-foreground">
+              <DialogDescription className="text-emerald-50 text-sm mt-1">
                 {editingId ? t('dialogEditDesc') : t('dialogNewDesc')}
               </DialogDescription>
             </DialogHeader>
           </div>
 
-          <div className="flex-1 min-h-0 flex flex-row overflow-hidden">
-
+          <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden bg-background">
             {/* Left side: Preview - fixed width */}
-            <div className="w-[340px] shrink-0 bg-muted/20 p-4 overflow-y-auto border-r border-border">
+            <div className="w-full md:w-[380px] shrink-0 bg-[#f0f2f5] p-5 overflow-y-auto border-r border-border/50">
               <TemplatePreview
                 bodyText={form.body_text}
                 headerType={form.template_type === 'CAROUSEL' ? 'CAROUSEL' : form.header_format}

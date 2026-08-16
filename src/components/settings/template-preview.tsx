@@ -136,7 +136,7 @@ export function TemplatePreview({
                 <div className="w-full h-36 bg-black/5 flex items-center justify-center text-xs text-[#667781] overflow-hidden">
                   {headerMediaUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={headerMediaUrl} alt="Header preview" className="w-full h-full object-contain bg-white" />
+                    <img src={headerMediaUrl} alt="Header preview" className="w-full h-full object-cover bg-white" />
                   ) : (
                     <div className="flex flex-col items-center gap-1 opacity-50">
                       <ImageIcon className="h-8 w-8" />
