@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Search, Filter, MessageSquare, Users, History, AlertCircle } from "lucide-react";
+import { Loader2, Search, Filter, MessageSquare, Users, History, AlertCircle, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 interface BaileysChat {
   id: string;
@@ -12,12 +15,25 @@ interface BaileysChat {
   conversationTimestamp?: number;
 }
 
+interface Template {
+  id: string;
+  name: string;
+  body_text: string;
+}
+
 export default function WhatsAppChatsPage() {
   const [chats, setChats] = useState<BaileysChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "groups" | "direct">("all");
+
+  // Send Message Modal State
+  const [selectedChat, setSelectedChat] = useState<BaileysChat | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [messageText, setMessageText] = useState("");
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     fetchChats();
@@ -37,6 +53,48 @@ export default function WhatsAppChatsPage() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openSendModal = async (chat: BaileysChat) => {
+    setSelectedChat(chat);
+    setMessageText("");
+    setSelectedTemplateId("");
+    if (templates.length === 0) {
+      try {
+        const res = await fetch("/api/whatsapp/templates?status=all");
+        const data = await res.json();
+        if (data.templates) {
+          setTemplates(data.templates);
+        }
+      } catch (err) {
+        console.error("Failed to load templates", err);
+      }
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!selectedChat || !messageText.trim()) return;
+    setSending(true);
+    try {
+      const res = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: selectedChat.id,
+          message: messageText
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send message");
+      
+      // Close modal and clear text
+      setSelectedChat(null);
+      setMessageText("");
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -146,25 +204,78 @@ export default function WhatsAppChatsPage() {
                   </div>
                 </div>
                 
-                <div className="text-right">
-                  {chat.unreadCount ? (
-                    <span className="inline-flex items-center justify-center rounded-full bg-rose-500 px-2.5 py-0.5 text-xs font-bold text-white">
-                      {chat.unreadCount} New
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Read</span>
-                  )}
-                  {chat.conversationTimestamp && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(chat.conversationTimestamp * 1000).toLocaleDateString()}
-                    </p>
-                  )}
+                <div className="text-right flex flex-col items-end gap-2">
+                  <div className="flex items-center gap-2">
+                    {chat.unreadCount ? (
+                      <span className="inline-flex items-center justify-center rounded-full bg-rose-500 px-2.5 py-0.5 text-xs font-bold text-white">
+                        {chat.unreadCount} New
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Read</span>
+                    )}
+                    {chat.conversationTimestamp && (
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(chat.conversationTimestamp * 1000).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                  <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => openSendModal(chat)}>
+                    <Send className="mr-1 h-3 w-3" /> Send
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      <Dialog open={!!selectedChat} onOpenChange={(open) => !open && setSelectedChat(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Send Message to {selectedChat?.name || selectedChat?.id.split('@')[0]}</DialogTitle>
+            <DialogDescription>
+              Select a template or type a custom message to send directly via Native Baileys.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="flex flex-col gap-2">
+              <Select 
+                value={selectedTemplateId} 
+                onValueChange={(val) => {
+                  setSelectedTemplateId(val);
+                  const tmpl = templates.find(t => t.id === val);
+                  if (tmpl) setMessageText(tmpl.body_text);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a Template (Optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map(t => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Textarea 
+                placeholder="Type your message here..."
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                rows={5}
+              />
+              <p className="text-xs text-muted-foreground">You can edit the template variables here before sending.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedChat(null)}>Cancel</Button>
+            <Button onClick={handleSendMessage} disabled={sending || !messageText.trim()}>
+              {sending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Send Message
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
