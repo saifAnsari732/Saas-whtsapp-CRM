@@ -21,6 +21,9 @@ interface Template {
   body_text: string;
   header_media_url?: string | null;
   header_format?: string | null;
+  header_content?: string | null;
+  footer_text?: string | null;
+  buttons?: any;
 }
 
 export default function WhatsAppChatsPage() {
@@ -276,7 +279,34 @@ export default function WhatsAppChatsPage() {
                   const id = val || "";
                   setSelectedTemplateId(id);
                   const tmpl = templates.find(t => t.id === id);
-                  if (tmpl) setMessageText(tmpl.body_text || "");
+                  if (tmpl) {
+                    let fullText = "";
+                    
+                    // Include Text Header
+                    if (tmpl.header_format === 'TEXT' && tmpl.header_content) {
+                      fullText += `*${tmpl.header_content}*\n\n`;
+                    }
+                    
+                    // Include Body
+                    fullText += tmpl.body_text || "";
+                    
+                    // Include Footer
+                    if (tmpl.footer_text) {
+                      fullText += `\n\n_${tmpl.footer_text}_`;
+                    }
+                    
+                    // Include Buttons as text options
+                    if (tmpl.buttons && Array.isArray(tmpl.buttons) && tmpl.buttons.length > 0) {
+                      fullText += `\n\n*Options:*`;
+                      tmpl.buttons.forEach((btn: any, index: number) => {
+                        fullText += `\n${index + 1}. ${btn.text || btn.url || btn.phone_number}`;
+                      });
+                    }
+                    
+                    setMessageText(fullText);
+                  } else {
+                    setMessageText("");
+                  }
                 }}
               >
                 <SelectTrigger className="w-full bg-muted/50 border-border focus:ring-rose-500 h-11 rounded-xl">
