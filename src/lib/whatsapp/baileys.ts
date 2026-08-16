@@ -67,22 +67,28 @@ export async function connectToWhatsApp(userId: string) {
   // Custom Store Event Listeners
   sock.ev.on('messaging-history.set', (data) => {
     for (const chat of data.chats) {
-      global.waStores[userId].chats[chat.id] = chat;
+      if (chat.id) {
+        global.waStores[userId].chats[chat.id] = chat;
+      }
     }
   });
 
   sock.ev.on('chats.upsert', (chats) => {
     for (const chat of chats) {
-      global.waStores[userId].chats[chat.id] = chat;
+      if (chat.id) {
+        global.waStores[userId].chats[chat.id] = chat;
+      }
     }
   });
 
   sock.ev.on('chats.update', (chats) => {
     for (const chat of chats) {
-      if (global.waStores[userId].chats[chat.id]) {
-        Object.assign(global.waStores[userId].chats[chat.id], chat);
-      } else {
-        global.waStores[userId].chats[chat.id] = chat;
+      if (chat.id) {
+        if (global.waStores[userId].chats[chat.id]) {
+          Object.assign(global.waStores[userId].chats[chat.id], chat);
+        } else {
+          global.waStores[userId].chats[chat.id] = chat;
+        }
       }
     }
   });
