@@ -22,17 +22,26 @@ export async function GET() {
 
     if (store && store.chats) {
       // Fetch from in-memory store which contains both DMs and Groups
-      const allChats = Object.values(store.chats);
-      chats = allChats.map((c: any) => {
-        const isGroup = c.id.endsWith('@g.us');
-        return {
-          id: c.id,
-          name: c.name || c.id,
-          unreadCount: c.unreadCount || 0,
-          conversationTimestamp: c.conversationTimestamp || Date.now() / 1000,
-          type: isGroup ? 'group' : 'direct',
-        };
-      });
+      const allChats = Object.values(store.chats) as any[];
+      chats = allChats
+        .filter(c => c.id && (c.id.endsWith('@s.whatsapp.net') || c.id.endsWith('@g.us')))
+        .map(c => {
+          const isGroup = c.id.endsWith('@g.us');
+          let ts = c.conversationTimestamp;
+          if (ts && typeof ts === 'object' && 'low' in ts) {
+            ts = ts.low;
+          } else if (typeof ts === 'string') {
+            ts = parseInt(ts, 10);
+          }
+          
+          return {
+            id: c.id,
+            name: c.name || c.id.split('@')[0],
+            unreadCount: c.unreadCount || 0,
+            conversationTimestamp: typeof ts === 'number' && !isNaN(ts) ? ts : Math.floor(Date.now() / 1000),
+            type: isGroup ? 'group' : 'direct',
+          };
+        });
     } else {
       // Fallback: If store fails or is not initialized, at least fetch groups
       const groups = await userSocket.groupFetchAllParticipating();
