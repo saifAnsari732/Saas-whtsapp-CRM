@@ -230,49 +230,97 @@ export default function WhatsAppChatsPage() {
       </div>
 
       <Dialog open={!!selectedChat} onOpenChange={(open) => !open && setSelectedChat(null)}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Send Message to {selectedChat?.name || selectedChat?.id.split('@')[0]}</DialogTitle>
-            <DialogDescription>
-              Select a template or type a custom message to send directly via Native Baileys.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="flex flex-col gap-2">
+        <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden border-0 shadow-2xl rounded-2xl">
+          <div className="bg-gradient-to-r from-rose-500 to-orange-400 p-6 text-white relative overflow-hidden">
+            <div className="absolute -right-4 -top-4 opacity-10">
+              <MessageSquare className="w-32 h-32" />
+            </div>
+            <DialogHeader className="relative z-10 text-left">
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2 text-white">
+                <Send className="w-6 h-6" />
+                Quick Send
+              </DialogTitle>
+              <DialogDescription className="text-rose-100 mt-1">
+                Sending to <strong className="text-white">{selectedChat?.name || selectedChat?.id.split('@')[0]}</strong>
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+
+          <div className="p-6 bg-card space-y-5">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Filter className="w-4 h-4 text-rose-500" />
+                Select a Template
+              </label>
               <Select 
                 value={selectedTemplateId} 
                 onValueChange={(val) => {
                   const id = val || "";
                   setSelectedTemplateId(id);
                   const tmpl = templates.find(t => t.id === id);
-                  if (tmpl) setMessageText(tmpl.body_text);
+                  if (tmpl) setMessageText(tmpl.body_text || "");
                 }}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a Template (Optional)" />
+                <SelectTrigger className="w-full bg-muted/50 border-border focus:ring-rose-500 h-11 rounded-xl">
+                  <SelectValue placeholder="Choose an approved template..." />
                 </SelectTrigger>
-                <SelectContent>
-                  {templates.map(t => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
+                <SelectContent className="rounded-xl shadow-lg">
+                  {templates.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">No templates found</div>
+                  ) : (
+                    templates.map(t => (
+                      <SelectItem key={t.id} value={t.id} className="cursor-pointer">
+                        {t.name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex flex-col gap-2">
-              <Textarea 
-                placeholder="Type your message here..."
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                rows={5}
-              />
-              <p className="text-xs text-muted-foreground">You can edit the template variables here before sending.</p>
+
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-rose-500" />
+                Message Content
+              </label>
+              <div className="relative">
+                <Textarea 
+                  placeholder="Type your custom message or select a template to populate this box..."
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  className="resize-none min-h-[140px] bg-muted/50 border-border focus-visible:ring-rose-500 p-4 rounded-xl leading-relaxed shadow-inner"
+                />
+                <div className="absolute bottom-3 right-3 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded-md backdrop-blur-sm border border-border">
+                  {messageText.length} chars
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5 bg-rose-50/50 text-rose-600/80 p-2 rounded-lg border border-rose-100">
+                <AlertCircle className="w-3.5 h-3.5" />
+                You can manually edit variables (like {'{{1}}'}) before sending.
+              </p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedChat(null)}>Cancel</Button>
-            <Button onClick={handleSendMessage} disabled={sending || !messageText.trim()}>
-              {sending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Send Message
+
+          <DialogFooter className="p-6 pt-0 bg-card border-t border-border/50 sm:justify-between flex items-center">
+            <Button variant="ghost" className="rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-colors" onClick={() => setSelectedChat(null)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSendMessage} 
+              disabled={sending || !messageText.trim()}
+              className="rounded-xl bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-500/20 px-8 transition-all active:scale-95"
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Now
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
