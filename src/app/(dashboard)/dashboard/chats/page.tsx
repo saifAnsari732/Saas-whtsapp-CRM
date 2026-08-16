@@ -77,7 +77,7 @@ export default function WhatsAppChatsPage() {
     if (!selectedChat || !messageText.trim()) return;
     setSending(true);
     try {
-      const res = await fetch("/api/whatsapp/send", {
+      const res = await fetch("/api/whatsapp/baileys/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
