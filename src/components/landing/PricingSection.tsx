@@ -8,7 +8,7 @@ export function PricingSection() {
   const plans = [
     {
       name: "Starter",
-      price: "₹499",
+      price: "₹299",
       period: "/mo",
       desc: "Perfect for testing the waters and small businesses.",
       features: [
@@ -28,7 +28,7 @@ export function PricingSection() {
     },
     {
       name: "Essential",
-      price: "₹999",
+      price: "₹499",
       period: "/mo",
       desc: "Minimum plan to kickstart your messaging & branding.",
       features: [
@@ -48,7 +48,7 @@ export function PricingSection() {
     },
     {
       name: "Growth",
-      price: "₹2,499",
+      price: "₹999",
       period: "/mo",
       desc: "For growing businesses ready to automate and scale.",
       features: [
@@ -69,7 +69,7 @@ export function PricingSection() {
     },
     {
       name: "All-In-One",
-      price: "₹4,999",
+      price: "₹1,999",
       period: "/mo",
       desc: "Complete tech & growth services included in one.",
       features: [

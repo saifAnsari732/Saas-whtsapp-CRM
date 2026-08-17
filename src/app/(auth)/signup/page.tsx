@@ -80,7 +80,7 @@ function SignupPageInner() {
             <MessageSquare className="h-5 w-5 text-white" />
           </div>
           <span className="text-3xl font-black tracking-tight text-navy font-heading">
-            wacrm
+            Botify.ai
           </span>
         </Link>
 
@@ -124,7 +124,7 @@ function SignupPageInner() {
             <MessageSquare className="h-5 w-5 text-white" />
           </div>
           <span className="text-3xl font-black tracking-tight text-navy font-heading">
-            wacrm
+            Botify.ai
           </span>
         </Link>
 
@@ -136,7 +136,7 @@ function SignupPageInner() {
             <p className="text-[15px] text-gray">
               {inviteToken
                 ? "Verify your email, then accept the invitation to join your team."
-                : "Get started with WaCRM in seconds"}
+                : "Get started with Botify.ai in seconds"}
             </p>
           </div>
 
@@ -236,7 +236,7 @@ function SignupPageInner() {
       <div className="hidden lg:block relative bg-[var(--color-navy)] overflow-hidden">
         <Image
           src="/auth-signup-bg.jpg"
-          alt="WaCRM Authentication Background"
+          alt="Botify.ai Authentication"
           fill
           className="object-cover object-center opacity-90"
           priority

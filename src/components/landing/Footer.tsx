@@ -13,7 +13,7 @@ export function Footer() {
                 <MessageSquare className="h-4 w-4 text-white" />
               </div>
               <span className="text-2xl font-black tracking-tight text-white font-heading">
-                wacrm
+                Botify.ai
               </span>
             </Link>
             <p className="text-white/60 text-sm max-w-sm leading-relaxed mb-6">
@@ -58,7 +58,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-white/50 text-sm">
-            &copy; {new Date().getFullYear()} WaCRM. All rights reserved.
+            &copy; {new Date().getFullYear()} Botify.ai. All rights reserved.
           </p>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-[var(--color-green-vivid)] animate-pulse shadow-[0_0_8px_rgba(37,211,102,0.8)]" />

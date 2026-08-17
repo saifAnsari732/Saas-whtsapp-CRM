@@ -66,7 +66,7 @@ function LoginPageInner() {
             <MessageSquare className="h-5 w-5 text-white" />
           </div>
           <span className="text-3xl font-black tracking-tight text-navy font-heading">
-            wacrm
+            Botify.ai
           </span>
         </Link>
 
@@ -154,7 +154,7 @@ function LoginPageInner() {
       <div className="hidden lg:block relative bg-[var(--color-navy)] overflow-hidden">
         <Image
           src="/auth-login-bg.jpg"
-          alt="WaCRM Authentication Background"
+          alt="Botify.ai Authentication Background"
           fill
           className="object-cover object-center opacity-90"
           priority

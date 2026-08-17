@@ -26,8 +26,8 @@ const plusJakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "wacrm",
-    template: "%s — wacrm",
+    default: "Botify.ai",
+    template: "%s - Botify.ai",
   },
   description: "Self-hostable CRM template for WhatsApp.",
   robots: {

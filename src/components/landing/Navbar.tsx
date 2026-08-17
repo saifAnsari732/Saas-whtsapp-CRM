@@ -25,7 +25,7 @@ export function Navbar() {
               <MessageSquare className="h-5 w-5 text-white" />
             </div>
             <span className="text-2xl font-black tracking-tight text-navy font-heading">
-              wacrm
+              Botify.ai
             </span>
           </Link>
 
