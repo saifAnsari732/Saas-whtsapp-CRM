@@ -90,14 +90,15 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Invalid alert value' }, { status: 400 });
     }
 
-    const { data: membership } = await supabase
-      .from('account_members')
+    // Get the account ID for the user
+    const { data: member } = await supabase
+      .from('profiles')
       .select('account_id')
       .eq('user_id', user.id)
       .limit(1)
       .single();
 
-    if (!membership) {
+    if (!member) {
       return NextResponse.json({ error: 'No active account found' }, { status: 404 });
     }
 
