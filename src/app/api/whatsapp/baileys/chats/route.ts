@@ -14,14 +14,10 @@ export async function GET() {
     const store = global.waStores?.[user.id];
     const userSocket = global.waSockets?.[user.id];
 
-    if (!userSocket) {
-      return NextResponse.json({ error: "WhatsApp not connected" }, { status: 400 });
-    }
-
     let chats = [];
 
-    if (store && store.chats) {
-      // Fetch from in-memory store which contains both DMs and Groups
+    if (userSocket && store && store.chats) {
+      // Baileys Connection Active: Fetch from in-memory store which contains both DMs and Groups
       const allChats = Object.values(store.chats) as any[];
       chats = allChats
         .filter(c => c.id && (c.id.endsWith('@s.whatsapp.net') || c.id.endsWith('@g.us')))
@@ -43,14 +39,39 @@ export async function GET() {
           };
         });
     } else {
-      // Fallback: If store fails or is not initialized, at least fetch groups
-      const groups = await userSocket.groupFetchAllParticipating();
-      chats = Object.values(groups).map((g: any) => ({
-        id: g.id,
-        name: g.subject,
-        unreadCount: 0,
-        conversationTimestamp: g.creation,
-        type: 'group'
+      // Fallback: Cloud API Mode. Fetch from Supabase `conversations` table
+      const { data: profile } = await supabase.from('profiles').select('account_id').eq('user_id', user.id).single();
+      if (!profile?.account_id) {
+        return NextResponse.json({ error: "WhatsApp not connected" }, { status: 400 });
+      }
+
+      // Check if Cloud API is actually connected for this account
+      const { data: config } = await supabase.from('whatsapp_configurations').select('phone_number_id').eq('account_id', profile.account_id).single();
+      if (!config?.phone_number_id) {
+        return NextResponse.json({ error: "WhatsApp not connected" }, { status: 400 });
+      }
+
+      const { data: dbConversations, error } = await supabase
+        .from('conversations')
+        .select(`
+          id,
+          contact_id,
+          unread_count,
+          last_message_at,
+          contacts ( phone, name )
+        `)
+        .eq('account_id', profile.account_id)
+        .order('last_message_at', { ascending: false })
+        .limit(100);
+        
+      if (error) throw error;
+
+      chats = (dbConversations || []).map((conv: any) => ({
+        id: conv.contacts?.phone ? `${conv.contacts.phone}@s.whatsapp.net` : conv.id,
+        name: conv.contacts?.name || conv.contacts?.phone || 'Unknown',
+        unreadCount: conv.unread_count || 0,
+        conversationTimestamp: conv.last_message_at ? Math.floor(new Date(conv.last_message_at).getTime() / 1000) : Math.floor(Date.now() / 1000),
+        type: 'direct' // Cloud API typically only handles direct messages
       }));
     }
 
@@ -59,7 +80,7 @@ export async function GET() {
       data: chats
     });
   } catch (error: any) {
-    console.error("Failed to fetch Baileys chats:", error);
+    console.error("Failed to fetch chats:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

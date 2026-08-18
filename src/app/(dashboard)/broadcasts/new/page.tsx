@@ -109,7 +109,7 @@ export default function NewBroadcastPage() {
             <Label className="flex items-center gap-2">
               Select Devices * <span className="text-muted-foreground font-normal text-xs">(Multi-device rotation)</span>
             </Label>
-            <Select value={device} onValueChange={setDevice}>
+            <Select value={device} onValueChange={(v) => setDevice(v || '')}>
               <SelectTrigger className="bg-card">
                 <SelectValue placeholder="Choose devices..." />
               </SelectTrigger>
@@ -134,7 +134,7 @@ export default function NewBroadcastPage() {
               <TabsTrigger value="numbers" className="data-[state=active]:bg-primary data-[state=active]:text-white">Paste Numbers</TabsTrigger>
             </TabsList>
             <TabsContent value="group">
-              <Select value={groupId} onValueChange={setGroupId}>
+              <Select value={groupId} onValueChange={(v) => setGroupId(v || '')}>
                 <SelectTrigger className="bg-card">
                   <SelectValue placeholder="Choose a contact group..." />
                 </SelectTrigger>

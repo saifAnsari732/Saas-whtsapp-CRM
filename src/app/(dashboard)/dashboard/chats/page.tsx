@@ -90,7 +90,9 @@ export default function WhatsAppChatsPage() {
           to: selectedChat.id,
           message: messageText,
           mediaUrl: tmpl?.header_media_url || null,
-          mediaType: tmpl?.header_format || null
+          mediaType: tmpl?.header_format || null,
+          templateName: tmpl?.name || null,
+          templateLanguage: tmpl?.language || 'en_US'
         })
       });
       const data = await res.json();
