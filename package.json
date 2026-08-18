@@ -82,7 +82,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "esbuild": "^0.28.2",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.2.6",
     "prettier": "^3.9.5",
     "prettier-plugin-tailwindcss": "^0.8.0",
