@@ -59,7 +59,7 @@ export async function POST(request: Request) {
           accessToken: config.system_user_token,
           to: metaPhone,
           templateName: templateName,
-          languageCode: templateLanguage || 'en_US',
+          language: templateLanguage || 'en_US',
         });
       } else {
         await sendTextMessage({

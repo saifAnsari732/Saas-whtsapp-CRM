@@ -33,6 +33,7 @@ export const SETTINGS_SECTIONS = [
   'deals',
   'members',
   'api',
+  'superadmin',
 ] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
@@ -44,7 +45,7 @@ export interface SectionMeta {
   id: SettingsSection;
   label: string;
   icon: LucideIcon;
-  group: 'top' | 'account' | 'workspace';
+  group: 'top' | 'account' | 'workspace' | 'admin';
 }
 
 export const SECTION_META: Record<SettingsSection, SectionMeta> = {
@@ -59,12 +60,14 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
   members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'workspace' },
+  superadmin: { id: 'superadmin', label: 'Platform Admin', icon: Shield, group: 'admin' },
 };
 
 export const RAIL_GROUPS: { label: string | null; group: SectionMeta['group'] }[] = [
   { label: null, group: 'top' },
   { label: 'Account', group: 'account' },
   { label: 'Workspace', group: 'workspace' },
+  { label: 'System', group: 'admin' },
 ];
 
 function isSection(value: string | null): value is SettingsSection {

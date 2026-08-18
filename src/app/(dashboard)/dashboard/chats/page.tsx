@@ -24,6 +24,7 @@ interface Template {
   header_content?: string | null;
   footer_text?: string | null;
   buttons?: any;
+  language?: string;
 }
 
 export default function WhatsAppChatsPage() {
