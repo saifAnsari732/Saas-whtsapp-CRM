@@ -7,9 +7,11 @@ export async function GET(req: NextRequest) {
   const errorDescription = searchParams.get('error_description');
 
   // URL to redirect the user back to in the CRM
+  // We use the actual request host to ensure the redirect URI exactly matches
+  // what the frontend used, avoiding domain mismatch errors.
   const protocol = req.headers.get('x-forwarded-proto') || 'https';
-  const host = req.headers.get('host') || 'saas-whtsapp-crm-pq3m.onrender.com';
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'saas-whtsapp-crm-pq3m.onrender.com';
+  const baseUrl = `${protocol}://${host}`;
   const settingsUrl = new URL('/settings', baseUrl);
   settingsUrl.searchParams.set('tab', 'whatsapp');
 
