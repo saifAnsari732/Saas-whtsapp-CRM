@@ -26,8 +26,7 @@
   ],
   "engines": {
     "node": ">=20.0.0"
-  },https://saas-whtsapp-crm-pq3m.onrender.com/api/whatsapp/webhook
-  https://saas-whtsapp-crm-sigma.vercel.app/api/whatsapp/webhook
+  },
   "scripts": {
     "build": "next build",
     "dev": "next dev",
