@@ -193,8 +193,15 @@ export default function BillingPage() {
               >
                 <Plus className="h-4 w-4 mr-2" /> Recharge Wallet
               </Button>
+              <Button 
+                variant="outline" 
+                className="w-full h-11 text-[#1877F2] border-[#1877F2]/30 hover:bg-[#1877F2]/10 hover:text-[#1877F2] font-semibold"
+                onClick={() => window.open('https://business.facebook.com/wa/manage/billing', '_blank')}
+              >
+                <CreditCard className="h-4 w-4 mr-2" /> Pay via Meta Directly
+              </Button>
               <Button variant="outline" className="w-full h-11 text-muted-foreground font-semibold">
-                <CreditCard className="h-4 w-4 mr-2" /> Manual Payment
+                <FileText className="h-4 w-4 mr-2" /> Manual Payment
               </Button>
             </div>
           </div>
