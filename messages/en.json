@@ -1509,11 +1509,13 @@
       "fields": "Fields & tags",
       "deals": "Deals & currency",
       "members": "Team members",
-      "api": "API keys"
+      "api": "API keys",
+      "superadmin": "Platform Admin"
     },
     "groups": {
       "account": "Account",
-      "workspace": "Workspace"
+      "workspace": "Workspace",
+      "admin": "System"
     },
     "profile": {
       "title": "Your profile",
