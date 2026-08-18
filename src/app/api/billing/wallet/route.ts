@@ -105,7 +105,7 @@ export async function PATCH(request: Request) {
     const { data: updatedWallet, error } = await supabase
       .from('wallets')
       .update({ low_balance_alert: Number(low_balance_alert) })
-      .eq('account_id', membership.account_id)
+      .eq('account_id', member.account_id)
       .select()
       .single();
 
