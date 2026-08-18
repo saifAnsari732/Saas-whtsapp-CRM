@@ -324,6 +324,11 @@ export function WhatsAppConfig() {
       }
 
       if (accountId) await fetchConfig(accountId);
+
+      // Redirect to dashboard after a short delay so user can see the success toast
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1500);
     } catch (err) {
       console.error('Save error:', err);
       toast.error('Failed to save configuration');
