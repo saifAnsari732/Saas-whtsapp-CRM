@@ -7,7 +7,8 @@ import {
   Loader2, 
   UserX, 
   UserCheck, 
-  Shield 
+  Shield,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -112,6 +113,41 @@ export function SuperAdminTab() {
       );
     } catch (err) {
       console.error('[SuperAdminTab] action error:', err);
+      toast.error('Could not reach the server');
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleDeleteUser = async (targetUserId: string, userEmail: string | null) => {
+    if (targetUserId === user?.id) {
+      toast.error("You cannot delete your own account from here.");
+      return;
+    }
+    
+    const confirmMessage = `WARNING: Are you absolutely sure you want to permanently delete ${userEmail || 'this user'} and all their data? This action cannot be undone.`;
+      
+    if (!window.confirm(confirmMessage)) return;
+
+    setPendingAction(`delete_${targetUserId}`);
+    try {
+      const res = await fetch(`/api/admin/users?userId=${targetUserId}`, {
+        method: 'DELETE',
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to delete user');
+        return;
+      }
+      
+      toast.success(data.message || 'User permanently deleted');
+      
+      // Remove from local state
+      setUsers(prev => prev.filter(u => u.id !== targetUserId));
+    } catch (err) {
+      console.error('[SuperAdminTab] delete error:', err);
       toast.error('Could not reach the server');
     } finally {
       setPendingAction(null);
@@ -231,6 +267,23 @@ export function SuperAdminTab() {
                           Block User
                         </Button>
                       )
+                    )}
+                    
+                    {!isSelf && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteUser(member.id, member.email)}
+                        disabled={pendingAction === `delete_${member.id}` || isBusy}
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 px-2"
+                        title="Delete User Permanently"
+                      >
+                        {pendingAction === `delete_${member.id}` ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-4" />
+                        )}
+                      </Button>
                     )}
                   </div>
                 </li>

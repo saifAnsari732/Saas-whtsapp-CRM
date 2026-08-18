@@ -117,3 +117,42 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const isSuperAdmin = await verifySuperAdmin();
+    if (!isSuperAdmin) {
+      return NextResponse.json({ error: 'Unauthorized. Super Admin access required.' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+
+    const adminClient = getAdminClient();
+
+    // 1. Delete user's account from public.accounts first.
+    // This bypasses the ON DELETE RESTRICT constraint on auth.users because we manually cascade the deletion.
+    const { error: accountDeleteError } = await adminClient
+      .from('accounts')
+      .delete()
+      .eq('owner_user_id', userId);
+      
+    if (accountDeleteError) {
+      console.error('Failed to delete user account (RESTRICT constraint bypass):', accountDeleteError);
+      // We don't throw here, in case the user has no account, we still want to try deleting them from auth
+    }
+
+    // 2. Delete user from auth
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
+    if (deleteError) throw deleteError;
+
+    return NextResponse.json({ success: true, message: 'User deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting user:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
