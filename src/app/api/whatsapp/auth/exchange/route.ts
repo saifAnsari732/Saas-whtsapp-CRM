@@ -34,57 +34,46 @@ export async function POST(req: NextRequest) {
 
     const accountId = member.account_id;
 
-    // 1. Fetch the user's WhatsApp Business Accounts
-    const wabaResponse = await fetch(
-      `https://graph.facebook.com/v20.0/me/client_whatsapp_business_accounts?access_token=${accessToken}`
+    // 1. Fetch WABA ID by debugging the access token
+    // In Meta Embedded Signup, the granted WABA IDs are found in the token's granular_scopes
+    const clientId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+    const clientSecret = process.env.FACEBOOK_APP_SECRET;
+    
+    if (!clientId || !clientSecret) {
+      return NextResponse.json({ error: "Missing Facebook App configuration" }, { status: 500 });
+    }
+
+    const appAccessToken = `${clientId}|${clientSecret}`;
+    const debugResponse = await fetch(
+      `https://graph.facebook.com/v20.0/debug_token?input_token=${accessToken}&access_token=${appAccessToken}`
     );
-    const wabaData = await wabaResponse.json();
+    const debugData = await debugResponse.json();
 
-    if (!wabaResponse.ok || !wabaData.data || wabaData.data.length === 0) {
-      // If client_whatsapp_business_accounts doesn't work, try direct
-      const directWabaResponse = await fetch(
-        `https://graph.facebook.com/v20.0/me/whatsapp_business_accounts?access_token=${accessToken}`
+    if (!debugResponse.ok || !debugData.data || !debugData.data.is_valid) {
+      console.error("Failed to validate access token", debugData);
+      return NextResponse.json(
+        { error: "Invalid access token or failed to validate with Meta." },
+        { status: 400 }
       );
-      const directWabaData = await directWabaResponse.json();
+    }
 
-      if (!directWabaResponse.ok || !directWabaData.data || directWabaData.data.length === 0) {
-          // 3rd Fallback: Query businesses first, then owned WABAs (works for App Owners in Dev mode)
-          const bizResponse = await fetch(`https://graph.facebook.com/v20.0/me/businesses?access_token=${accessToken}`);
-          const bizData = await bizResponse.json();
-          let foundWaba = null;
-
-          if (bizResponse.ok && bizData.data && bizData.data.length > 0) {
-            for (const biz of bizData.data) {
-              const ownedWabaRes = await fetch(`https://graph.facebook.com/v20.0/${biz.id}/owned_whatsapp_business_accounts?access_token=${accessToken}`);
-              const ownedWabaData = await ownedWabaRes.json();
-              if (ownedWabaRes.ok && ownedWabaData.data && ownedWabaData.data.length > 0) {
-                foundWaba = ownedWabaData.data[0];
-                break;
-              }
-              // Also try client WABAs just in case
-              const clientWabaRes = await fetch(`https://graph.facebook.com/v20.0/${biz.id}/client_whatsapp_business_accounts?access_token=${accessToken}`);
-              const clientWabaData = await clientWabaRes.json();
-              if (clientWabaRes.ok && clientWabaData.data && clientWabaData.data.length > 0) {
-                foundWaba = clientWabaData.data[0];
-                break;
-              }
-            }
-          }
-
-          if (!foundWaba) {
-            console.error("Failed to fetch WABA IDs in all fallbacks", { wabaData, directWabaData, bizData });
-            return NextResponse.json(
-              { error: "Could not find any WhatsApp Business Accounts associated with this login." },
-              { status: 400 }
-            );
-          }
-          wabaData.data = [foundWaba];
-      } else {
-        wabaData.data = directWabaData.data;
+    // Extract WABA ID from granular_scopes
+    let wabaId = null;
+    const granularScopes = debugData.data.granular_scopes;
+    if (granularScopes && Array.isArray(granularScopes)) {
+      const waScope = granularScopes.find((s: any) => s.scope === 'whatsapp_business_management');
+      if (waScope && waScope.target_ids && waScope.target_ids.length > 0) {
+        wabaId = waScope.target_ids[0]; // Take the first granted WABA
       }
     }
 
-    const wabaId = wabaData.data[0].id;
+    if (!wabaId) {
+      console.error("No WABA ID found in granular_scopes", debugData);
+      return NextResponse.json(
+        { error: `Could not find any WhatsApp Business Accounts. Debug info: ${JSON.stringify(debugData)}` },
+        { status: 400 }
+      );
+    }
 
     // 2. Fetch the phone numbers for this WABA
     const phoneResponse = await fetch(
