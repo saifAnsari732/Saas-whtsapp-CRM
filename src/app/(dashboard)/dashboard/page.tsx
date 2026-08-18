@@ -37,6 +37,7 @@ import { ResponseTimeChart } from '@/components/dashboard/response-time-chart'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import { ConnectWhatsappBanner } from '@/components/dashboard/connect-whatsapp-banner'
 import { MessageAnalytics } from '@/components/dashboard/message-analytics'
+import { BillingCard } from '@/components/dashboard/billing-card'
 import { Card } from '@/components/ui/card'
 
 import { useTranslations } from 'next-intl'
@@ -140,6 +141,9 @@ export default function DashboardPage() {
     [series],
   )
 
+  const isConnected = waConfig?.connected === true
+  const isLoadingConfig = waConfig === null
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -150,39 +154,26 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <ConnectWhatsappBanner />
-      {msgAnalytics && <MessageAnalytics stats={msgAnalytics} />}
-
-      {/* New Action Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Plan Card */}
-        <div className="rounded-xl bg-gradient-to-br from-[var(--color-navy)] to-[#0f172a] p-5 text-white shadow-[0_8px_30px_rgba(26,26,46,0.12)] relative overflow-hidden flex flex-col justify-between h-40 border border-navy/50">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--color-green-vivid)]/10 blur-[40px] rounded-full pointer-events-none"></div>
-          <div>
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs text-white/60 font-medium">Kisan Groups</p>
-                <h3 className="text-2xl font-bold mt-1 text-white">Base</h3>
-                <p className="text-[11px] text-[var(--color-green-vivid)] mt-1 font-semibold uppercase tracking-wider">Expires: Jan 11, 2027</p>
-              </div>
-              <div className="w-12 h-12 rounded-full border-4 border-[var(--color-green-vivid)]/30 flex items-center justify-center bg-[var(--color-green-deep)] text-white font-bold text-xs shadow-inner">
-                0%
-                <br />
-                <span className="text-[8px] leading-none text-white/70">Used</span>
-              </div>
-            </div>
-            <div className="flex gap-4 mt-4">
-              <div>
-                <p className="text-[10px] text-white/50 uppercase font-medium">Sent</p>
-                <p className="font-bold text-sm text-white">498</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-white/50 uppercase font-medium">Remaining</p>
-                <p className="font-bold text-sm text-white">999,502</p>
-              </div>
-            </div>
+      {!isConnected && !isLoadingConfig && (
+        <div className="py-4">
+          <ConnectWhatsappBanner />
+          <div className="mt-8 text-center p-12 border border-dashed rounded-xl border-border bg-card/50">
+            <h2 className="text-xl font-semibold mb-2">Connect your WhatsApp to unlock the CRM</h2>
+            <p className="text-muted-foreground mb-6">You need to connect your Meta WhatsApp Business API to view analytics, send messages, and manage contacts.</p>
+            <Link href="/settings?tab=whatsapp" className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 transition-colors rounded-lg text-sm font-bold text-white shadow-md">
+              Go to Settings
+            </Link>
           </div>
         </div>
+      )}
+
+      {isConnected && (
+        <>
+          {msgAnalytics && <MessageAnalytics stats={msgAnalytics} />}
+
+          {/* New Action Grid */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <BillingCard />
 
         {/* Action Cards */}
         {[
@@ -243,6 +234,8 @@ export default function DashboardPage() {
 
       {/* Activity feed */}
       <ActivityFeed items={activity} loading={activityLoading} />
+        </>
+      )}
     </div>
   )
 }

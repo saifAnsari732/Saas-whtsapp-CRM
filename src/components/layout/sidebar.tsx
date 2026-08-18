@@ -101,6 +101,7 @@ const navItems: NavItem[] = [
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
   { href: "/keyword-flows", labelKey: "keywordFlows", icon: Zap },
+  { href: "/billing", labelKey: "Billing & Plans", icon: Crown },
   { href: "/agents", labelKey: "aiAgents", icon: Bot },
 ];
 
