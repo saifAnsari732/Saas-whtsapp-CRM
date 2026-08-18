@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     // Get the account ID for the user
     const { data: member } = await (await supabase)
-      .from('account_members')
+      .from('profiles')
       .select('account_id')
       .eq('user_id', user.id)
       .single();
