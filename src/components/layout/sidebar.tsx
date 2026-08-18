@@ -180,7 +180,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
       <aside
         className={cn(
           // Mobile: fixed drawer that slides in from the left.
-          "fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col bg-[#0b1121] text-slate-300 shadow-xl",
+          "fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col bg-background border-r border-border text-muted-foreground shadow-xl",
           "transition-transform duration-200 ease-out will-change-transform",
           open ? "translate-x-0" : "-translate-x-full",
           // Desktop: static, always visible — reset all the mobile framing.
@@ -190,12 +190,12 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
       >
         {/* Logo row. On mobile we put a close button here; on desktop the
             close button is hidden since the sidebar is always-visible. */}
-        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-white/10 px-6">
+        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border px-6">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-primary/20">
               <MessageSquare className="h-4 w-4" />
             </div>
-            <span className="text-xl font-black tracking-tight text-white font-heading">
+            <span className="text-xl font-black tracking-tight text-foreground font-heading">
               Botify.ai
             </span>
           </Link>
@@ -261,8 +261,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                       // Taller on mobile so fingers can hit the row reliably (≥44px).
                       "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 lg:py-2.5",
                       isActive
-                        ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
-                        : "text-slate-400 hover:bg-white/5 hover:text-white",
+                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
@@ -298,7 +298,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             })}
           </ul>
 
-          <div className="my-4 border-t border-white/10 mx-3" />
+          <div className="my-4 border-t border-border mx-3" />
 
           <ul className="flex flex-col gap-1">
             {bottomNavItems.map((item) => {
@@ -310,8 +310,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                     className={cn(
                       "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 lg:py-2.5",
                       isActive
-                        ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
-                        : "text-slate-400 hover:bg-white/5 hover:text-white",
+                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
@@ -324,7 +324,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         </nav>
 
         {/* User section */}
-        <div className="shrink-0 border-t border-white/10 p-4">
+        <div className="shrink-0 border-t border-border p-4">
           {/* Account name display — surfaced only when the account
               name differs from the user's own name (see
               `showAccountStrip`). For a default solo account the two
@@ -361,7 +361,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             </div>
           ) : null}
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-white/5 focus:bg-white/5 focus:outline-none">
+            <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted focus:bg-muted focus:outline-none">
               <Avatar className="size-8 shrink-0">
                 {profile?.avatar_url ? (
                   <AvatarImage
@@ -376,7 +376,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-white">
+                <p className="truncate text-sm font-semibold text-foreground">
                   {profile?.full_name ?? t("defaultUser")}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
