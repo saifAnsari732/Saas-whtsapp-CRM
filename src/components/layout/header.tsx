@@ -74,11 +74,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
-        {/* Connected Indicator */}
-        <div className="hidden sm:flex items-center gap-2 bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20">
-          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[11px] font-bold uppercase tracking-wider">Connected</span>
-        </div>
+
 
         {/* Language Selector Mockup */}
         <div className="hidden sm:flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground cursor-pointer transition-colors px-2">
