@@ -164,6 +164,8 @@ export default function BroadcastDetailPage() {
   const { createAndSendBroadcast } = useBroadcastSending();
 
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
     async function fetchData() {
       try {
         const supabase = createClient();
@@ -185,6 +187,10 @@ export default function BroadcastDetailPage() {
 
         if (recsError) throw recsError;
         setRecipients(recs ?? []);
+
+        if (bc.status === 'sending' || bc.status === 'scheduled') {
+          timeoutId = setTimeout(fetchData, 5000);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : t('notFound'));
       } finally {
@@ -193,7 +199,9 @@ export default function BroadcastDetailPage() {
     }
 
     fetchData();
-  }, [broadcastId]);
+
+    return () => clearTimeout(timeoutId);
+  }, [broadcastId, t]);
 
   const filteredRecipients = useMemo(
     () =>
