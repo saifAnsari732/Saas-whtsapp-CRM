@@ -572,6 +572,13 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         .update({ status: finalStatus })
         .eq('id', broadcast.id);
 
+      setProgress(100);
+      return broadcast.id;
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   async function createBroadcastAndStart(payload: BroadcastPayload): Promise<string> {
     setIsProcessing(true);
     setProgress(0);
