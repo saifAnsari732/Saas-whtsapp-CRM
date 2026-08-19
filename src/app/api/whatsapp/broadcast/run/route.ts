@@ -8,12 +8,13 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function POST(req: Request) {
   try {
     const { broadcastId, payload, totalRecipients, origin } = await req.json();
+    const cookieHeader = req.headers.get('cookie') || '';
 
     // Respond immediately so client can navigate
     const res = NextResponse.json({ success: true, status: 'started' });
 
     // Background process (Promises in Next.js Node runtime keep running)
-    runBackgroundLoop(broadcastId, payload, totalRecipients, origin).catch(console.error);
+    runBackgroundLoop(broadcastId, payload, totalRecipients, origin, cookieHeader).catch(console.error);
 
     return res;
   } catch (err) {
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
   }
 }
 
-async function runBackgroundLoop(broadcastId: string, payload: any, totalRecipients: number, origin: string) {
+async function runBackgroundLoop(broadcastId: string, payload: any, totalRecipients: number, origin: string, cookieHeader: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Must use service role to bypass cookies in detached context
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -103,13 +104,19 @@ async function runBackgroundLoop(broadcastId: string, payload: any, totalRecipie
       try {
         const res = await fetch(`${origin}/api/whatsapp/broadcast`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cookie': cookieHeader
+          },
           body: JSON.stringify({
             recipients: apiRecipients,
             template_name: payload.template.name,
             template_language: payload.template.language ?? 'en_US',
           }),
         });
+        
+        console.log(`[Background Loop] Sent batch of ${apiRecipients.length} to ${origin}/api/whatsapp/broadcast. Status: ${res.status}`);
+        
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Broadcast API request failed');
 
