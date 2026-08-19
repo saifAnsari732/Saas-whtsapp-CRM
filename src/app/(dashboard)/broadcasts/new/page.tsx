@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
@@ -19,8 +19,9 @@ import { Settings, Users, MessageSquare, Clock, X, Loader2, Info, UploadCloud } 
 
 export default function NewBroadcastPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { accountId } = useAuth();
-  const { createAndSendBroadcast, isProcessing } = useBroadcastSending();
+  const { createBroadcastAndStart, isProcessing } = useBroadcastSending();
   const supabase = createClient();
 
   const [name, setName] = useState('');
@@ -33,6 +34,7 @@ export default function NewBroadcastPage() {
   // Scheduling
   const [sendWhen, setSendWhen] = useState<'immediately' | 'later'>('immediately');
   const [scheduleDate, setScheduleDate] = useState('');
+  const [delaySeconds, setDelaySeconds] = useState('1');
 
   // Templates
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -53,11 +55,19 @@ export default function NewBroadcastPage() {
       
       if (!error && data) {
         setTemplates(data as MessageTemplate[]);
+        
+        const resendName = searchParams.get('resend_name');
+        const resendTemplateName = searchParams.get('resend_template');
+        if (resendName) setName(resendName + ' (Copy)');
+        if (resendTemplateName) {
+           const found = (data as MessageTemplate[]).find(t => t.name === resendTemplateName);
+           if (found) setSelectedTemplateId(found.id);
+        }
       }
       setIsLoadingTemplates(false);
     }
     fetchTemplates();
-  }, [supabase]);
+  }, [supabase, searchParams]);
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
   const requiresMedia = selectedTemplate?.header_type === 'image' || 
@@ -155,17 +165,23 @@ export default function NewBroadcastPage() {
         };
       }
 
-      await createAndSendBroadcast({
+      const id = await createBroadcastAndStart({
         name,
         template: selectedTemplate,
         audience,
         variables: {},
         headerMediaUrl: requiresMedia ? headerMediaUrl : undefined,
         scheduledAt: sendWhen === 'later' ? new Date(scheduleDate).toISOString() : undefined,
+        batchDelayMs: Math.max(0, parseFloat(delaySeconds) || 1) * 1000,
       } as any);
 
       toast.success(sendWhen === 'later' ? 'Campaign scheduled successfully!' : 'Campaign created and sending started!');
-      router.push('/broadcasts');
+      
+      if (sendWhen === 'later') {
+        router.push('/broadcasts');
+      } else {
+        router.push(`/broadcasts/${id}`);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Broadcast failed';
       toast.error(message);
@@ -257,6 +273,14 @@ export default function NewBroadcastPage() {
             {sendWhen === 'later' && (
               <Input type="datetime-local" className="max-w-xs mt-3 bg-card" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
             )}
+
+            <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
+              <Label className="text-sm font-semibold mb-2 block">Delay between batches (Seconds)</Label>
+              <div className="flex items-center gap-3">
+                <Input type="number" min="0" step="0.5" className="max-w-[120px] bg-card" value={delaySeconds} onChange={e => setDelaySeconds(e.target.value)} />
+                <span className="text-xs text-muted-foreground">Wait time between sending messages (helps avoid bans). Default: 1s.</span>
+              </div>
+            </div>
           </div>
         </section>
 

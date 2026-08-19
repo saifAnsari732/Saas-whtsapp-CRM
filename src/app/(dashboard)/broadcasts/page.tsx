@@ -180,6 +180,22 @@ export default function BroadcastsPage() {
         </div>
       )}
 
+      {/* Summary Stats */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-card border rounded-xl p-4 flex flex-col justify-center">
+          <span className="text-muted-foreground text-sm font-medium">Total Overall Recipients</span>
+          <span className="text-3xl font-bold">{broadcasts.reduce((acc, b) => acc + (b.total_recipients || 0), 0)}</span>
+        </div>
+        <div className="bg-card border rounded-xl p-4 flex flex-col justify-center">
+          <span className="text-muted-foreground text-sm font-medium">Total Messages Sent</span>
+          <span className="text-3xl font-bold text-primary">{broadcasts.reduce((acc, b) => acc + (b.sent_count || 0) + (b.delivered_count || 0) + (b.read_count || 0), 0)}</span>
+        </div>
+        <div className="bg-card border rounded-xl p-4 flex flex-col justify-center">
+          <span className="text-muted-foreground text-sm font-medium">Remaining / Failed</span>
+          <span className="text-3xl font-bold text-yellow-600">{broadcasts.reduce((acc, b) => acc + (b.failed_count || 0), 0)}</span>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
@@ -229,6 +245,7 @@ export default function BroadcastsPage() {
                 <TableHead className="hidden text-muted-foreground lg:table-cell">{t('table.read')}</TableHead>
                 <TableHead className="text-muted-foreground">{t('table.status')}</TableHead>
                 <TableHead className="hidden text-muted-foreground sm:table-cell">{t('table.date')}</TableHead>
+                <TableHead className="text-right text-muted-foreground">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -278,6 +295,18 @@ export default function BroadcastsPage() {
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {new Date(broadcast.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/broadcasts/new?resend_name=${encodeURIComponent(broadcast.name)}&resend_template=${encodeURIComponent(broadcast.template_name)}`);
+                        }}
+                      >
+                        Resend
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
