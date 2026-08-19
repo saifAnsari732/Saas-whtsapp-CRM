@@ -190,7 +190,7 @@ export default function KeywordFlowsPage() {
           gateReason="create flows"
           onClick={() => {
             setEditingFlow(null);
-            setForm({ name: "", keywords: "", template_id: "" });
+            setForm({ name: "", keywords: "", response_type: "template", template_id: "", text_message: "" });
             setDialogOpen(true);
           }}
           className="gap-2"
@@ -212,20 +212,20 @@ export default function KeywordFlowsPage() {
               <p className="text-sm text-muted-foreground">
                 Create a keyword flow to auto-reply to specific incoming words.
               </p>
+              {canCreate && (
+                <Button
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => {
+                    setEditingFlow(null);
+                    setForm({ name: "", keywords: "", response_type: "template", template_id: "", text_message: "" });
+                    setDialogOpen(true);
+                  }}
+                >
+                  Create your first flow
+                </Button>
+              )}
             </div>
-            {canCreate && (
-              <Button
-                variant="outline"
-                className="mt-2"
-                onClick={() => {
-                  setEditingFlow(null);
-                  setForm({ name: "", keywords: "", template_id: "" });
-                  setDialogOpen(true);
-                }}
-              >
-                Create your first flow
-              </Button>
-            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
