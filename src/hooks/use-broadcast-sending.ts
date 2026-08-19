@@ -52,6 +52,7 @@ interface BroadcastPayload {
 
 interface UseBroadcastSendingReturn {
   createAndSendBroadcast: (payload: BroadcastPayload) => Promise<string>;
+  createBroadcastAndStart: (payload: BroadcastPayload) => Promise<string>;
   isProcessing: boolean;
   progress: number;
 }
