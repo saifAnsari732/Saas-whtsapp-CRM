@@ -647,94 +647,23 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         return broadcast.id;
       }
 
-      // Background the sending process
-      processSendLoop(broadcast, payload, supabase, contacts.length).catch(console.error);
+      // Background the sending process via the API route
+      fetch('/api/whatsapp/broadcast/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          broadcastId: broadcast.id,
+          payload,
+          totalRecipients: contacts.length,
+          origin: window.location.origin,
+        }),
+      }).catch(console.error);
 
       // Return ID immediately
       return broadcast.id;
     } catch (e) {
       setIsProcessing(false);
       throw e;
-    }
-  }
-
-  async function processSendLoop(broadcast: any, payload: BroadcastPayload, supabase: any, totalRecipients: number) {
-    try {
-      const { data: recipients, error: recipientsFetchError } = await supabase
-        .from('broadcast_recipients')
-        .select('*, contact:contacts(*)')
-        .eq('broadcast_id', broadcast.id);
-
-      if (recipientsFetchError || !recipients) return;
-
-      const contactIds = recipients.map((r: any) => r.contact?.id).filter(Boolean);
-      const customValueIndex = await fetchCustomValueIndex(supabase, contactIds);
-
-      let failedCount = 0;
-      const headerType = payload.template.header_type;
-      const isMediaHeader = headerType === 'image' || headerType === 'video' || headerType === 'document';
-      const headerMediaUrl = payload.headerMediaUrl?.trim();
-      const messageParams = isMediaHeader && headerMediaUrl ? { headerMediaUrl } : undefined;
-
-      for (let i = 0; i < recipients.length; i += SEND_BATCH_SIZE) {
-        const batch = recipients.slice(i, i + SEND_BATCH_SIZE);
-        const apiRecipients = batch.filter((r: any) => r.contact?.phone).map((r: any) => ({
-          phone: r.contact!.phone as string,
-          params: r.contact ? resolveVariables(payload.variables, r.contact, customValueIndex.get(r.contact.id)) : [],
-          ...(messageParams ? { messageParams } : {}),
-        }));
-
-        if (apiRecipients.length === 0) continue;
-
-        try {
-          const res = await fetch('/api/whatsapp/broadcast', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              recipients: apiRecipients,
-              template_name: payload.template.name,
-              template_language: payload.template.language ?? 'en_US',
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Broadcast API request failed');
-
-          const resultsByPhone = new Map<string, BroadcastApiResult>();
-          for (const r of (data.results ?? []) as BroadcastApiResult[]) resultsByPhone.set(r.phone, r);
-
-          for (const recipient of batch) {
-            const phone = recipient.contact?.phone;
-            const result = phone ? resultsByPhone.get(phone) : undefined;
-            if (!result) {
-              failedCount++;
-              await supabase.from('broadcast_recipients').update({ status: 'failed', error_message: 'No phone number' }).eq('id', recipient.id);
-              continue;
-            }
-            if (result.status === 'sent') {
-              await supabase.from('broadcast_recipients').update({ status: 'sent', sent_at: new Date().toISOString(), whatsapp_message_id: result.whatsapp_message_id ?? null, error_message: null }).eq('id', recipient.id);
-            } else {
-              failedCount++;
-              await supabase.from('broadcast_recipients').update({ status: 'failed', error_message: result.error ?? 'Unknown error' }).eq('id', recipient.id);
-            }
-          }
-        } catch (err) {
-          for (const recipient of batch) {
-            failedCount++;
-            await supabase.from('broadcast_recipients').update({ status: 'failed', error_message: err instanceof Error ? err.message : 'Unknown error' }).eq('id', recipient.id);
-          }
-        }
-
-        const progressPct = 30 + Math.round(((i + batch.length) / totalRecipients) * 60);
-        setProgress(progressPct);
-
-        if (i + SEND_BATCH_SIZE < recipients.length) await sleep(payload.batchDelayMs ?? SEND_BATCH_DELAY_MS);
-      }
-
-      const finalStatus = failedCount === totalRecipients ? 'failed' : 'sent';
-      await supabase.from('broadcasts').update({ status: finalStatus }).eq('id', broadcast.id);
-      setProgress(100);
-    } finally {
-      setIsProcessing(false);
     }
   }
 
