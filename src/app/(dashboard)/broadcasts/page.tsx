@@ -302,7 +302,7 @@ export default function BroadcastsPage() {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          router.push(`/broadcasts/new?resend_name=${encodeURIComponent(broadcast.name)}&resend_template=${encodeURIComponent(broadcast.template_name)}`);
+                          router.push(`/broadcasts/new?resend_id=${broadcast.id}&resend_name=${encodeURIComponent(broadcast.name)}&resend_template=${encodeURIComponent(broadcast.template_name)}`);
                         }}
                       >
                         Resend

@@ -55,12 +55,26 @@ export default function NewBroadcastPage() {
       if (!error && data) {
         setTemplates(data as MessageTemplate[]);
         
+        const resendId = searchParams.get('resend_id');
         const resendName = searchParams.get('resend_name');
         const resendTemplateName = searchParams.get('resend_template');
         if (resendName) setName(resendName + ' (Copy)');
         if (resendTemplateName) {
            const found = (data as MessageTemplate[]).find(t => t.name === resendTemplateName);
            if (found) setSelectedTemplateId(found.id);
+        }
+
+        if (resendId) {
+          const { data: oldRecipients } = await supabase
+            .from('broadcast_recipients')
+            .select('contact:contacts(phone)')
+            .eq('broadcast_id', resendId);
+            
+          if (oldRecipients && oldRecipients.length > 0) {
+            setRecipientMode('numbers');
+            const phones = oldRecipients.map((r: any) => r.contact?.phone).filter(Boolean);
+            setPastedNumbers(phones.join('\n'));
+          }
         }
       }
       setIsLoadingTemplates(false);
