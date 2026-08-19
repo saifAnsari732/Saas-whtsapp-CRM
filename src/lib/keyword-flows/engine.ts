@@ -34,7 +34,7 @@ export async function dispatchKeywordFlow({
   // Fetch all active keyword flows for this account (using configOwnerUserId)
   const { data: flows, error } = await supabaseAdmin()
     .from('keyword_flows')
-    .select('id, keywords, template_id')
+    .select('id, keywords, template_id, text_message')
     .eq('user_id', configOwnerUserId)
     .eq('is_active', true);
 
@@ -43,23 +43,11 @@ export async function dispatchKeywordFlow({
   }
 
   // Find the first flow whose keywords array contains an exact match (case-insensitive) for the inbound text
-  const matchedFlow = flows.find((flow: { keywords: string[], template_id: string }) =>
+  const matchedFlow = flows.find((flow: { keywords: string[], template_id: string, text_message: string }) =>
     flow.keywords.map((k: string) => k.toLowerCase()).includes(text)
   );
 
   if (!matchedFlow) {
-    return { consumed: false };
-  }
-
-  // Fetch the template details
-  const { data: template, error: tplError } = await supabaseAdmin()
-    .from('message_templates')
-    .select('*')
-    .eq('id', matchedFlow.template_id)
-    .single();
-
-  if (tplError || !template) {
-    console.error('[keyword-flow] matched template not found', tplError);
     return { consumed: false };
   }
 
@@ -95,23 +83,44 @@ export async function dispatchKeywordFlow({
   const accessToken = decrypt(config.access_token);
 
   try {
-    await sendTemplateMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
-      to: phone,
-      templateName: template.name,
-      language: template.language || 'en_US',
-      template,
-      messageParams: {},
-    });
+    if (matchedFlow.text_message) {
+      // Send raw text message
+      const { sendTextMessage } = await import('@/lib/whatsapp/meta-api');
+      await sendTextMessage({
+        phoneNumberId: config.phone_number_id,
+        accessToken,
+        to: phone,
+        text: matchedFlow.text_message,
+      });
+      return { consumed: true };
+    } else if (matchedFlow.template_id) {
+      // Fetch the template details
+      const { data: template, error: tplError } = await supabaseAdmin()
+        .from('message_templates')
+        .select('*')
+        .eq('id', matchedFlow.template_id)
+        .single();
 
-    // Optionally insert the outbound message to the messages table here,
-    // or let the webhook's message status update handle it later.
-    // For now we just return consumed.
-    
-    return { consumed: true };
+      if (tplError || !template) {
+        console.error('[keyword-flow] matched template not found', tplError);
+        return { consumed: false };
+      }
+
+      await sendTemplateMessage({
+        phoneNumberId: config.phone_number_id,
+        accessToken,
+        to: phone,
+        templateName: template.name,
+        language: template.language || 'en_US',
+        template,
+        messageParams: {},
+      });
+      return { consumed: true };
+    }
+
+    return { consumed: false };
   } catch (err) {
-    console.error('[keyword-flow] failed to send template message:', err);
+    console.error('[keyword-flow] failed to send message:', err);
     return { consumed: false };
   }
 }

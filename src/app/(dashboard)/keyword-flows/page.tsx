@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -43,7 +45,8 @@ type KeywordFlow = {
   id: string;
   name: string;
   keywords: string[];
-  template_id: string;
+  template_id: string | null;
+  text_message: string | null;
   is_active: boolean;
   created_at: string;
 };
@@ -61,7 +64,7 @@ export default function KeywordFlowsPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFlow, setEditingFlow] = useState<KeywordFlow | null>(null);
-  const [form, setForm] = useState({ name: "", keywords: "", template_id: "" });
+  const [form, setForm] = useState({ name: "", keywords: "", response_type: "template", template_id: "", text_message: "" });
   const [saving, setSaving] = useState(false);
 
   async function loadData() {
@@ -117,8 +120,14 @@ export default function KeywordFlowsPage() {
   }
 
   async function saveFlow() {
-    if (!form.name.trim() || !form.keywords.trim() || !form.template_id) {
-      return toast.error("Please fill in all fields");
+    if (!form.name.trim() || !form.keywords.trim()) {
+      return toast.error("Please fill in flow name and keywords");
+    }
+    if (form.response_type === "template" && !form.template_id) {
+      return toast.error("Please select a template");
+    }
+    if (form.response_type === "text" && !form.text_message?.trim()) {
+      return toast.error("Please enter a text message");
     }
 
     setSaving(true);
@@ -128,6 +137,13 @@ export default function KeywordFlowsPage() {
       .map((k) => k.trim())
       .filter(Boolean);
 
+    const payload = {
+      name: form.name,
+      keywords: keywordsArray,
+      template_id: form.response_type === "template" ? form.template_id : null,
+      text_message: form.response_type === "text" ? form.text_message : null,
+    };
+
     try {
       const authReq = await supabase.auth.getUser();
       const user_id = authReq.data.user?.id;
@@ -136,20 +152,14 @@ export default function KeywordFlowsPage() {
       if (editingFlow) {
         const { error } = await supabase
           .from("keyword_flows")
-          .update({
-            name: form.name,
-            keywords: keywordsArray,
-            template_id: form.template_id,
-          })
+          .update(payload)
           .eq("id", editingFlow.id);
         if (error) throw error;
         toast.success("Flow updated");
       } else {
         const { error } = await supabase.from("keyword_flows").insert({
-          name: form.name,
-          keywords: keywordsArray,
-          template_id: form.template_id,
-          user_id: user_id,
+          ...payload,
+          user_id,
         });
         if (error) throw error;
         toast.success("Flow created");
@@ -157,7 +167,7 @@ export default function KeywordFlowsPage() {
       setDialogOpen(false);
       loadData();
     } catch (err) {
-      toast.error("Failed to save flow");
+      toast.error(err instanceof Error ? err.message : "Error saving flow");
     } finally {
       setSaving(false);
     }
@@ -257,7 +267,9 @@ export default function KeywordFlowsPage() {
                               setForm({
                                 name: flow.name,
                                 keywords: flow.keywords.join(", "),
-                                template_id: flow.template_id,
+                                response_type: flow.text_message ? "text" : "template",
+                                template_id: flow.template_id || "",
+                                text_message: flow.text_message || "",
                               });
                               setDialogOpen(true);
                             }}
@@ -292,13 +304,19 @@ export default function KeywordFlowsPage() {
                         ))}
                       </div>
                     </div>
-                    <div className="grid grid-cols-[80px_1fr] gap-2 items-start">
-                      <span className="text-muted-foreground font-medium">Response:</span>
-                      <span className="flex items-center gap-1.5 text-foreground">
-                        <MessageSquareText className="h-3.5 w-3.5 text-muted-foreground" />
-                        {template?.name || "Unknown Template"}
-                      </span>
-                    </div>
+                      <div className="grid grid-cols-[80px_1fr] gap-2 items-start">
+                        <span className="text-muted-foreground font-medium">Response:</span>
+                        <span className="flex flex-col gap-1 text-foreground">
+                          {flow.text_message ? (
+                            <span className="text-sm italic">"{flow.text_message}"</span>
+                          ) : (
+                            <span className="flex items-center gap-1.5">
+                              <MessageSquareText className="h-3.5 w-3.5 text-muted-foreground" />
+                              {template?.name || "Unknown Template"}
+                            </span>
+                          )}
+                        </span>
+                      </div>
                   </div>
                 </div>
               );
@@ -336,24 +354,52 @@ export default function KeywordFlowsPage() {
                 If an incoming message matches any of these exactly, the flow will trigger.
               </p>
             </div>
-            <div className="space-y-2">
-              <Label>Response Template</Label>
-              <Select
-                value={form.template_id}
-                onValueChange={(val) => setForm({ ...form, template_id: val || "" })}
-              >
-                <SelectTrigger className="bg-muted border-border">
-                  <SelectValue placeholder="Select a template" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-3">
+                <Label>Response Type</Label>
+                <RadioGroup 
+                  value={form.response_type} 
+                  onValueChange={(v) => setForm({ ...form, response_type: v })}
+                  className="flex items-center gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="template" id="r-template" />
+                    <Label htmlFor="r-template" className="font-normal">Template</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="text" id="r-text" />
+                    <Label htmlFor="r-text" className="font-normal">Text Message</Label>
+                  </div>
+                </RadioGroup>
+                
+                {form.response_type === "template" ? (
+                  <div className="space-y-2 mt-2">
+                    <Select
+                      value={form.template_id}
+                      onValueChange={(val) => setForm({ ...form, template_id: val || "" })}
+                    >
+                      <SelectTrigger className="bg-muted border-border">
+                        <SelectValue placeholder="Select a template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="space-y-2 mt-2">
+                    <Textarea 
+                      placeholder="Type your response message here..."
+                      value={form.text_message}
+                      onChange={(e) => setForm({ ...form, text_message: e.target.value })}
+                      className="min-h-[100px] bg-muted border-border"
+                    />
+                  </div>
+                )}
+              </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
