@@ -14,6 +14,10 @@ import { formatDistanceToNow } from "date-fns";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -71,6 +75,13 @@ export function ConversationList({
   // matches if its contact carries any selected tag), consistent with
   // Broadcast audience filtering. Company is an exact match on the field.
   const [tags, setTags] = useState<Tag[]>([]);
+  
+  // Group manage state
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [groupSelection, setGroupSelection] = useState<string>('create_new');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [groupNumbers, setGroupNumbers] = useState('');
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
 
@@ -225,6 +236,60 @@ export function ConversationList({
     // the single pane showing; fixed 320px on desktop where it shares the
     // row with the thread + contact sidebar.
     <div className="flex h-full w-full flex-col border-r border-border bg-card lg:w-80">
+      
+      <Dialog open={isGroupModalOpen} onOpenChange={setIsGroupModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Manage Contact Group</DialogTitle>
+            <DialogDescription>
+              Create a new group or add numbers to an existing one.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Group</Label>
+              <Select value={groupSelection} onValueChange={setGroupSelection}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select group" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="create_new" className="font-semibold text-primary">+ Create New Group</SelectItem>
+                  {tags.map((tag) => (
+                    <SelectItem key={tag.id} value={tag.id}>{tag.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {groupSelection === 'create_new' && (
+              <div className="space-y-2">
+                <Label>New Group Name</Label>
+                <Input 
+                  placeholder="e.g. Premium Customers" 
+                  value={newGroupName} 
+                  onChange={e => setNewGroupName(e.target.value)} 
+                />
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label>Add Numbers (Optional)</Label>
+              <Textarea 
+                placeholder="Paste numbers separated by commas or newlines (e.g. 919876543210, 919876543211)..."
+                value={groupNumbers}
+                onChange={e => setGroupNumbers(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsGroupModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveGroup} disabled={isSavingGroup}>
+              {isSavingGroup ? "Saving..." : "Save Group"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Search + Filter */}
       <div className="space-y-2 border-b border-border p-3">
         <div className="relative">
@@ -238,6 +303,27 @@ export function ConversationList({
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-7 text-xs px-2 text-primary"
+            onClick={async () => {
+              const name = window.prompt("Enter new group name:");
+              if (!name || !name.trim()) return;
+              const supabase = createClient();
+              const { data, error } = await supabase.from('tags').insert({ 
+                name: name.trim(), 
+                user_id: (await supabase.auth.getUser()).data.user?.id 
+              }).select();
+              if (data) {
+                // simple reload to fetch new tags
+                window.location.reload();
+              }
+            }}
+          >
+            + New Group
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted">
                 {activeFilter?.label ?? t("filterAll")}
@@ -503,5 +589,10 @@ function ConversationItem({
     </button>
   );
 }
+
+
+
+
+
 
 
