@@ -380,19 +380,7 @@ export function ConversationList({
             variant="ghost" 
             size="sm" 
             className="h-7 text-xs px-2 text-primary"
-            onClick={async () => {
-              const name = window.prompt("Enter new group name:");
-              if (!name || !name.trim()) return;
-              const supabase = createClient();
-              const { data, error } = await supabase.from('tags').insert({ 
-                name: name.trim(), 
-                user_id: (await supabase.auth.getUser()).data.user?.id 
-              }).select();
-              if (data) {
-                // simple reload to fetch new tags
-                window.location.reload();
-              }
-            }}
+            onClick={() => setIsGroupModalOpen(true)}
           >
             + New Group
           </Button>
