@@ -46,7 +46,7 @@ export default function NewBroadcastPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
-  const requiresMedia = selectedTemplate?.header_type && selectedTemplate.header_type !== 'TEXT' && selectedTemplate.header_type !== 'NONE';
+  const requiresMedia = selectedTemplate?.header_type && selectedTemplate.header_type !== 'text' && selectedTemplate.header_type !== ('none' as any);
 
   const placeholders = useMemo(() => {
     if (!selectedTemplate) return [];
