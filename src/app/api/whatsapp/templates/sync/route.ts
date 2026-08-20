@@ -260,6 +260,8 @@ export async function POST() {
         status: normalizeStatus(t.status),
         meta_template_id: t.id,
         quality_score: normalizeQualityScore(t.quality_score),
+        submission_error: null,
+        rejection_reason: normalizeStatus(t.status) === 'REJECTED' ? t.reason || null : null,
         updated_at: new Date().toISOString(),
       }
 
