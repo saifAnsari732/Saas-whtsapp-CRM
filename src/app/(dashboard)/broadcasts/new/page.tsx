@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -41,8 +41,25 @@ export default function NewBroadcastPage() {
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [variables, setVariables] = useState<Record<string, { type: 'static' | 'field'; value: string }>>({});
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+  const requiresMedia = selectedTemplate?.header_type && selectedTemplate.header_type !== 'TEXT' && selectedTemplate.header_type !== 'NONE';
+
+  const placeholders = useMemo(() => {
+    if (!selectedTemplate) return [];
+    const textToSearch = [
+      selectedTemplate.body_text,
+      selectedTemplate.header_content,
+      ...(selectedTemplate.buttons || []).map((b: any) => b.url || b.text),
+    ].filter(Boolean).join(' ');
+    
+    const matches = textToSearch.match(/\{\{(\d+)\}\}/g);
+    if (!matches) return [];
+    return [...new Set(matches)].sort();
+  }, [selectedTemplate]);
 
   useEffect(() => {
     async function fetchTemplates() {
@@ -182,7 +199,7 @@ export default function NewBroadcastPage() {
         name,
         template: selectedTemplate,
         audience,
-        variables: {},
+        variables,
         headerMediaUrl: requiresMedia ? headerMediaUrl : undefined,
         scheduledAt: sendWhen === 'later' ? new Date(scheduleDate).toISOString() : undefined,
       } as any);
@@ -385,3 +402,4 @@ export default function NewBroadcastPage() {
     </div>
   );
 }
+
