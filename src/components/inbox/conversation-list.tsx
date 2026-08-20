@@ -222,6 +222,79 @@ export function ConversationList({
     []
   );
 
+  const handleSaveGroup = async () => {
+    setIsSavingGroup(true);
+    const supabase = createClient();
+    try {
+      let tagId = groupSelection;
+      
+      // 1. Create tag if needed
+      if (groupSelection === 'create_new') {
+        if (!newGroupName.trim()) {
+           alert("Please enter a group name");
+           setIsSavingGroup(false);
+           return;
+        }
+        const { data: user } = await supabase.auth.getUser();
+        const { data: newTag } = await supabase.from('tags').insert({
+          name: newGroupName.trim(),
+          user_id: user.user?.id
+        }).select().single();
+        if (newTag) {
+          tagId = newTag.id;
+        } else {
+          throw new Error("Failed to create tag");
+        }
+      }
+      
+      // 2. Add numbers if provided
+      if (groupNumbers.trim()) {
+        const numbers = groupNumbers.split(/[\n,]+/).map(n => n.trim().replace(/\D/g, '')).filter(Boolean);
+        const { data: user } = await supabase.auth.getUser();
+        const { data: profile } = await supabase.from('profiles').select('account_id').eq('id', user.user?.id).single();
+        
+        if (profile && numbers.length > 0) {
+          // Find existing contacts
+          const { data: existingContacts } = await supabase.from('contacts').select('id, phone').eq('account_id', profile.account_id).in('phone', numbers);
+          const existingPhones = new Set((existingContacts || []).map(c => c.phone));
+          
+          // Insert new ones
+          const newNumbers = numbers.filter(n => !existingPhones.has(n));
+          if (newNumbers.length > 0) {
+            const contactsToInsert = newNumbers.map(phone => ({
+              account_id: profile.account_id,
+              phone: phone,
+              name: phone
+            }));
+            await supabase.from('contacts').insert(contactsToInsert);
+          }
+          
+          // Re-fetch all to get their IDs
+          const { data: allContacts } = await supabase.from('contacts').select('id').eq('account_id', profile.account_id).in('phone', numbers);
+          
+          if (allContacts && tagId) {
+             const contactTags = allContacts.map(c => ({
+               contact_id: c.id,
+               tag_id: tagId
+             }));
+             // Insert and ignore duplicates using onConflict
+             await supabase.from('contact_tags').upsert(contactTags, { onConflict: 'contact_id,tag_id' });
+          }
+        }
+      }
+      
+      setIsGroupModalOpen(false);
+      setNewGroupName('');
+      setGroupNumbers('');
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save group");
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
   const handleSelect = useCallback(
     (conv: Conversation) => {
       onSelect(conv);
@@ -248,7 +321,7 @@ export function ConversationList({
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label>Select Group</Label>
-              <Select value={groupSelection} onValueChange={setGroupSelection}>
+              <Select value={groupSelection} onValueChange={(v) => setGroupSelection(v || '')}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select group" />
                 </SelectTrigger>
@@ -589,6 +662,7 @@ function ConversationItem({
     </button>
   );
 }
+
 
 
 
