@@ -99,10 +99,7 @@ export default function NewBroadcastPage() {
     fetchTemplates();
   }, [supabase, searchParams]);
 
-  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
-  const requiresMedia = selectedTemplate?.header_type === 'image' || 
-                        selectedTemplate?.header_type === 'video' || 
-                        selectedTemplate?.header_type === 'document';
+
 
   // Pre-fill the header media URL if the template already has one saved permanently
   useEffect(() => {
