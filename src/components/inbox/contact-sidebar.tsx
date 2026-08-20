@@ -17,6 +17,7 @@ import {
   Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { useTranslations } from "next-intl";
@@ -37,13 +38,15 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
 
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+
   const fetchContactData = useCallback(async () => {
     if (!contact) return;
 
     const supabase = createClient();
 
     // Fetch deals, notes, and tags in parallel
-    const [dealsRes, notesRes, tagsRes] = await Promise.all([
+    const [dealsRes, notesRes, tagsRes, allTagsRes] = await Promise.all([
       supabase
         .from("deals")
         .select("*, stage:pipeline_stages(*)")
@@ -58,6 +61,10 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
         .from("contact_tags")
         .select("id, tag_id, tags(*)")
         .eq("contact_id", contact.id),
+      supabase
+        .from("tags")
+        .select("*")
+        .order("name"),
     ]);
 
     if (dealsRes.data) setDeals(dealsRes.data);
@@ -70,6 +77,9 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
           contact_tag_id: ct.id as string,
         }));
       setTags(mapped);
+    }
+    if (allTagsRes.data) {
+      setAllTags(allTagsRes.data);
     }
   }, [contact]);
 
@@ -118,6 +128,24 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
     }
     setAddingNote(false);
   }, [contact, newNote, accountId]);
+
+  const handleAssignGroup = async (tagId: string) => {
+    if (!contact || !tagId || tagId === 'none') return;
+    const supabase = createClient();
+    
+    // Check if already assigned
+    if (tags.some(t => t.id === tagId)) return;
+    
+    const { data, error } = await supabase
+      .from("contact_tags")
+      .insert({ contact_id: contact.id, tag_id: tagId })
+      .select('id')
+      .single();
+      
+    if (!error) {
+      fetchContactData();
+    }
+  };
 
   if (!contact) {
     return (
@@ -301,3 +329,5 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
     </div>
   );
 }
+
+

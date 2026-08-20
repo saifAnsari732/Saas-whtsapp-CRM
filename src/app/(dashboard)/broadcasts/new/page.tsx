@@ -40,6 +40,7 @@ export default function NewBroadcastPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
+  const [contactGroups, setContactGroups] = useState<{id: string; name: string}[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [variables, setVariables] = useState<Record<string, { type: 'static' | 'field'; value: string }>>({});
   
@@ -64,11 +65,16 @@ export default function NewBroadcastPage() {
   useEffect(() => {
     async function fetchTemplates() {
       setIsLoadingTemplates(true);
-      const { data, error } = await supabase
-        .from('message_templates')
-        .select('*')
-        .eq('status', 'APPROVED');
+      const [tplRes, tagsRes] = await Promise.all([
+        supabase.from('message_templates').select('*').eq('status', 'APPROVED'),
+        supabase.from('tags').select('*').order('name')
+      ]);
       
+      if (!tagsRes.error && tagsRes.data) {
+        setContactGroups(tagsRes.data);
+      }
+      
+      const { data, error } = tplRes;
       if (!error && data) {
         setTemplates(data as MessageTemplate[]);
         
@@ -262,6 +268,9 @@ export default function NewBroadcastPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Contacts</SelectItem>
+                  {contactGroups.map(g => (
+                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </TabsContent>
@@ -399,4 +408,5 @@ export default function NewBroadcastPage() {
     </div>
   );
 }
+
 
