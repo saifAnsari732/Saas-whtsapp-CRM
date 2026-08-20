@@ -299,7 +299,14 @@ export async function DELETE(
         })
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Meta delete failed.'
-        return NextResponse.json({ error: message }, { status: 502 })
+        
+        // If the template was already deleted on Meta, it often returns "Invalid parameter" or "does not exist"
+        const lowerMsg = message.toLowerCase()
+        if (lowerMsg.includes('invalid parameter') || lowerMsg.includes('does not exist') || lowerMsg.includes('not found')) {
+          console.warn(`Template delete on Meta failed (likely already deleted). Proceeding to local delete. Reason: ${message}`)
+        } else {
+          return NextResponse.json({ error: message }, { status: 502 })
+        }
       }
     }
 
