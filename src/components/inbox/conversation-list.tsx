@@ -15,6 +15,7 @@ import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -231,7 +232,7 @@ export function ConversationList({
       // 1. Create tag if needed
       if (groupSelection === 'create_new') {
         if (!newGroupName.trim()) {
-           alert("Please enter a group name");
+           toast.error("Please enter a group name");
            setIsSavingGroup(false);
            return;
         }
@@ -289,7 +290,7 @@ export function ConversationList({
       window.location.reload();
     } catch (err) {
       console.error(err);
-      alert("Failed to save group");
+      toast.error("Failed to save group");
     } finally {
       setIsSavingGroup(false);
     }
@@ -650,6 +651,9 @@ function ConversationItem({
     </button>
   );
 }
+
+
+
 
 
 
