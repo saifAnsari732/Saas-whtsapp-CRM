@@ -229,6 +229,13 @@ export function ConversationList({
     try {
       let tagId = groupSelection;
       
+      const { data: user } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from('profiles').select('account_id').eq('user_id', user.user?.id).single();
+      
+      if (!profile) {
+         throw new Error("Failed to load user profile");
+      }
+
       // 1. Create tag if needed
       if (groupSelection === 'create_new') {
         if (!newGroupName.trim()) {
@@ -236,14 +243,17 @@ export function ConversationList({
            setIsSavingGroup(false);
            return;
         }
-        const { data: user } = await supabase.auth.getUser();
-        const { data: newTag } = await supabase.from('tags').insert({
+        
+        const { data: newTag, error: tagErr } = await supabase.from('tags').insert({
           name: newGroupName.trim(),
-          user_id: user.user?.id
+          user_id: user.user?.id,
+          account_id: profile.account_id
         }).select().single();
+        
         if (newTag) {
           tagId = newTag.id;
         } else {
+          console.error("Tag creation error:", tagErr);
           throw new Error("Failed to create tag");
         }
       }
@@ -251,10 +261,8 @@ export function ConversationList({
       // 2. Add numbers if provided
       if (groupNumbers.trim()) {
         const numbers = groupNumbers.split(/[\n,]+/).map(n => n.trim().replace(/\D/g, '')).filter(Boolean);
-        const { data: user } = await supabase.auth.getUser();
-        const { data: profile } = await supabase.from('profiles').select('account_id').eq('id', user.user?.id).single();
         
-        if (profile && numbers.length > 0) {
+        if (numbers.length > 0) {
           // Find existing contacts
           const { data: existingContacts } = await supabase.from('contacts').select('id, phone').eq('account_id', profile.account_id).in('phone', numbers);
           const existingPhones = new Set((existingContacts || []).map(c => c.phone));
@@ -264,10 +272,15 @@ export function ConversationList({
           if (newNumbers.length > 0) {
             const contactsToInsert = newNumbers.map(phone => ({
               account_id: profile.account_id,
+              user_id: user.user?.id,
               phone: phone,
               name: phone
             }));
-            await supabase.from('contacts').insert(contactsToInsert);
+            const { error: insertErr } = await supabase.from('contacts').insert(contactsToInsert);
+            if (insertErr) {
+               console.error("Contacts insert error:", insertErr);
+               throw new Error("Failed to insert contacts");
+            }
           }
           
           // Re-fetch all to get their IDs
@@ -279,7 +292,11 @@ export function ConversationList({
                tag_id: tagId
              }));
              // Insert and ignore duplicates using onConflict
-             await supabase.from('contact_tags').upsert(contactTags, { onConflict: 'contact_id,tag_id' });
+             const { error: ctErr } = await supabase.from('contact_tags').upsert(contactTags, { onConflict: 'contact_id,tag_id' });
+             if (ctErr) {
+               console.error("Contact tags insert error:", ctErr);
+               throw new Error("Failed to insert contact tags");
+             }
           }
         }
       }
