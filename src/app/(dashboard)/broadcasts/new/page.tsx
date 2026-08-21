@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Settings, Users, MessageSquare, Clock, X, Loader2, Info, UploadCloud } from 'lucide-react';
 
 export default function NewBroadcastPage() {
@@ -30,6 +31,12 @@ export default function NewBroadcastPage() {
   const [recipientMode, setRecipientMode] = useState<'group' | 'numbers'>('group');
   const [groupId, setGroupId] = useState('');
   const [pastedNumbers, setPastedNumbers] = useState('');
+
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [groupSelection, setGroupSelection] = useState<string>('create_new');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [groupNumbers, setGroupNumbers] = useState('');
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
 
   // Scheduling
   const [sendWhen, setSendWhen] = useState<'immediately' | 'later'>('immediately');
@@ -155,6 +162,104 @@ export default function NewBroadcastPage() {
     }
   };
 
+    const handleSaveGroup = async () => {
+    setIsSavingGroup(true);
+    const supabase = createClient();
+    try {
+      let tagId = groupSelection;
+      
+      const { data: user } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from('profiles').select('account_id').eq('user_id', user.user?.id).single();
+      
+      if (!profile) {
+         throw new Error("Failed to load user profile");
+      }
+
+      // 1. Create tag if needed
+      if (groupSelection === 'create_new') {
+        if (!newGroupName.trim()) {
+           toast.error("Please enter a group name");
+           setIsSavingGroup(false);
+           return;
+        }
+        
+        const { data: newTag, error: tagErr } = await supabase.from('tags').insert({
+          name: newGroupName.trim(),
+          user_id: user.user?.id,
+          account_id: profile.account_id
+        }).select().single();
+        
+        if (newTag) {
+          tagId = newTag.id;
+        } else {
+          console.error("Tag creation error:", tagErr);
+          throw new Error("Failed to create tag");
+        }
+      }
+      
+      // 2. Add numbers if provided
+      if (groupNumbers.trim()) {
+        const numbers = groupNumbers.split(/[\n,]+/).map(n => n.trim().replace(/\D/g, '')).filter(Boolean);
+        
+        if (numbers.length > 0) {
+          // Find existing contacts
+          const { data: existingContacts } = await supabase.from('contacts').select('id, phone').eq('account_id', profile.account_id).in('phone', numbers);
+          const existingPhones = new Set((existingContacts || []).map(c => c.phone));
+          
+          // Insert new ones
+          const newNumbers = numbers.filter(n => !existingPhones.has(n));
+          if (newNumbers.length > 0) {
+            const contactsToInsert = newNumbers.map(phone => ({
+              account_id: profile.account_id,
+              user_id: user.user?.id,
+              phone: phone,
+              name: phone
+            }));
+            const { error: insertErr } = await supabase.from('contacts').insert(contactsToInsert);
+            if (insertErr) {
+               console.error("Contacts insert error:", insertErr);
+               throw new Error("Failed to insert contacts");
+            }
+          }
+          
+          // Re-fetch all to get their IDs
+          const { data: allContacts } = await supabase.from('contacts').select('id').eq('account_id', profile.account_id).in('phone', numbers);
+          
+          if (allContacts && tagId) {
+             const contactTags = allContacts.map(c => ({
+               contact_id: c.id,
+               tag_id: tagId
+             }));
+             // Insert and ignore duplicates using onConflict
+             const { error: ctErr } = await supabase.from('contact_tags').upsert(contactTags, { onConflict: 'contact_id,tag_id' });
+             if (ctErr) {
+               console.error("Contact tags insert error:", ctErr);
+               throw new Error("Failed to insert contact tags");
+             }
+          }
+        }
+      }
+      
+      setIsGroupModalOpen(false);
+      setNewGroupName('');
+      setGroupNumbers('');
+      toast.success("Group saved successfully");
+      
+      // Instead of window reload, just refresh tags
+      const { data: tags } = await supabase.from('tags').select('id, name').eq('account_id', profile.account_id).order('name');
+      if (tags) {
+        setContactGroups(tags);
+        setGroupId(tagId);
+      }
+      
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save group");
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
   async function handleSend() {
     if (!name.trim()) {
       toast.error('Campaign Name is required');
@@ -221,7 +326,61 @@ export default function NewBroadcastPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl bg-background text-foreground pb-20 mt-6">
+    <div className="flex flex-col min-h-screen bg-background">
+      <Dialog open={isGroupModalOpen} onOpenChange={setIsGroupModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Manage Contact Group</DialogTitle>
+            <DialogDescription>
+              Create a new group or add numbers to an existing one.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Group</Label>
+              <Select value={groupSelection} onValueChange={(v) => setGroupSelection(v || '')}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select group" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="create_new" className="font-semibold text-primary">+ Create New Group</SelectItem>
+                  {contactGroups.map((tag) => (
+                    <SelectItem key={tag.id} value={tag.id}>{tag.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {groupSelection === 'create_new' && (
+              <div className="space-y-2">
+                <Label>New Group Name</Label>
+                <Input 
+                  placeholder="e.g. Premium Customers" 
+                  value={newGroupName} 
+                  onChange={e => setNewGroupName(e.target.value)} 
+                />
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label>Add Numbers (Optional)</Label>
+              <Textarea 
+                placeholder="Paste numbers separated by commas or newlines (e.g. 919876543210, 919876543211)..."
+                value={groupNumbers}
+                onChange={e => setGroupNumbers(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsGroupModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveGroup} disabled={isSavingGroup}>
+              {isSavingGroup ? "Saving..." : "Save Group"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <div className="mx-auto max-w-4xl bg-background text-foreground pb-20 mt-6">
       <div className="flex items-center justify-between mb-6 pb-4 border-b">
         <h1 className="text-2xl font-bold">Create New Campaign</h1>
         <Button variant="ghost" size="icon" onClick={() => router.push('/broadcasts')}>
@@ -261,9 +420,9 @@ export default function NewBroadcastPage() {
               <TabsTrigger value="group" className="data-[state=active]:bg-primary data-[state=active]:text-white">Select Group</TabsTrigger>
               <TabsTrigger value="numbers" className="data-[state=active]:bg-primary data-[state=active]:text-white">Paste Numbers</TabsTrigger>
             </TabsList>
-            <TabsContent value="group">
+            <TabsContent value="group" className="flex items-center gap-2">
               <Select value={groupId} onValueChange={(v) => setGroupId(v || '')}>
-                <SelectTrigger className="bg-card">
+                <SelectTrigger className="bg-card w-full">
                   <SelectValue placeholder="Choose a contact group..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -273,6 +432,9 @@ export default function NewBroadcastPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Button type="button" variant="outline" onClick={() => setIsGroupModalOpen(true)}>
+                + New Group
+              </Button>
             </TabsContent>
             <TabsContent value="numbers">
               <Textarea 
@@ -406,7 +568,9 @@ export default function NewBroadcastPage() {
         </Button>
       </div>
     </div>
+    </div>
   );
 }
+
 
 
