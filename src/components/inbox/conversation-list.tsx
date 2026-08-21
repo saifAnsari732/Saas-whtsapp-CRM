@@ -171,8 +171,66 @@ export function ConversationList({
     return m;
   }, [tags]);
 
+  const [stubConversations, setStubConversations] = useState<Conversation[]>([]);
+  useEffect(() => {
+    if (selectedTagIds.length === 0) {
+      setStubConversations([]);
+      return;
+    }
+    
+    let cancelled = false;
+    const fetchStubContacts = async () => {
+       const supabase = createClient();
+       const { data: user } = await supabase.auth.getUser();
+       const { data: profile } = await supabase.from('profiles').select('account_id').eq('user_id', user.user?.id).single();
+       if (!profile || cancelled) return;
+       
+       const { data: contactTags } = await supabase
+         .from('contact_tags')
+         .select('contact_id')
+         .in('tag_id', selectedTagIds);
+         
+       if (!contactTags || contactTags.length === 0 || cancelled) {
+         setStubConversations([]);
+         return;
+       }
+       
+       const contactIds = Array.from(new Set(contactTags.map(ct => ct.contact_id)));
+       const { data: contacts } = await supabase
+         .from('contacts')
+         .select('*, tags(*)')
+         .in('id', contactIds);
+         
+       if (contacts && !cancelled) {
+         const stubs = contacts.map(c => ({
+           id: "stub-" + c.id,
+           contact_id: c.id,
+           contact: c,
+           status: 'open',
+           unread_count: 0,
+           last_message_text: "",
+           last_message_at: c.created_at,
+           account_id: profile.account_id,
+         })) as unknown as Conversation[];
+         setStubConversations(stubs);
+       }
+    };
+    fetchStubContacts();
+    return () => { cancelled = true; };
+  }, [selectedTagIds]);
+
   const filtered = useMemo(() => {
-    let result = conversations;
+    let result = [...conversations];
+
+    // Merge stubs if they don't already have a real conversation
+    if (selectedTagIds.length > 0) {
+      const existingContactIds = new Set(result.map(c => c.contact_id));
+      for (const stub of stubConversations) {
+        if (!existingContactIds.has(stub.contact_id)) {
+          result.push(stub);
+        }
+      }
+    }
 
     if (filter === "unread") {
       result = result.filter((c) => c.unread_count > 0);
@@ -201,7 +259,7 @@ export function ConversationList({
     }
 
     return result;
-  }, [conversations, filter, search, selectedTagIds, selectedCompany]);
+  }, [conversations, filter, search, selectedTagIds, selectedCompany, stubConversations]);
 
   const toggleTag = useCallback((id: string) => {
     setSelectedTagIds((prev) =>
@@ -668,6 +726,8 @@ function ConversationItem({
     </button>
   );
 }
+
+
 
 
 
