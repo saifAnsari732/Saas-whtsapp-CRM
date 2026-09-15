@@ -25,14 +25,7 @@ export function ChatMockup() {
     }
   }, [step]);
 
-  const floatAnimation = {
-    y: [0, -8, 0],
-    transition: {
-      duration: 3.5,
-      repeat: Infinity,
-      ease: "easeInOut" as const,
-    },
-  };
+
 
   const bubbleVariants = {
     hidden: { opacity: 0, y: 10, scale: 0.95, transformOrigin: "bottom left" },
@@ -47,37 +40,7 @@ export function ChatMockup() {
   return (
     <div className="relative w-full max-w-[340px] mx-auto sm:max-w-[380px] lg:max-w-[420px] xl:max-w-[380px]">
       
-      {/* Floating Stat 1 */}
-      <motion.div
-        animate={floatAnimation}
-        className="absolute -right-12 top-20 z-30 hidden rounded-2xl bg-white p-4 shadow-[0_12px_40px_rgba(7,94,84,0.15)] sm:block border border-gray-100"
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-50">
-            <CheckCheck className="h-5 w-5 text-green-500" />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 font-heading">Delivery</p>
-            <p className="text-lg font-black text-navy font-heading leading-none">98.5% Rate</p>
-          </div>
-        </div>
-      </motion.div>
 
-      {/* Floating Stat 2 */}
-      <motion.div
-        animate={{ ...floatAnimation, transition: { ...floatAnimation.transition, delay: 1.5 } }}
-        className="absolute -left-12 bottom-32 z-30 hidden rounded-2xl bg-white p-4 shadow-[0_12px_40px_rgba(7,94,84,0.15)] sm:block border border-gray-100"
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-            <span className="text-lg font-black text-blue-500">⚡</span>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 font-heading">Response</p>
-            <p className="text-lg font-black text-navy font-heading leading-none">1.2s Avg Time</p>
-          </div>
-        </div>
-      </motion.div>
 
       {/* Phone Frame */}
       <div className="relative overflow-hidden rounded-[3rem] border-[12px] border-gray-900 bg-[#efeae2] shadow-[0_24px_80px_rgba(7,94,84,0.2)] ring-1 ring-black/5">
