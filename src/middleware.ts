@@ -85,6 +85,75 @@ export async function middleware(request: NextRequest) {
     )
   }
 
+  // Subscription enforcement for API routes
+  if (user && request.nextUrl.pathname.startsWith('/api/')) {
+    const SUBSCRIPTION_GATED_API = [
+      '/api/whatsapp/send',
+      '/api/broadcasts',
+      '/api/automations',
+      '/api/contacts',
+      '/api/flows',
+    ];
+
+    const isGatedApi = SUBSCRIPTION_GATED_API.some(path => request.nextUrl.pathname.startsWith(path));
+
+    if (isGatedApi) {
+      // 1. Query profiles to get account_id and account_role
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('account_id, account_role')
+        .eq('user_id', user.id)
+        .single();
+
+      if (profile?.account_id) {
+        // 2. If account_role === 'owner', allow (owner never blocked)
+        if (profile.account_role !== 'owner') {
+          // 3. Query accounts for subscription_status and trial_ends_at
+          const { data: account } = await supabase
+            .from('accounts')
+            .select('subscription_status, subscription_plan, trial_ends_at, subscription_expires_at')
+            .eq('id', profile.account_id)
+            .single();
+
+          if (account) {
+            let isActive = false;
+            const now = new Date();
+
+            if (account.subscription_status === 'active') {
+              if (account.subscription_expires_at) {
+                const expiresAt = new Date(account.subscription_expires_at);
+                if (expiresAt > now) {
+                  isActive = true;
+                }
+              } else {
+                isActive = true;
+              }
+            } else if (account.subscription_status === 'trial') {
+              if (account.trial_ends_at) {
+                const trialEndsAt = new Date(account.trial_ends_at);
+                if (trialEndsAt > now) {
+                  isActive = true;
+                }
+              }
+            }
+
+            // 4. If expired and not owner: return JSON error
+            if (!isActive) {
+              return withRefreshedCookies(
+                NextResponse.json({
+                  error: "Subscription required",
+                  code: "SUBSCRIPTION_EXPIRED",
+                  message: "Your trial has expired. Please upgrade to continue.",
+                  upgrade_url: "/billing"
+                }, { status: 403 })
+              )
+            }
+          }
+        }
+      }
+    }
+  }
+
   return supabaseResponse
 }
 

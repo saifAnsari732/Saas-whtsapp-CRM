@@ -10,21 +10,23 @@ export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
+    { name: "Services", href: "#pricing" },
+    { name: "WhatsApp API", href: "/settings?tab=whatsapp" },
+    { name: "Coexistence QR", href: "/dashboard/coexistence" },
+    { name: "Pricing & Plans", href: "#pricing" },
     { name: "Features", href: "#features" },
-    { name: "How it Works", href: "#how-it-works" },
-    { name: "Pricing", href: "#pricing" },
   ];
 
   return (
-    <header className="fixed top-0 left-0 w-full bg-white/90 backdrop-blur-md border-b border-border/40 z-50">
+    <header className="fixed top-0 left-0 w-full bg-white/95 backdrop-blur-md border-b border-slate-200/80 z-50 shadow-xs">
       <div className="container mx-auto px-4 md:px-8 py-3.5">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-gradient-to-br from-[var(--color-green-deep)] to-[var(--color-green-vivid)] shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-gradient-to-br from-blue-600 to-emerald-600 shadow-md">
               <MessageSquare className="h-5 w-5 text-white" />
             </div>
-            <span className="text-2xl font-black tracking-tight text-navy font-heading">
+            <span className="text-2xl font-black tracking-tight text-slate-900 font-heading">
               Botify.ai
             </span>
           </Link>
@@ -35,7 +37,7 @@ export function Navbar() {
               <Link
                 key={link.name}
                 href={link.href}
-                className="text-[15px] font-semibold text-gray hover:text-[var(--color-green-deep)] transition-colors relative group"
+                className="text-xs font-extrabold uppercase tracking-wider text-slate-600 hover:text-blue-600 transition-colors relative group"
               >
                 {link.name}
               </Link>
@@ -43,13 +45,13 @@ export function Navbar() {
           </nav>
 
           {/* Desktop CTAs */}
-          <div className="hidden md:flex items-center gap-5">
-            <Link href="/login" className="text-[15px] font-semibold text-navy hover:text-[var(--color-green-deep)] transition-colors">
+          <div className="hidden md:flex items-center gap-4">
+            <Link href="/login" className="text-xs font-extrabold uppercase tracking-wider text-slate-700 hover:text-blue-600 transition-colors px-3 py-2">
               Log in
             </Link>
             <Link href="/signup">
-              <Button className="h-11 px-6 bg-[var(--color-navy)] hover:bg-[var(--color-navy)]/90 text-white shadow-sm hover:-translate-y-0.5 transition-all rounded-[12px] text-[15px] font-bold">
-                Get Started
+              <Button className="h-10 px-5 bg-blue-600 hover:bg-blue-700 text-white shadow-md rounded-full text-xs font-extrabold uppercase tracking-wider transition-all">
+                Start Free Trial
               </Button>
             </Link>
           </div>

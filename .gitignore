@@ -51,3 +51,5 @@ baileys_auth_info/
 .wrangler
 .dev.vars*
 !.dev.vars.example
+baileys_auth_info_*
+baileys_store_*.json

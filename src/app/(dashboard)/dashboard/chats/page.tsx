@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { CoexistenceConnectionPrompt } from "@/components/dashboard/coexistence-connection-prompt";
 
 interface BaileysChat {
   id: string;
@@ -40,6 +41,7 @@ export default function WhatsAppChatsPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
+  const [showCoexistencePrompt, setShowCoexistencePrompt] = useState(false);
 
   useEffect(() => {
     fetchChats();
@@ -129,9 +131,11 @@ export default function WhatsAppChatsPage() {
   }).sort((a, b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8 bg-[#f0f2f5] min-h-screen">
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-border/50">
-        <div className="bg-[#f0f2f5] p-4 flex items-center justify-between border-b border-border/50">
+    <>
+      <CoexistenceConnectionPrompt />
+      <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8 bg-[#f0f2f5] min-h-screen">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-border/50">
+          <div className="bg-[#f0f2f5] p-4 flex items-center justify-between border-b border-border/50">
           <h1 className="text-xl font-semibold text-[#111b21] flex items-center gap-3">
             <div className="bg-[#00a884] p-2 rounded-full text-white">
               <History className="h-5 w-5" />
@@ -377,5 +381,6 @@ export default function WhatsAppChatsPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

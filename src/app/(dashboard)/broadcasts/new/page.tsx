@@ -38,9 +38,10 @@ export default function NewBroadcastPage() {
   const [groupNumbers, setGroupNumbers] = useState('');
   const [isSavingGroup, setIsSavingGroup] = useState(false);
 
-  // Scheduling
+  // Scheduling & Delay
   const [sendWhen, setSendWhen] = useState<'immediately' | 'later'>('immediately');
   const [scheduleDate, setScheduleDate] = useState('');
+  const [sendDelaySeconds, setSendDelaySeconds] = useState<number>(3);
 
   // Templates
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -310,6 +311,7 @@ export default function NewBroadcastPage() {
         variables,
         headerMediaUrl: requiresMedia ? headerMediaUrl : undefined,
         scheduledAt: sendWhen === 'later' ? new Date(scheduleDate).toISOString() : undefined,
+        delaySeconds: sendDelaySeconds,
       } as any);
 
       toast.success(sendWhen === 'later' ? 'Campaign scheduled successfully!' : 'Campaign created and sending started!');
@@ -446,30 +448,62 @@ export default function NewBroadcastPage() {
             </TabsContent>
           </Tabs>
 
-          <div className="mt-4 p-4 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold mb-2">
-              <Clock className="h-4 w-4" />
-              When to Send? *
+          <div className="mt-4 p-5 rounded-xl border bg-emerald-50/40 border-emerald-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-emerald-100 pb-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                <Clock className="h-4 w-4 text-emerald-600" />
+                <span>When to Send? *</span>
+              </div>
             </div>
+
             <RadioGroup value={sendWhen} onValueChange={(v: any) => setSendWhen(v)}>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="immediately" id="immed" />
-                <Label htmlFor="immed" className="font-medium flex flex-col">
+                <Label htmlFor="immed" className="font-semibold flex flex-col cursor-pointer">
                   Send Immediately
                   <span className="text-xs text-muted-foreground font-normal">Campaign will start as soon as it's created</span>
                 </Label>
               </div>
               <div className="flex items-center space-x-2 mt-2">
                 <RadioGroupItem value="later" id="later" />
-                <Label htmlFor="later" className="font-medium flex flex-col">
+                <Label htmlFor="later" className="font-semibold flex flex-col cursor-pointer">
                   Schedule for Later
                   <span className="text-xs text-muted-foreground font-normal">Choose a specific date and time</span>
                 </Label>
               </div>
             </RadioGroup>
+
             {sendWhen === 'later' && (
-              <Input type="datetime-local" className="max-w-xs mt-3 bg-card" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+              <Input type="datetime-local" className="max-w-xs mt-3 bg-white" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
             )}
+
+            {/* Message Delay per Message (Anti-Ban Guard) */}
+            <div className="pt-4 border-t border-emerald-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <span>Message Sending Delay (Interval)</span>
+                  <span className="text-xs font-normal text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Anti-Ban Protection</span>
+                </Label>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <Select value={String(sendDelaySeconds)} onValueChange={(v) => setSendDelaySeconds(Number(v))}>
+                  <SelectTrigger className="w-48 bg-white font-medium border-emerald-200">
+                    <SelectValue placeholder="Select delay" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 Second (Fast)</SelectItem>
+                    <SelectItem value="2">2 Seconds</SelectItem>
+                    <SelectItem value="3">3 Seconds (Recommended)</SelectItem>
+                    <SelectItem value="5">5 Seconds (Safe)</SelectItem>
+                    <SelectItem value="10">10 Seconds (Very Safe)</SelectItem>
+                    <SelectItem value="15">15 Seconds (Extra Safe)</SelectItem>
+                    <SelectItem value="30">30 Seconds</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-slate-500">Wait {sendDelaySeconds}s between each message dispatch.</span>
+              </div>
+            </div>
           </div>
         </section>
 

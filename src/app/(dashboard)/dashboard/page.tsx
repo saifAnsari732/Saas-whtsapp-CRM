@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
-import { formatCurrency } from '@/lib/currency'
 import {
   MessageSquare,
   Send,
@@ -12,6 +11,7 @@ import {
   Users,
   Smartphone,
   PieChart,
+  Radio
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -23,12 +23,18 @@ import {
   loadResponseTime,
   loadMessageAnalytics,
 } from '@/lib/dashboard/queries'
+import {
+  loadTemplatePerformance,
+  loadBroadcastAnalytics
+} from '@/lib/dashboard/template-queries'
 import type {
   ActivityItem,
   ConversationsSeriesPoint,
   MetricsBundle,
   PipelineDonutData,
   ResponseTimeSummary,
+  TemplatePerformanceData,
+  BroadcastAnalyticsData
 } from '@/lib/dashboard/types'
 
 import { ConversationsChart } from '@/components/dashboard/conversations-chart'
@@ -37,7 +43,10 @@ import { ResponseTimeChart } from '@/components/dashboard/response-time-chart'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import { ConnectWhatsappBanner } from '@/components/dashboard/connect-whatsapp-banner'
 import { MessageAnalytics } from '@/components/dashboard/message-analytics'
-import { BillingCard } from '@/components/dashboard/billing-card'
+import { TemplatePerformance } from '@/components/dashboard/template-performance'
+import { BroadcastAnalytics } from '@/components/dashboard/broadcast-analytics'
+import { TeamActivityCard } from '@/components/dashboard/team-activity-card'
+import { MetricCard } from '@/components/dashboard/metric-card'
 import { Card } from '@/components/ui/card'
 
 import { useTranslations } from 'next-intl'
@@ -51,9 +60,6 @@ export default function DashboardPage() {
   const [metricsLoading, setMetricsLoading] = useState(true)
 
   const [range, setRange] = useState<RangeDays>(30)
-  // Keep a cache per range so switching tabs doesn't re-fetch what we
-  // already have. Ranges the user hasn't opened yet stay null and
-  // trigger a fetch on first view.
   const [series, setSeries] = useState<Record<RangeDays, ConversationsSeriesPoint[] | null>>({
     7: null,
     30: null,
@@ -74,18 +80,17 @@ export default function DashboardPage() {
   
   const [msgAnalytics, setMsgAnalytics] = useState<{ delivered: number, seen: number, failed: number, pending: number } | null>(null)
 
+  const [templatePerf, setTemplatePerf] = useState<TemplatePerformanceData | null>(null)
+  const [broadcastPerf, setBroadcastPerf] = useState<BroadcastAnalyticsData | null>(null)
+
   const loadAll = useCallback(() => {
     const db = createClient()
 
-    // Fetch WhatsApp config status so we can show a CTA banner if disconnected
     fetch('/api/whatsapp/config')
       .then((res) => res.json())
       .then((data) => setWaConfig(data))
       .catch((err) => console.error('[dashboard] wa_config failed:', err))
 
-    // Kick everything off in parallel. Each block has its own
-    // setState + finally so a slow query doesn't hold up faster
-    // sections — each widget shows its own skeleton independently.
     void loadMetrics(db)
       .then((m) => setMetrics(m))
       .catch((err) => console.error('[dashboard] metrics failed:', err))
@@ -110,23 +115,24 @@ export default function DashboardPage() {
       .catch((err) => console.error('[dashboard] response time failed:', err))
       .finally(() => setResponseTimeLoading(false))
 
-    // Fetch up to 50 so the biggest page-size option in the feed
-    // (50 rows) is already in memory — switching sizes then becomes
-    // a pure client-side slice with no extra round trip.
     void loadActivity(db, 50)
       .then((a) => setActivity(a))
       .catch((err) => console.error('[dashboard] activity failed:', err))
       .finally(() => setActivityLoading(false))
+
+    void loadTemplatePerformance(db)
+      .then((tData) => setTemplatePerf(tData))
+      .catch((err) => console.error('[dashboard] template performance failed:', err))
+
+    void loadBroadcastAnalytics(db)
+      .then((bData) => setBroadcastPerf(bData))
+      .catch((err) => console.error('[dashboard] broadcast analytics failed:', err))
   }, [])
 
   useEffect(() => {
     loadAll()
   }, [loadAll])
 
-  // Range switch handler — kept in an event callback (not an effect)
-  // so the setState calls stay out of the react-hooks/set-state-in-effect
-  // rule's way. The cached bucket check means switching back to a
-  // previously-viewed range is instant and doesn't re-fetch.
   const handleRangeChange = useCallback(
     (r: RangeDays) => {
       setRange(r)
@@ -155,14 +161,122 @@ export default function DashboardPage() {
       </div>
 
       {!isConnected && !isLoadingConfig && (
-        <div className="py-4">
-          <ConnectWhatsappBanner />
-          <div className="mt-8 text-center p-12 border border-dashed rounded-xl border-border bg-card/50">
-            <h2 className="text-xl font-semibold mb-2">Connect your WhatsApp to unlock the CRM</h2>
-            <p className="text-muted-foreground mb-6">You need to connect your Meta WhatsApp Business API to view analytics, send messages, and manage contacts.</p>
-            <Link href="/settings?tab=whatsapp" className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 transition-colors rounded-lg text-sm font-bold text-white shadow-md">
-              Go to Settings
-            </Link>
+        <div className="space-y-6">
+          {/* Hero Welcome Banner */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 p-8 text-white shadow-lg">
+            <div className="relative z-10 max-w-2xl space-y-3">
+              <span className="inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider backdrop-blur-md">
+                Getting Started
+              </span>
+              <h2 className="text-3xl font-extrabold tracking-tight">Welcome to Botify.ai CRM</h2>
+              <p className="text-emerald-100 text-base leading-relaxed">
+                Connect your Meta WhatsApp Business API or Scan Coexistence QR to automate your sales, broadcast messages to thousands of customers, and manage chats effortlessly.
+              </p>
+              <div className="pt-2 flex flex-wrap gap-4">
+                <Link
+                  href="/settings?tab=whatsapp"
+                  className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-emerald-800 shadow-md hover:bg-emerald-50 transition-all active:scale-95"
+                >
+                  <Smartphone className="h-4 w-4 text-emerald-600" />
+                  Connect Cloud API
+                </Link>
+                <Link
+                  href="/dashboard/coexistence"
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-800/60 border border-white/20 px-5 py-3 text-sm font-bold text-white shadow-md hover:bg-emerald-800/80 transition-all active:scale-95"
+                >
+                  <Smartphone className="h-4 w-4 text-purple-300" />
+                  Connect Coexistence QR
+                </Link>
+              </div>
+            </div>
+            <div className="absolute -right-10 -bottom-10 h-64 w-64 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+          </div>
+
+          {/* Quick Metrics Placeholder */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              title="Active Conversations"
+              value="0"
+              icon={MessageSquare}
+              subtitle="Connect WhatsApp to start"
+            />
+            <MetricCard
+              title="New Contacts Today"
+              value="0"
+              icon={Users}
+              subtitle="Import or sync contacts"
+            />
+            <MetricCard
+              title="Open Deals Value"
+              value="0"
+              icon={Send}
+              subtitle="Track sales pipelines"
+            />
+            <MetricCard
+              title="Messages Sent Today"
+              value="0"
+              icon={Zap}
+              subtitle="Broadcasts & automations"
+            />
+          </div>
+
+          {/* Quick Setup Checklist */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+            <h3 className="text-lg font-bold text-slate-900">Setup Checklist</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Link href="/settings?tab=whatsapp" className="p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-emerald-500 hover:bg-emerald-50/50 transition-all group">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors">1</div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">Connect WhatsApp</h4>
+                    <p className="text-xs text-slate-500">Official Meta API or QR Scan</p>
+                  </div>
+                </div>
+              </Link>
+
+              <Link href="/contacts" className="p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-blue-500 hover:bg-blue-50/50 transition-all group">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold group-hover:bg-blue-600 group-hover:text-white transition-colors">2</div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">Import Contacts</h4>
+                    <p className="text-xs text-slate-500">Upload CSV or add manually</p>
+                  </div>
+                </div>
+              </Link>
+
+              <Link href="/broadcasts/new" className="p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-purple-500 hover:bg-purple-50/50 transition-all group">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-700 font-bold group-hover:bg-purple-600 group-hover:text-white transition-colors">3</div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">Send First Campaign</h4>
+                    <p className="text-xs text-slate-500">Broadcast to your audience</p>
+                  </div>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* Quick Action Grid */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { icon: Radio, label: 'Broadcasts', href: '/broadcasts', color: 'bg-emerald-600' },
+              { icon: FileText, label: 'Templates', href: '/settings?tab=whatsapp', color: 'bg-teal-600' },
+              { icon: Users, label: 'Contacts', href: '/contacts', color: 'bg-blue-600' },
+              { icon: Smartphone, label: 'Coexistence QR', href: '/dashboard/coexistence', color: 'bg-purple-600' },
+            ].map((action, i) => (
+              <Link
+                key={i}
+                href={action.href}
+                className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white p-6 shadow-sm border border-slate-200 hover:border-emerald-500 hover:shadow-md transition-all h-36 group"
+              >
+                <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${action.color} text-white shadow-md group-hover:scale-110 transition-transform duration-300`}>
+                  <action.icon className="h-6 w-6" />
+                </div>
+                <span className="text-xs font-bold text-slate-800 text-center group-hover:text-emerald-700 transition-colors">
+                  {action.label}
+                </span>
+              </Link>
+            ))}
           </div>
         </div>
       )}
@@ -171,79 +285,106 @@ export default function DashboardPage() {
         <>
           {msgAnalytics && <MessageAnalytics stats={msgAnalytics} />}
 
-          {/* New Action Grid */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <BillingCard />
-
-        {/* Action Cards */}
-        {[
-          { icon: Send, label: 'Send Message', href: '/broadcasts', color: 'bg-gradient-to-br from-[var(--color-green-deep)] to-[#094d45]' },
-          { icon: FileText, label: 'Templates', href: '/settings?tab=whatsapp', color: 'bg-gradient-to-br from-emerald-500 to-teal-600' },
-          { icon: Zap, label: 'Keyword Flow', href: '/keyword-flows', color: 'bg-gradient-to-br from-[#25D366] to-[#128C7E]' },
-          { icon: Users, label: 'WhatsApp Group', href: '/contacts', color: 'bg-gradient-to-br from-sky-500 to-blue-600' },
-          { icon: PieChart, label: 'Reports', href: '/dashboard', color: 'bg-gradient-to-br from-indigo-500 to-violet-600' },
-          { icon: Smartphone, label: 'Devices', href: '/dashboard/coexistence', color: 'bg-gradient-to-br from-slate-600 to-slate-800' },
-          { icon: Users, label: 'Contacts Group', href: '/contacts', color: 'bg-gradient-to-br from-teal-500 to-emerald-600' },
-        ].map((action, i) => (
-          <Link
-            key={i}
-            href={action.href}
-            className="flex flex-col items-center justify-center gap-3 rounded-xl bg-card p-6 shadow-sm border border-border hover:border-[var(--color-green-vivid)]/50 hover:shadow-md transition-all h-40 group"
-          >
-            <div className={`flex h-[52px] w-[52px] items-center justify-center rounded-[18px] ${action.color} text-white shadow-md group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300`}>
-              <action.icon className="h-6 w-6" />
+          {/* Real-data KPI summary */}
+          {metrics && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricCard
+                title={t('activeConversations')}
+                value={String(metrics.activeConversations.current)}
+                icon={MessageSquare}
+                delta={{
+                  sign: Math.sign(metrics.activeConversations.current - metrics.activeConversations.previous),
+                  label: `${metrics.activeConversations.current - metrics.activeConversations.previous >= 0 ? '+' : ''}${metrics.activeConversations.current - metrics.activeConversations.previous} vs prev. period`,
+                }}
+              />
+              <MetricCard
+                title={t('newContactsToday')}
+                value={String(metrics.newContactsToday.current)}
+                icon={Users}
+                delta={{
+                  sign: Math.sign(metrics.newContactsToday.current - metrics.newContactsToday.previous),
+                  label: `${metrics.newContactsToday.current - metrics.newContactsToday.previous >= 0 ? '+' : ''}${metrics.newContactsToday.current - metrics.newContactsToday.previous} ${t('newTodayVsYesterday')}`,
+                }}
+              />
+              <MetricCard
+                title={t('openDeals', { count: metrics.openDealsCount })}
+                value={String(metrics.openDealsCount)}
+                icon={Send}
+                subtitle={`${defaultCurrency} ${metrics.openDealsValue.toLocaleString()}`}
+              />
+              <MetricCard
+                title={t('messagesSentToday')}
+                value={String(metrics.messagesSentToday.current)}
+                icon={Zap}
+                delta={{
+                  sign: Math.sign(metrics.messagesSentToday.current - metrics.messagesSentToday.previous),
+                  label: `${metrics.messagesSentToday.current - metrics.messagesSentToday.previous >= 0 ? '+' : ''}${metrics.messagesSentToday.current - metrics.messagesSentToday.previous} ${t('vsYesterday')}`,
+                }}
+              />
             </div>
-            <span className="text-[13px] font-bold text-navy text-center group-hover:text-[var(--color-green-deep)] transition-colors">
-              {action.label}
-            </span>
-          </Link>
-        ))}
-      </div>
+          )}
 
-      {/* Charts row */}
-      {/* items-stretch (the grid default) stretches the two columns to
-          match the tallest sibling; adding h-full on each wrapper and
-          on the inner panels makes both cards actually fill that
-          stretched height so their rounded borders line up. Without
-          this, the pipeline card rendered at its natural (shorter)
-          height while the line chart drove the row height. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <div className="h-full lg:col-span-3">
-          <ConversationsChart
-            series={series}
-            loading={seriesLoading}
-            range={range}
-            onRangeChange={handleRangeChange}
-          />
-        </div>
-        <div className="h-full lg:col-span-2">
-          <PipelineDonut
-            data={{
-              totalValue: 236,
-              stages: [
-                { id: '1', name: 'Text', totalValue: 236, dealCount: 236, color: '#3b82f6' }
-              ]
-            }}
-            loading={false}
-          />
-        </div>
-      </div>
+          {/* Action Grid */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
-      {/* Response time */}
-      <ResponseTimeChart data={responseTime} loading={responseTimeLoading} />
+            {/* Action Cards */}
+            {[
+              { icon: Radio, label: 'Broadcasts', href: '/broadcasts', color: 'bg-gradient-to-br from-[var(--color-green-deep)] to-[#094d45]' },
+              { icon: FileText, label: 'Templates', href: '/settings?tab=whatsapp', color: 'bg-gradient-to-br from-emerald-500 to-teal-600' },
+              { icon: Zap, label: 'Keyword Flow', href: '/keyword-flows', color: 'bg-gradient-to-br from-[#25D366] to-[#128C7E]' },
+              { icon: Users, label: 'Contacts', href: '/contacts', color: 'bg-gradient-to-br from-sky-500 to-blue-600' },
+              { icon: Send, label: 'Automations', href: '/automations', color: 'bg-gradient-to-br from-indigo-500 to-violet-600' },
+              { icon: Smartphone, label: 'Connect Coexistence', href: '/dashboard/coexistence', color: 'bg-gradient-to-br from-slate-600 to-slate-800' },
+            ].map((action, i) => (
+              <Link
+                key={i}
+                href={action.href}
+                className="flex flex-col items-center justify-center gap-3 rounded-xl bg-card p-6 shadow-sm border border-border hover:border-[var(--color-green-vivid)]/50 hover:shadow-md transition-all h-40 group"
+              >
+                <div className={`flex h-[52px] w-[52px] items-center justify-center rounded-[18px] ${action.color} text-white shadow-md group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300`}>
+                  <action.icon className="h-6 w-6" />
+                </div>
+                <span className="text-[13px] font-bold text-navy text-center group-hover:text-[var(--color-green-deep)] transition-colors">
+                  {action.label}
+                </span>
+              </Link>
+            ))}
+          </div>
 
-      {/* Activity feed */}
-      <ActivityFeed items={activity} loading={activityLoading} />
+          {/* Template & Broadcast Analytics */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 mt-4">
+            {templatePerf && <TemplatePerformance data={templatePerf} />}
+            {broadcastPerf && <BroadcastAnalytics data={broadcastPerf} />}
+          </div>
+
+          {/* Charts row */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 mt-4">
+            <div className="h-full lg:col-span-3">
+              <ConversationsChart
+                series={series}
+                loading={seriesLoading}
+                range={range}
+                onRangeChange={handleRangeChange}
+              />
+            </div>
+            <div className="h-full lg:col-span-2">
+              <PipelineDonut
+                data={pipeline}
+                loading={pipelineLoading}
+              />
+            </div>
+          </div>
+
+          {/* Response time */}
+          <ResponseTimeChart data={responseTime} loading={responseTimeLoading} />
+
+          {/* Activity feed */}
+          <ActivityFeed items={activity} loading={activityLoading} />
+          
+          {/* Admin Team Management view */}
+          <TeamActivityCard />
         </>
       )}
     </div>
   )
-}
-
-// ------------------------------------------------------------
-
-function deltaLabel(delta: number, suffix: string, noChangeLabel: string): string {
-  if (delta === 0) return noChangeLabel
-  const sign = delta > 0 ? '+' : ''
-  return `${sign}${delta.toLocaleString()} ${suffix}`
 }

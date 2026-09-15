@@ -65,3 +65,25 @@ export interface ActivityItem {
   /** Optional deep-link for the whole row (not all items have a target). */
   href?: string
 }
+
+export interface TemplatePerformanceData {
+  total: number
+  approved: number
+  pending: number
+  rejected: number
+  topTemplates: { id: string; name: string; status: string; sendCount: number }[]
+}
+
+export interface BroadcastAnalyticsData {
+  totalBroadcasts: number
+  recentBroadcasts: {
+    id: string
+    name: string
+    status: string
+    totalRecipients: number
+    deliveredCount: number
+    failedCount: number
+    createdAt: string
+    scheduledAt: string | null
+  }[]
+}

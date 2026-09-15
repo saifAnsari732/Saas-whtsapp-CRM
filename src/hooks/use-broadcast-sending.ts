@@ -48,6 +48,7 @@ interface BroadcastPayload {
   headerMediaUrl?: string;
   scheduledAt?: string;
   batchDelayMs?: number;
+  delaySeconds?: number;
 }
 
 interface UseBroadcastSendingReturn {

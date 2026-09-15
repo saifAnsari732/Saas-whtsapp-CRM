@@ -1,204 +1,354 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
-export function PricingSection() {
-  const plans = [
+type CategoryId = "web" | "app" | "automation" | "whatsapp";
+
+interface PlanItem {
+  name: string;
+  price: string;
+  subtitle: string;
+  popular?: boolean;
+  features: string[];
+}
+
+const CATEGORIES: { id: CategoryId; label: string }[] = [
+  { id: "web", label: "WEB PACKAGES" },
+  { id: "app", label: "APP DEVELOPMENT" },
+  { id: "automation", label: "AI AUTOMATION" },
+  { id: "whatsapp", label: "WHATSAPP & CRM" },
+];
+
+const PLAN_DATA: Record<CategoryId, PlanItem[]> = {
+  web: [
     {
-      name: "Starter",
-      price: "₹299",
-      period: "/mo",
-      desc: "Perfect for testing the waters and small businesses.",
+      name: "BASIC WEBSITE",
+      price: "₹2,999",
+      subtitle: "PERFECT FOR LOCAL PRESENCE.",
+      features: [
+        "One Page Static Website",
+        "Hosting Included",
+        "Free SSL Certificate",
+        "Mobile Responsive Design",
+        "WhatsApp Chat Button",
+        "Google Map Integration",
+        "Social Media Integration",
+        "Basic SEO Optimization",
+        "Free Landing Page",
+      ],
+    },
+    {
+      name: "STANDARD WEBSITE",
+      price: "₹4,999",
+      subtitle: "MOST POPULAR FOR SMALL BUSINESS.",
+      popular: true,
+      features: [
+        "0-10 Pages Website",
+        "Hosting Included",
+        "Free SSL Certificate",
+        "Mobile & Tablet Responsive",
+        "WhatsApp Chat Button",
+        "Google Map Integration",
+        "Social Media Integration",
+        "Lead Generation Forms",
+        "On-Page SEO Setup",
+        "2-3 Domain Email Id",
+        "6 Months Free Website Maintenance",
+        "Free Landing Page",
+      ],
+    },
+    {
+      name: "BUSINESS WEBSITE",
+      price: "₹7,999",
+      subtitle: "ADVANCED FEATURES FOR GROWTH.",
+      features: [
+        "10-20 Pages Website",
+        "Hosting Included",
+        "Free SSL Certificate",
+        "Premium Responsive Design",
+        "WhatsApp Chat Button",
+        "Google Map Integration",
+        "Social Media Integration",
+        "Advanced SEO Optimization",
+        "Admin Panel Access",
+        "2-5 Domain Email Id",
+        "12 Months Free Website Maintenance",
+        "Free Landing Page",
+      ],
+    },
+  ],
+  app: [
+    {
+      name: "BASIC APP",
+      price: "₹9,999",
+      subtitle: "STARTUP HYBRID APP.",
+      features: [
+        "Android Hybrid App",
+        "Play Store Publishing",
+        "Push Notifications",
+        "User Auth & Profiles",
+        "WhatsApp Live Chat",
+        "Basic Analytics",
+        "3 Months Support",
+      ],
+    },
+    {
+      name: "PRO MOBILE APP",
+      price: "₹19,999",
+      subtitle: "IOS & ANDROID COMPLETE APP.",
+      popular: true,
+      features: [
+        "iOS & Android Native Apps",
+        "Play Store & App Store Publishing",
+        "Custom UI/UX Design",
+        "Payment Gateway Integration",
+        "Realtime Database & Backend",
+        "Automated Push Notifications",
+        "Admin Portal Dashboard",
+        "6 Months Maintenance",
+      ],
+    },
+    {
+      name: "ENTERPRISE APP",
+      price: "₹39,999",
+      subtitle: "FULL TECH STACK & SOURCE CODE.",
+      features: [
+        "Cross-Platform Flutter/React Native",
+        "Dedicated Backend Server",
+        "Custom AI Chatbot Embedded",
+        "Scalable Cloud Architecture",
+        "Full Source Code Handover",
+        "Advanced Analytics & Security",
+        "12 Months Priority Support",
+      ],
+    },
+  ],
+  automation: [
+    {
+      name: "AI CHATBOT",
+      price: "₹1,499",
+      subtitle: "AUTOMATE CUSTOMER QUERIES.",
+      features: [
+        "Smart Keyword Auto-Reply",
+        "24/7 Support Bot",
+        "Multi-language Support",
+        "Lead Capture Forms",
+        "Instant Email/SMS Alerts",
+        "Standard Integration",
+      ],
+    },
+    {
+      name: "AI AGENT SUITE",
+      price: "₹3,499",
+      subtitle: "ADVANCED WORKFLOWS & BOT.",
+      popular: true,
+      features: [
+        "Custom Trained AI Model (Gemini/OpenAI)",
+        "Automated Follow-up Sequences",
+        "CRM & Database Sync",
+        "Intent Recognition",
+        "E-Commerce Product Recommendations",
+        "Priority Support",
+      ],
+    },
+    {
+      name: "FULL AI AUTOMATION",
+      price: "₹6,999",
+      subtitle: "COMPLETE BUSINESS AUTOMATION.",
+      features: [
+        "Unlimited Custom Workflows",
+        "Multi-Channel Bot (WhatsApp, Web, IG)",
+        "Voice & Document Parsing",
+        "Custom API & Webhook Triggers",
+        "Dedicated AI Engineer",
+        "24/7 SLA Guarantee",
+      ],
+    },
+  ],
+  whatsapp: [
+    {
+      name: "STARTER CRM",
+      price: "₹499",
+      subtitle: "PERFECT FOR SMALL TEAMS.",
       features: [
         "1 WhatsApp Number",
-        "1,000 Messages / month",
-        "1,000 Contacts",
-        "1 User",
+        "2,000 Contacts",
+        "1 Team Member",
         "Basic CRM Templates",
-        "Basic AI Chatbot",
         "Basic Broadcasts",
-        "Contact Management",
-        "Standard Analytics",
-        "Community Support"
+        "Community Support",
       ],
-      buttonText: "Start 14-Day Trial",
-      featured: false,
     },
     {
-      name: "Essential",
-      price: "₹499",
-      period: "/mo",
-      desc: "Minimum plan to kickstart your messaging & branding.",
-      features: [
-        "2 WhatsApp Numbers",
-        "10,000 Messages / month",
-        "10,000 Contacts",
-        "5 Users",
-        "Advanced AI Chatbot",
-        "Unlimited Campaigns",
-        "Flow Builder (Messages)",
-        "API & Webhooks",
-        "Website Development Support",
-        "Standard Email Support"
-      ],
-      buttonText: "Start Essential",
-      featured: false,
-    },
-    {
-      name: "Growth",
-      price: "₹999",
-      period: "/mo",
-      desc: "For growing businesses ready to automate and scale.",
+      name: "GROWTH CRM",
+      price: "₹1,999",
+      subtitle: "MOST POPULAR FOR SCALING.",
+      popular: true,
       features: [
         "3 WhatsApp Numbers",
-        "25,000 Messages / month",
+        "50,000 Messages/mo",
         "Unlimited Contacts",
-        "15 Users",
-        "Custom AI Agents & Workflows",
-        "Flow Builder (Advanced)",
+        "15 Team Members",
+        "Advanced Flow Builder",
         "AI Template Generator",
-        "Lead Generation Funnels",
-        "E-Commerce Integration",
-        "Priority Support"
+        "Messaging Wallet",
+        "Priority Support",
       ],
-      buttonText: "Start 14-Day Trial",
-      featured: true,
-      badge: "Most Popular",
     },
     {
-      name: "All-In-One",
-      price: "₹1,999",
-      period: "/mo",
-      desc: "Complete tech & growth services included in one.",
+      name: "ALL-IN-ONE CRM",
+      price: "₹3,999",
+      subtitle: "UNLIMITED EVERYTHING + APPS.",
       features: [
         "Unlimited WhatsApp Numbers",
-        "Unlimited Messages",
         "Unlimited Contacts",
-        "Unlimited Users",
+        "Unlimited Team Members",
+        "Mobile App & Web Dev Included",
         "Full AI Automation Suite",
-        "Sequence & Auto-Followups",
-        "Custom Website & App Dev",
-        "SEO Optimization & Google Ads",
-        "Advanced Integrations",
-        "Dedicated Account Manager"
+        "Dedicated Account Manager",
       ],
-      buttonText: "Get All Services",
-      featured: false,
-    }
-  ];
+    },
+  ],
+};
+
+export function PricingSection() {
+  const [activeCategory, setActiveCategory] = useState<CategoryId>("web");
 
   return (
-    <section id="pricing" className="bg-[#fafcfa] py-32 relative overflow-hidden">
-      {/* Decorative Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[var(--color-green-vivid)]/5 rounded-[100%] blur-[120px] pointer-events-none"></div>
+    <section id="pricing" className="bg-[#fafcfa] py-28 relative overflow-hidden">
+      {/* Background Orbs */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-blue-500/5 rounded-full blur-[140px] pointer-events-none" />
 
-      <div className="container mx-auto px-4 md:px-8 relative z-10 max-w-[1400px]">
-        
+      <div className="container mx-auto px-4 md:px-8 relative z-10 max-w-[1300px]">
         {/* Header */}
-        <div className="mb-20 text-center max-w-2xl mx-auto">
+        <div className="mb-14 text-center max-w-3xl mx-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true, amount: 0.5 }}
-            className="mb-6 inline-flex items-center rounded-full bg-white px-4 py-2 border border-border/50 shadow-sm"
+            viewport={{ once: true }}
+            className="mb-4 inline-flex items-center rounded-full bg-white px-4 py-1.5 border border-slate-200 shadow-sm"
           >
-            <div className="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-green-light)]">
-              <Sparkles className="h-3 w-3 text-[var(--color-green-deep)]" />
-            </div>
-            <span className="text-[13px] font-extrabold uppercase tracking-widest text-navy font-heading">
-              Simple Pricing
+            <Sparkles className="mr-2 h-4 w-4 text-blue-600" />
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-800">
+              PRICING & SERVICES
             </span>
           </motion.div>
+
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.5 }}
-            transition={{ delay: 0.1 }}
-            className="text-4xl md:text-5xl lg:text-[56px] font-extrabold tracking-tight text-navy font-heading mb-6 leading-[1.1]"
+            viewport={{ once: true }}
+            className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-slate-900 font-heading mb-4 uppercase"
           >
-            Scale without surprises
+            CHOOSE YOUR <span className="text-blue-600 italic">PLAN</span>
           </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.5 }}
-            transition={{ delay: 0.2 }}
-            className="text-lg md:text-[19px] text-gray font-medium"
-          >
-            Pay for what you use. Upgrade as you grow. Our plans now include our premium tech and marketing services.
-          </motion.p>
+
+          {/* Category Tabs (Pills) */}
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            {CATEGORIES.map((cat) => {
+              const isActive = activeCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`relative rounded-full px-6 py-3 text-xs font-extrabold uppercase tracking-wider transition-all duration-300 ${
+                    isActive
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-105"
+                      : "bg-white text-slate-600 border border-slate-200 hover:border-blue-400 hover:text-blue-600 shadow-sm"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 items-center">
-          {plans.map((plan, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ delay: i * 0.15, duration: 0.6 }}
-              className={`relative rounded-[32px] p-6 xl:p-8 transition-all duration-300 ${
-                plan.featured
-                  ? "bg-gradient-to-b from-[var(--color-navy)] to-[#0f172a] text-white shadow-[0_30px_60px_rgba(7,94,84,0.15)] lg:scale-105 border border-navy/50 z-10"
-                  : "bg-white text-navy border border-border shadow-[0_8px_32px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.06)] hover:-translate-y-1"
-              }`}
-            >
-              {plan.featured && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-[80%] flex justify-center">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-[var(--color-green-vivid)] blur-md opacity-50"></div>
-                    <span className="relative whitespace-nowrap inline-block rounded-full bg-gradient-to-r from-[var(--color-green-deep)] to-[var(--color-green-vivid)] px-5 py-1.5 text-[13px] font-extrabold uppercase tracking-widest text-white shadow-lg border border-white/20">
-                      {plan.badge}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <h3 className={`text-[22px] font-bold font-heading mb-2 mt-2 ${plan.featured ? "text-white" : "text-navy"}`}>
-                {plan.name}
-              </h3>
-              <p className={`text-[14px] mb-8 font-medium h-[42px] ${plan.featured ? "text-white/70" : "text-gray"}`}>
-                {plan.desc}
-              </p>
-
-              <div className="mb-8 flex items-end gap-1">
-                <span className="text-[40px] xl:text-[44px] leading-[1] font-extrabold tracking-tight font-heading">
-                  {plan.price}
-                </span>
-                {plan.period && (
-                  <span className={`text-[15px] font-medium mb-1 ${plan.featured ? "text-white/60" : "text-gray"}`}>
-                    {plan.period}
-                  </span>
-                )}
-              </div>
-
-              <Button
-                className={`w-full h-14 rounded-[16px] text-[15px] font-bold transition-all hover:-translate-y-1 mb-8 ${
-                  plan.featured
-                    ? "bg-gradient-to-r from-[var(--color-green-deep)] to-[var(--color-green-vivid)] hover:from-[var(--color-green-vivid)] hover:to-[var(--color-green-vivid)] text-white shadow-[0_8px_24px_rgba(37,211,102,0.3)] border-none"
-                    : "bg-[var(--color-gray-light)] hover:bg-gray-100 text-navy border border-border shadow-sm"
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeCategory}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="grid gap-8 md:grid-cols-3 items-stretch max-w-6xl mx-auto"
+          >
+            {PLAN_DATA[activeCategory].map((plan, i) => (
+              <div
+                key={i}
+                className={`relative flex flex-col justify-between rounded-[36px] bg-white p-8 md:p-10 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${
+                  plan.popular
+                    ? "border-2 border-blue-600 shadow-xl scale-105 z-10"
+                    : "border border-slate-200/80 shadow-md"
                 }`}
               >
-                {plan.buttonText}
-              </Button>
-
-              <ul className="space-y-4">
-                {plan.features.map((feat, j) => (
-                  <li key={j} className="flex items-start gap-3">
-                    <CheckCircle2 className={`h-[20px] w-[20px] shrink-0 ${plan.featured ? "text-[var(--color-green-vivid)]" : "text-[var(--color-green-deep)]"}`} />
-                    <span className={`text-[14px] font-medium leading-tight pt-0.5 ${plan.featured ? "text-white/90" : "text-navy"}`}>
-                      {feat}
+                {/* Most Popular Badge */}
+                {plan.popular && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                    <span className="bg-blue-600 text-white text-[10px] font-extrabold px-5 py-1.5 rounded-full uppercase tracking-widest shadow-md">
+                      MOST POPULAR
                     </span>
-                  </li>
-                ))}
-              </ul>
-            </motion.div>
-          ))}
-        </div>
+                  </div>
+                )}
+
+                {/* Top Section */}
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 tracking-wide font-heading uppercase mb-1">
+                    {plan.name}
+                  </h3>
+                  <p className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-6">
+                    {plan.subtitle}
+                  </p>
+
+                  <div className="mb-8 flex items-baseline gap-1 border-b border-slate-100 pb-6">
+                    <span className="text-5xl font-black text-blue-600 tracking-tight font-heading">
+                      {plan.price}
+                    </span>
+                    <span className="text-xs font-bold text-slate-400 uppercase">
+                      / PROJECT
+                    </span>
+                  </div>
+
+                  {/* Features List */}
+                  <ul className="space-y-3.5 mb-8">
+                    {plan.features.map((feat, j) => (
+                      <li key={j} className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+                          <Check className="h-2.5 w-2.5 stroke-[3]" />
+                        </div>
+                        <span className="text-xs font-semibold text-slate-700 leading-snug">
+                          {feat}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Bottom Action Button */}
+                <div className="pt-4">
+                  <Link href="/signup" className="block w-full">
+                    <Button
+                      className={`w-full h-12 rounded-full text-xs font-extrabold uppercase tracking-widest transition-all ${
+                        plan.popular
+                          ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30"
+                          : "bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 border border-slate-200"
+                      }`}
+                    >
+                      SELECT PLAN
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </section>
   );
 }
+

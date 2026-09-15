@@ -1,11 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
+import { GlobalSearch } from "@/components/layout/global-search";
+import { TrialBanner } from "@/components/billing/trial-banner";
+import { SubscriptionGate } from "@/components/billing/subscription-gate";
+import { useSubscription } from "@/hooks/use-subscription";
 
 // Auth-gated dashboard shell. Extracted from the layout so the layout
 // itself can stay a server component and export metadata (noindex) —
@@ -13,7 +17,9 @@ import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
 
 function DashboardShellInner({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const { status, daysRemaining, isOwner } = useSubscription();
   const router = useRouter();
+  const pathname = usePathname();
 
   // Sidebar drawer state — only used on mobile. On lg+ the sidebar is
   // always visible and this stays at `false` (ignored by the component).
@@ -39,16 +45,24 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
+  const ALWAYS_ACCESSIBLE = ['/dashboard', '/billing', '/settings', '/profile', '/admin'];
+  const isAlwaysAccessible = ALWAYS_ACCESSIBLE.some(p => pathname === p || pathname.startsWith(p + '/'));
+  const showTrialBanner = status === 'trial' && daysRemaining <= 5 && !isOwner;
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Reports this tab's online/away presence once we know a user is
           signed in. Headless — renders nothing. */}
       <PresenceHeartbeat />
+      <GlobalSearch />
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onOpenSidebar={() => setSidebarOpen(true)} />
+        {showTrialBanner && <TrialBanner />}
         {/* Thinner horizontal padding on mobile so cards have room to breathe. */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {isAlwaysAccessible ? children : <SubscriptionGate>{children}</SubscriptionGate>}
+        </main>
       </div>
     </div>
   );

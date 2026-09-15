@@ -17,6 +17,8 @@
   "Sidebar": {
     "title": "WhatsApp용 CRM 템플릿",
     "dashboard": "대시보드",
+    "coexistence": "공존",
+    "chats": "채팅",
     "inbox": "인박스",
     "notifications": "알림",
     "contacts": "연락처",

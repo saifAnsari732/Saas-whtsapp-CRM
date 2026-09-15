@@ -57,38 +57,38 @@ function LoginPageInner() {
   };
 
   return (
-    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2 bg-[var(--color-gray-light)] font-sans">
+    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2 bg-slate-50 font-sans">
       
       {/* Form Column */}
       <div className="flex flex-col items-center justify-center px-4 py-12 lg:px-8 relative z-10">
-        <Link href="/" className="mb-8 flex items-center gap-2 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-gradient-to-br from-[var(--color-green-deep)] to-[var(--color-green-vivid)] shadow-sm">
+        <Link href="/" className="mb-8 flex items-center gap-2.5 group">
+          <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-gradient-to-br from-blue-600 to-emerald-600 shadow-md">
             <MessageSquare className="h-5 w-5 text-white" />
           </div>
-          <span className="text-3xl font-black tracking-tight text-navy font-heading">
+          <span className="text-3xl font-black tracking-tight text-slate-900 font-heading">
             Botify.ai
           </span>
         </Link>
 
-        <div className="w-full max-w-[440px] rounded-[32px] border border-border/50 bg-white p-8 sm:p-12 shadow-[0_20px_60px_rgba(7,94,84,0.06)] relative">
+        <div className="w-full max-w-[440px] rounded-[32px] border border-slate-200/80 bg-white p-8 sm:p-12 shadow-xl relative">
           <div className="mb-8 text-center">
-            <h1 className="text-3xl font-bold text-navy font-heading mb-3">
+            <h1 className="text-3xl font-black text-slate-900 font-heading mb-2">
               {inviteToken ? t('titleAccept') : t('titleWelcome')}
             </h1>
-            <p className="text-[15px] text-gray">
+            <p className="text-sm font-medium text-slate-500">
               {inviteToken ? t('descAccept') : t('descWelcome')}
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-5">
             {error && (
-              <div className="rounded-2xl border border-red-500/20 bg-red-50 px-4 py-3 text-sm text-red-600 font-medium">
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 font-semibold">
                 {error}
               </div>
             )}
 
-            <div className="flex flex-col gap-2.5">
-              <Label htmlFor="email" className="text-[15px] font-semibold text-navy">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-slate-700">
                 {t('emailLabel')}
               </Label>
               <Input
@@ -98,18 +98,18 @@ function LoginPageInner() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20"
+                className="h-12 rounded-xl border-slate-200 bg-white text-slate-900 px-4 font-medium placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-500/20"
               />
             </div>
 
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-[15px] font-semibold text-navy">
+                <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   {t('passwordLabel')}
                 </Label>
                 <Link
                   href="/forgot-password"
-                  className="text-sm font-semibold text-[var(--color-green-deep)] hover:text-[var(--color-green-vivid)] transition-colors"
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
                 >
                   {t('forgotPassword')}
                 </Link>
@@ -121,20 +121,20 @@ function LoginPageInner() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20"
+                className="h-12 rounded-xl border-slate-200 bg-white text-slate-900 px-4 font-medium placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-500/20"
               />
             </div>
 
             <Button
               type="submit"
               disabled={loading}
-              className="mt-4 h-12 w-full rounded-xl bg-[var(--color-navy)] text-white text-[15px] font-bold shadow-md hover:bg-[var(--color-navy)]/90 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0"
+              className="mt-4 h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-emerald-600 text-white text-sm font-extrabold uppercase tracking-wider shadow-md hover:from-blue-700 hover:to-emerald-700 hover:-translate-y-0.5 transition-all disabled:opacity-50"
             >
               {loading ? t('signingIn') : t('signIn')}
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-[15px] font-medium text-gray">
+          <p className="mt-8 text-center text-xs font-semibold text-slate-500">
             {t('noAccount')}{" "}
             <Link
               href={
@@ -142,7 +142,7 @@ function LoginPageInner() {
                   ? `/signup?invite=${encodeURIComponent(inviteToken)}`
                   : "/signup"
               }
-              className="font-bold text-[var(--color-green-deep)] hover:text-[var(--color-green-vivid)] transition-colors"
+              className="font-bold text-blue-600 hover:text-blue-700 transition-colors"
             >
               {t('createAccount')}
             </Link>

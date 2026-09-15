@@ -52,7 +52,7 @@ export async function connectToWhatsApp(userId: string) {
     }
 
     // Initialize custom lightweight store
-    global.waStores[userId] = { chats: {} };
+    global.waStores[userId] = { chats: {}, messages: {} };
 
     // Try to load existing store from disk
     if (fs.existsSync(storeFile)) {
@@ -85,6 +85,18 @@ export async function connectToWhatsApp(userId: string) {
       for (const chat of data.chats) {
         if (chat.id) {
           global.waStores[userId].chats[chat.id] = chat;
+        }
+      }
+      if (!global.waStores[userId].messages) {
+        global.waStores[userId].messages = {};
+      }
+      for (const msg of data.messages || []) {
+        const jid = msg.key.remoteJid;
+        if (jid) {
+          if (!global.waStores[userId].messages[jid]) {
+            global.waStores[userId].messages[jid] = [];
+          }
+          global.waStores[userId].messages[jid].push(msg);
         }
       }
     });
@@ -174,3 +186,5 @@ export function getStatus(userId: string) {
     user: global.waSockets[userId]?.user || null,
   };
 }
+
+

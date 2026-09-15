@@ -18,6 +18,7 @@
     "title": "CRM Template for WhatsApp",
     "dashboard": "Dashboard",
     "chats": "Chats",
+    "coexistence": "Coexistence",
     "inbox": "Inbox",
     "notifications": "Notifications",
     "contacts": "Contacts",
@@ -30,6 +31,10 @@
     "aiAgents": "AI Agents",
     "settings": "Settings",
     "beta": "Beta",
+    "connectCloudAPI": "Connect Cloud API",
+    "connectCoexistence": "Connect Coexistence",
+    "singleMsg": "Single Msg",
+    "bulkMsg": "Bulk Msg",
     "unreadConversations": "{count} unread {count, plural, =1 {conversation} other {conversations}}",
     "unreadNotifications": "{count} unread {count, plural, =1 {notification} other {notifications}}",
     "roleOwner": "Owner",
@@ -41,7 +46,9 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Profile",
     "menuSettings": "Settings",
-    "menuSignOut": "Sign out"
+    "menuSignOut": "Sign out",
+    "admin": "Admin",
+    "profile": "Profile"
   },
   "Header": {
     "dashboard": "Dashboard",

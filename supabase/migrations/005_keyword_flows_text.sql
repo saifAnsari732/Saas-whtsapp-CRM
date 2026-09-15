@@ -1,1 +1,0 @@
-ALTER TABLE keyword_flows ALTER COLUMN template_id DROP NOT NULL; ALTER TABLE keyword_flows ADD COLUMN text_message TEXT;

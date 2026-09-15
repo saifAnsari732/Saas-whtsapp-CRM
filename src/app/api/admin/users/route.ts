@@ -1,158 +1,127 @@
 import { NextResponse } from 'next/server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 
-// Initialize the Supabase Service Role client to bypass RLS and use Admin API
-function getAdminClient() {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('Missing Supabase Service Role Keys');
-  }
-  return createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-}
-
-// Strict check for super admin privileges
-async function verifySuperAdmin() {
-  const supabase = await createClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    return false;
-  }
-
-  // Check hardcoded email or role in profiles
-  // Using the user's specific email from the screenshot for failsafe security
-  if (user.email === 'kisandeveloper2@gmail.com') {
-    return true;
-  }
-
-  // Fallback check if they manually set their profile role to superadmin in the database
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('user_id', user.id)
-    .single();
-
-  if (profile && profile.role === 'superadmin') {
-    return true;
-  }
-
-  return false;
-}
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const isSuperAdmin = await verifySuperAdmin();
-    if (!isSuperAdmin) {
-      return NextResponse.json({ error: 'Unauthorized. Super Admin access required.' }, { status: 403 });
+    const supabase = await createClient();
+    
+    // 1. Verify user is authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    // 2. Get user's profile to check if owner
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('account_id, account_role')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!profile || profile.account_role !== 'owner') {
+      return NextResponse.json({ error: 'Forbidden: Owner access required' }, { status: 403 });
     }
 
-    const adminClient = getAdminClient();
-
-    // 1. Fetch all users from Auth
-    const { data: { users }, error: authError } = await adminClient.auth.admin.listUsers();
-    if (authError) throw authError;
-
-    // 2. Fetch all profiles from public.profiles
-    const { data: profiles, error: profilesError } = await adminClient
+    // 3. Query all profiles in the same account with account info
+    const { data: users, error } = await supabase
       .from('profiles')
-      .select('user_id, full_name, email, role, avatar_url, created_at')
-      .order('created_at', { ascending: false });
+      .select(`
+        id,
+        user_id,
+        full_name,
+        email,
+        account_role,
+        accounts!profiles_account_id_fkey (
+          subscription_status,
+          subscription_plan,
+          trial_ends_at
+        )
+      `)
+      .eq('account_id', profile.account_id);
 
-    if (profilesError) throw profilesError;
+    if (error) throw error;
 
-    // 3. Merge data
-    const mergedUsers = profiles.map(profile => {
-      const authUser = users.find(u => u.id === profile.user_id);
+    // Map to a cleaner format
+    const formattedUsers = (users || []).map((u: any) => {
+      const acc = Array.isArray(u.accounts) ? u.accounts[0] : u.accounts;
       return {
-        id: profile.user_id,
-        fullName: profile.full_name,
-        email: profile.email,
-        role: profile.role,
-        avatarUrl: profile.avatar_url,
-        createdAt: profile.created_at,
-        isBanned: authUser ? !!authUser.banned_until : false,
-        lastSignInAt: authUser?.last_sign_in_at || null,
+        id: u.id,
+        user_id: u.user_id,
+        full_name: u.full_name,
+        email: u.email,
+        role: u.account_role,
+        status: acc?.subscription_status,
+        plan: acc?.subscription_plan,
+        trial_ends_at: acc?.trial_ends_at
       };
     });
 
-    return NextResponse.json({ success: true, users: mergedUsers });
-  } catch (error: any) {
+    return NextResponse.json(formattedUsers);
+  } catch (error) {
     console.error('Error fetching admin users:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
 export async function PATCH(request: Request) {
   try {
-    const isSuperAdmin = await verifySuperAdmin();
-    if (!isSuperAdmin) {
-      return NextResponse.json({ error: 'Unauthorized. Super Admin access required.' }, { status: 403 });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('account_id, account_role')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!profile || profile.account_role !== 'owner') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { userId, action } = body;
-
-    if (!userId || !['ban', 'unban'].includes(action)) {
-      return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
+    const { user_id, action, plan_id } = await request.json();
+    if (!user_id || !action) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const adminClient = getAdminClient();
-
-    if (action === 'ban') {
-      // Ban for 10 years
-      const { data, error } = await adminClient.auth.admin.updateUserById(userId, { ban_duration: '87600h' });
-      if (error) throw error;
-    } else if (action === 'unban') {
-      // Unban by setting ban_duration to "none"
-      const { data, error } = await adminClient.auth.admin.updateUserById(userId, { ban_duration: 'none' });
-      if (error) throw error;
-    }
-
-    return NextResponse.json({ success: true, message: `User successfully ${action === 'ban' ? 'blocked' : 'unblocked'}` });
-  } catch (error: any) {
-    console.error(`Error performing admin action:`, error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const isSuperAdmin = await verifySuperAdmin();
-    if (!isSuperAdmin) {
-      return NextResponse.json({ error: 'Unauthorized. Super Admin access required.' }, { status: 403 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
-    }
-
-    const adminClient = getAdminClient();
-
-    // 1. Delete user's account from public.accounts first.
-    // This bypasses the ON DELETE RESTRICT constraint on auth.users because we manually cascade the deletion.
-    const { error: accountDeleteError } = await adminClient
-      .from('accounts')
-      .delete()
-      .eq('owner_user_id', userId);
+    // Since users share the same account_id in this CRM model, 
+    // blocking or modifying a "user" means modifying their specific account if they own it.
+    // Wait, the prompt says: "block: set account subscription_status to 'blocked'".
+    // Let's get the target user's account_id.
+    const { data: targetUser } = await supabase
+      .from('profiles')
+      .select('account_id')
+      .eq('user_id', user_id)
+      .single();
       
-    if (accountDeleteError) {
-      console.error('Failed to delete user account (RESTRICT constraint bypass):', accountDeleteError);
-      // We don't throw here, in case the user has no account, we still want to try deleting them from auth
+    if (!targetUser || targetUser.account_id !== profile.account_id) {
+        return NextResponse.json({ error: 'User not found in this account' }, { status: 404 });
     }
 
-    // 2. Delete user from auth
-    const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
-    if (deleteError) throw deleteError;
+    const account_id = targetUser.account_id;
 
-    return NextResponse.json({ success: true, message: 'User deleted successfully' });
-  } catch (error: any) {
-    console.error('Error deleting user:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (action === 'block') {
+      await supabase.from('accounts').update({ subscription_status: 'blocked' }).eq('id', account_id);
+    } else if (action === 'unblock') {
+      await supabase.from('accounts').update({ subscription_status: 'active' }).eq('id', account_id);
+    } else if (action === 'extend_trial') {
+      // Add 7 days
+      const { data: acc } = await supabase.from('accounts').select('trial_ends_at').eq('id', account_id).single();
+      if (acc) {
+        const newDate = new Date(acc.trial_ends_at || Date.now());
+        newDate.setDate(newDate.getDate() + 7);
+        await supabase.from('accounts').update({ trial_ends_at: newDate.toISOString() }).eq('id', account_id);
+      }
+    } else if (action === 'change_plan') {
+      if (plan_id) {
+        await supabase.from('accounts').update({ 
+          subscription_plan: plan_id,
+          subscription_status: 'active'
+        }).eq('id', account_id);
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error updating admin user:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

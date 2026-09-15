@@ -10,6 +10,7 @@ import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import {
   Bell,
   Bot,
+  CreditCard,
   Crown,
   GitBranch,
   LayoutDashboard,
@@ -93,6 +94,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
   { href: "/dashboard/chats", labelKey: "chats", icon: MessageSquare },
+  { href: "/dashboard/coexistence", labelKey: "coexistence", icon: Smartphone },
   { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
   { href: "/notifications", labelKey: "notifications", icon: Bell },
   { href: "/contacts", labelKey: "contacts", icon: Users },
@@ -101,7 +103,7 @@ const navItems: NavItem[] = [
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
   { href: "/keyword-flows", labelKey: "keywordFlows", icon: Zap },
-  { href: "/billing", labelKey: "billingAndPlans", icon: Crown },
+  { href: "/billing", labelKey: "billingAndPlans", icon: CreditCard },
   { href: "/agents", labelKey: "aiAgents", icon: Bot },
 ];
 
@@ -212,28 +214,39 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Main navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            <li className="mb-4 flex flex-col gap-2">
+            <li className="mb-5 flex flex-col gap-2.5">
+              {/* Primary Button: Connect Cloud API */}
               <Link
-                href="/dashboard/coexistence"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold text-white transition-all bg-emerald-500 hover:bg-emerald-600 hover:shadow-md hover:-translate-y-0.5"
+                href="/settings?tab=whatsapp"
+                className="flex items-center justify-center gap-2.5 rounded-xl px-4 py-2.5 text-xs font-bold text-white transition-all bg-emerald-600 hover:bg-emerald-700 shadow-sm active:scale-95 duration-200"
               >
                 <Smartphone className="h-4 w-4" />
-                <span className="flex-1">Connect WhatsApp</span>
+                <span>Connect Cloud API</span>
               </Link>
 
-              <div className="grid grid-cols-2 gap-2">
+              {/* Secondary Button: Connect Coexistence */}
+              <Link
+                href="/dashboard/coexistence"
+                className="flex items-center justify-center gap-2.5 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 transition-all bg-slate-100 hover:bg-slate-200 border border-slate-200 shadow-sm active:scale-95 duration-200"
+              >
+                <Smartphone className="h-4 w-4 text-purple-600" />
+                <span>Connect Coexistence</span>
+              </Link>
+
+              {/* Quick Action Buttons */}
+              <div className="grid grid-cols-2 gap-2 mt-0.5">
                 <Link
                   href="/inbox"
-                  className="flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-[11px] font-bold text-white transition-all bg-rose-500 hover:bg-rose-600 hover:shadow-md hover:-translate-y-0.5 text-center leading-tight"
+                  className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-bold text-slate-700 transition-all bg-slate-100 hover:bg-slate-200 border border-slate-200 text-center leading-tight"
                 >
-                  <MessageSquare className="h-3 w-3 shrink-0" />
+                  <MessageSquare className="h-3 w-3 text-emerald-600 shrink-0" />
                   <span>Single Msg</span>
                 </Link>
                 <Link
                   href="/broadcasts/new"
-                  className="flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-[11px] font-bold text-white transition-all bg-rose-500 hover:bg-rose-600 hover:shadow-md hover:-translate-y-0.5 text-center leading-tight"
+                  className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-bold text-slate-700 transition-all bg-slate-100 hover:bg-slate-200 border border-slate-200 text-center leading-tight"
                 >
-                  <Radio className="h-3 w-3 shrink-0" />
+                  <Radio className="h-3 w-3 text-emerald-600 shrink-0" />
                   <span>Bulk Msg</span>
                 </Link>
               </div>
@@ -320,6 +333,38 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 </li>
               );
             })}
+            
+            {accountRole === 'owner' && (
+              <li>
+                <Link
+                  href="/admin"
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 lg:py-2.5",
+                    pathname.startsWith("/admin")
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <Shield className="h-4 w-4" />
+                  {t("admin") || "Admin"}
+                </Link>
+              </li>
+            )}
+            
+            <li>
+              <Link
+                href="/profile"
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 lg:py-2.5",
+                  pathname.startsWith("/profile")
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <User className="h-4 w-4" />
+                {t("profile") || "Profile"}
+              </Link>
+            </li>
           </ul>
         </nav>
 
@@ -393,14 +438,14 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               <DropdownMenuItem
                 render={
                   <Link
-                    href="/settings?tab=profile"
+                    href="/profile"
                     onClick={onClose}
                     className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
                   />
                 }
               >
                 <User className="size-4" />
-                {t("menuProfile")}
+                {t("menuProfile") || "Profile"}
               </DropdownMenuItem>
               <DropdownMenuItem
                 render={
