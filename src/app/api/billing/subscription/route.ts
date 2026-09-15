@@ -50,16 +50,24 @@ export async function GET() {
     return NextResponse.json({ error: 'Account not found' }, { status: 404 });
   }
 
-  // Get some basic usage stats for the trial
-  const { count: contactsCount } = await supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id);
-  // Just safe placeholders if the tables don't exist or error out
-  const contactsCreated = contactsCount || 0;
+  // Fetch live usage metrics for trial report
+  const [
+    { count: contactsCount },
+    { count: messagesCount },
+    { count: broadcastsCount },
+    { count: templatesCount }
+  ] = await Promise.all([
+    supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
+    supabase.from('messages').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
+    supabase.from('campaigns').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
+    supabase.from('templates').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
+  ]);
   
   const trialUsage = {
-    messagesSent: 0, // Mock for now
-    contactsCreated,
-    broadcastsSent: 0,
-    templatesUsed: 0,
+    messagesSent: messagesCount || 0,
+    contactsCreated: contactsCount || 0,
+    broadcastsSent: broadcastsCount || 0,
+    templatesUsed: templatesCount || 0,
   };
 
   const now = new Date();

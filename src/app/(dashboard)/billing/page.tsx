@@ -14,8 +14,8 @@ import { motion } from "framer-motion";
 const DEFAULT_PLANS = [
   {
     id: "starter",
-    name: "Starter",
-    price: 499,
+    name: "Starter (Testing)",
+    price: 10,
     gradient: "from-blue-500 to-blue-600",
     popular: false,
     services: [
@@ -123,32 +123,32 @@ export default function BillingPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // Attempt to fetch real data
         const [plansRes, subRes, walletRes, txRes] = await Promise.allSettled([
           fetch('/api/billing/plans').then(res => res.ok ? res.json() : null),
           fetch('/api/billing/subscription').then(res => res.ok ? res.json() : null),
           fetch('/api/billing/wallet').then(res => res.ok ? res.json() : null),
-          fetch('/api/billing/transactions').then(res => res.ok ? res.json() : null)
+          fetch('/api/billing/wallet').then(res => res.ok ? res.json() : null)
         ]);
 
         if (plansRes.status === 'fulfilled' && plansRes.value && plansRes.value.length > 0) {
           setPlansData(plansRes.value);
         }
         if (subRes.status === 'fulfilled' && subRes.value) {
-          setCurrentPlan(subRes.value.planId || "starter");
-          setTrialStatus(subRes.value.trialStatus || "none");
+          setCurrentPlan(subRes.value.plan || "starter");
+          setTrialStatus(subRes.value.status === 'trial' ? "active" : subRes.value.status === 'expired' ? "expired" : "none");
         }
-        if (walletRes.status === 'fulfilled' && walletRes.value) {
-          setWalletBalance(walletRes.value.balance || 150);
-        }
-        if (txRes.status === 'fulfilled' && txRes.value && txRes.value.length > 0) {
-          setTransactions(txRes.value);
-        } else {
-          // Fallback mockup transactions if none exist
-          setTransactions([
-             { id: "1", amount: 999, type: 'credit', description: 'Premium Plan Subscription', status: 'success', created_at: new Date().toISOString() },
-             { id: "2", amount: 500, type: 'credit', description: 'Wallet Top-up', status: 'success', created_at: new Date(Date.now() - 86400000).toISOString() },
-          ]);
+        if (walletRes.status === 'fulfilled' && walletRes.value && walletRes.value.wallet) {
+          setWalletBalance(Number(walletRes.value.wallet.balance) || 0);
+          if (walletRes.value.transactions && walletRes.value.transactions.length > 0) {
+            setTransactions(walletRes.value.transactions.map((t: any) => ({
+              id: t.id,
+              amount: Number(t.amount) || 0,
+              type: t.type === 'credit' ? 'credit' : 'debit',
+              description: t.description || 'Transaction',
+              status: 'success',
+              created_at: t.created_at
+            })));
+          }
         }
       } catch (err) {
         console.error("Failed to fetch billing data, using defaults", err);
@@ -441,7 +441,7 @@ export default function BillingPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
-                {[500, 1000, 2000, 5000].map(amount => (
+                {[10, 500, 1000, 2000].map(amount => (
                   <Button 
                     key={amount} 
                     variant="outline" 
