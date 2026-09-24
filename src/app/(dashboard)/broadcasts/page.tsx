@@ -188,7 +188,7 @@ export default function BroadcastsPage() {
         </div>
         <div className="bg-card border rounded-xl p-4 flex flex-col justify-center">
           <span className="text-muted-foreground text-sm font-medium">Total Messages Sent</span>
-          <span className="text-3xl font-bold text-primary">{broadcasts.reduce((acc, b) => acc + (b.sent_count || 0) + (b.delivered_count || 0) + (b.read_count || 0), 0)}</span>
+          <span className="text-3xl font-bold text-primary">{broadcasts.reduce((acc, b) => acc + (b.sent_count || 0), 0)}</span>
         </div>
         <div className="bg-card border rounded-xl p-4 flex flex-col justify-center">
           <span className="text-muted-foreground text-sm font-medium">Remaining / Failed</span>

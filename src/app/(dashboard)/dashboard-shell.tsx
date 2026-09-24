@@ -11,6 +11,8 @@ import { TrialBanner } from "@/components/billing/trial-banner";
 import { SubscriptionGate } from "@/components/billing/subscription-gate";
 import { useSubscription } from "@/hooks/use-subscription";
 
+import { PageLoader } from "@/components/ui/page-loader";
+
 // Auth-gated dashboard shell. Extracted from the layout so the layout
 // itself can stay a server component and export metadata (noindex) —
 // client components can't export Next's metadata object.
@@ -33,21 +35,14 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   }, [user, loading, router]);
 
   if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!user) return null;
 
-  const ALWAYS_ACCESSIBLE = ['/dashboard', '/billing', '/settings', '/profile', '/admin'];
+  const ALWAYS_ACCESSIBLE = ['/billing', '/settings', '/profile', '/admin'];
   const isAlwaysAccessible = ALWAYS_ACCESSIBLE.some(p => pathname === p || pathname.startsWith(p + '/'));
-  const showTrialBanner = status === 'trial' && daysRemaining <= 5 && !isOwner;
+  const showTrialBanner = (status === 'trial' || status === 'expired') && !pathname.startsWith('/billing');
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

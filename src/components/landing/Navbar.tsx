@@ -1,108 +1,142 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { MessageSquare, Menu, X } from "lucide-react";
+import Image from "next/image";
+import { Menu, X, ChevronDown } from "lucide-react";
 
-export function Navbar() {
+export default function Navbar() {
+  const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navLinks = [
-    { name: "Services", href: "#pricing" },
-    { name: "WhatsApp API", href: "/settings?tab=whatsapp" },
-    { name: "Coexistence QR", href: "/dashboard/coexistence" },
-    { name: "Pricing & Plans", href: "#pricing" },
-    { name: "Features", href: "#features" },
-  ];
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
-    <header className="fixed top-0 left-0 w-full bg-white/95 backdrop-blur-md border-b border-slate-200/80 z-50 shadow-xs">
-      <div className="container mx-auto px-4 md:px-8 py-3.5">
-        <div className="flex items-center justify-between">
+    <header
+      className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+        isScrolled
+          ? "bg-white/95 backdrop-blur-md shadow-xs border-b border-gray-100 py-3"
+          : "bg-transparent py-4 sm:py-5"
+      }`}
+    >
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10">
+        <div className="flex justify-between items-center h-14 sm:h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-gradient-to-br from-blue-600 to-emerald-600 shadow-md">
-              <MessageSquare className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-2xl font-black tracking-tight text-slate-900 font-heading">
-              Botify.ai
-            </span>
+          <Link href="/" className="flex items-center gap-2.5">
+            <Image
+              src="/chatflyr-logo.png"
+              alt="ChatFlyr"
+              width={220}
+              height={56}
+              priority
+              className="h-11 sm:h-12 md:h-14 w-auto object-contain"
+            />
           </Link>
 
-          {/* Desktop Links */}
-          <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <Link
-                key={link.name}
-                href={link.href}
-                className="text-xs font-extrabold uppercase tracking-wider text-slate-600 hover:text-blue-600 transition-colors relative group"
-              >
-                {link.name}
-              </Link>
-            ))}
+          {/* Nav Links */}
+          <nav className="hidden md:flex items-center gap-7 lg:gap-8">
+            <Link
+              href="/"
+              className="text-[#00A884] font-semibold text-sm relative pb-1 after:absolute after:bottom-0 after:left-0 after:w-full after:h-[2px] after:bg-[#00A884] after:rounded-full"
+            >
+              Home
+            </Link>
+            <div className="relative group cursor-pointer flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors">
+              <span>Services</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600" />
+            </div>
+            <div className="relative group cursor-pointer flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors">
+              <span>Features</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600" />
+            </div>
+            <Link
+              href="#pricing"
+              className="text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors"
+            >
+              Pricing
+            </Link>
+            <Link
+              href="#about"
+              className="text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors"
+            >
+              About
+            </Link>
+            <Link
+              href="#contact"
+              className="text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors"
+            >
+              Contact
+            </Link>
           </nav>
 
-          {/* Desktop CTAs */}
-          <div className="hidden md:flex items-center gap-4">
-            <Link href="/login" className="text-xs font-extrabold uppercase tracking-wider text-slate-700 hover:text-blue-600 transition-colors px-3 py-2">
-              Log in
+          {/* Right Action Buttons */}
+          <div className="hidden md:flex items-center gap-3">
+            <Link
+              href="/login"
+              className="px-5 py-2 rounded-full text-slate-700 hover:text-slate-950 font-medium text-sm border border-slate-200 hover:border-slate-300 transition-colors"
+            >
+              Login
             </Link>
-            <Link href="/signup">
-              <Button className="h-10 px-5 bg-blue-600 hover:bg-blue-700 text-white shadow-md rounded-full text-xs font-extrabold uppercase tracking-wider transition-all">
-                Start Free Trial
-              </Button>
+            <Link
+              href="/signup"
+              className="px-5 py-2.5 rounded-full bg-[#00A884] hover:bg-[#008f70] text-white font-semibold text-sm transition-all shadow-xs flex items-center gap-1.5"
+            >
+              <span>Get Started Free</span>
+              <span className="text-base leading-none">→</span>
             </Link>
           </div>
 
-          {/* Mobile Menu Toggle */}
+          {/* Mobile Menu Button */}
           <button
-            className="md:hidden text-navy p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-colors"
+            type="button"
+            className="md:hidden p-2 text-slate-700"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
-
-        {/* Mobile Menu */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="md:hidden overflow-hidden"
-            >
-              <div className="flex flex-col space-y-4 pt-6 pb-2">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.name}
-                    href={link.href}
-                    className="text-lg font-bold text-navy hover:text-green-deep transition-colors"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    {link.name}
-                  </Link>
-                ))}
-                <div className="h-px w-full bg-border/50 my-2" />
-                <Link
-                  href="/login"
-                  className="text-lg font-bold text-navy hover:text-green-deep transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Log in
-                </Link>
-                <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
-                  <Button className="w-full h-12 bg-gradient-to-r from-[var(--color-green-deep)] to-[var(--color-green-vivid)] text-white rounded-xl shadow-sm mt-2 text-lg font-bold">
-                    Get Started
-                  </Button>
-                </Link>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
+
+      {/* Mobile Drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-white border-b border-gray-100 px-6 py-5 shadow-lg space-y-4">
+          <Link href="/" className="block text-[#00A884] font-semibold text-sm">
+            Home
+          </Link>
+          <Link href="#services" className="block text-slate-700 font-medium text-sm">
+            Services
+          </Link>
+          <Link href="#features" className="block text-slate-700 font-medium text-sm">
+            Features
+          </Link>
+          <Link href="#pricing" className="block text-slate-700 font-medium text-sm">
+            Pricing
+          </Link>
+          <Link href="#contact" className="block text-slate-700 font-medium text-sm">
+            Contact
+          </Link>
+          <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
+            <Link
+              href="/login"
+              className="w-full text-center py-2.5 rounded-full text-slate-700 font-medium text-sm border border-slate-200"
+            >
+              Login
+            </Link>
+            <Link
+              href="/signup"
+              className="w-full text-center py-2.5 rounded-full bg-[#00A884] text-white font-semibold text-sm"
+            >
+              Get Started Free →
+            </Link>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

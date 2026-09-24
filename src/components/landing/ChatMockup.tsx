@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MoreVertical, Phone, Video, ChevronLeft, CheckCheck, Paperclip, Camera, Mic, Smile, Image as ImageIcon } from "lucide-react";
 
-export function ChatMockup() {
+export default function ChatMockup() {
   const [step, setStep] = useState(0);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 

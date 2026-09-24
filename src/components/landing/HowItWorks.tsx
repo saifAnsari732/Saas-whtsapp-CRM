@@ -1,95 +1,104 @@
-"use client";
+'use client';
 
-import { motion } from "framer-motion";
-import { Link2, Sparkles, Rocket } from "lucide-react";
+import { motion } from 'framer-motion';
+import { UserPlus, Link2, Settings, Send, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 
-export function HowItWorks() {
-  const steps = [
-    {
-      num: "01",
-      icon: Link2,
-      title: "Connect via Embedded Signup",
-      desc: "Connect your WhatsApp number via Meta Business Login in 1-click. No complex developer setup required."
-    },
-    {
-      num: "02",
-      icon: Sparkles,
-      title: "Create Message Templates",
-      desc: "Use our AI-assisted template builder with real-time Meta approval tracking to craft the perfect message."
-    },
-    {
-      num: "03",
-      icon: Rocket,
-      title: "Launch & Automate",
-      desc: "Send bulk broadcasts, set up drip campaigns, and let our AI handle replies while you sleep."
-    }
-  ];
+const steps = [
+  {
+    icon: UserPlus,
+    title: 'Create Account',
+    description: 'Sign up with your email, Google or Facebook account.',
+    number: '01'
+  },
+  {
+    icon: Link2,
+    title: 'Connect WhatsApp',
+    description: 'Link your number and start your WhatsApp API journey.',
+    number: '02'
+  },
+  {
+    icon: Settings,
+    title: 'Configure Settings',
+    description: 'Set up templates, auto-replies, and workflow automations.',
+    number: '03'
+  },
+  {
+    icon: Send,
+    title: 'Start Messaging',
+    description: 'Send broadcasts, automate conversations, and grow.',
+    number: '04'
+  }
+];
 
+export default function HowItWorks() {
   return (
-    <section id="how-it-works" className="bg-[var(--color-green-mint)] py-24">
-      <div className="container mx-auto px-4 md:px-8">
-        {/* Section Header */}
-        <div className="mb-16 max-w-3xl">
-          <motion.p
+    <section className="py-24 bg-slate-50 relative overflow-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Header */}
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.5 }}
-            className="text-sm font-bold uppercase tracking-widest text-[var(--color-green-deep)] font-heading mb-4"
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="flex flex-col items-center"
           >
-            How it works
-          </motion.p>
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.5 }}
-            transition={{ delay: 0.1 }}
-            className="text-4xl font-extrabold tracking-tight text-navy md:text-5xl font-heading mb-6"
-          >
-            From zero to sending in under 5 minutes
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.5 }}
-            transition={{ delay: 0.2 }}
-            className="text-lg text-gray"
-          >
-            We've streamlined the official WhatsApp Cloud API onboarding so you can focus on what matters: growing your business.
-          </motion.p>
+            <div className="inline-flex items-center space-x-2 bg-[#25D366]/10 text-[#075E54] px-4 py-2 rounded-full text-sm font-semibold mb-6">
+              <span>⚡</span>
+              <span>Simple & Easy Steps</span>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-heading font-bold text-[#1A1A2E] mb-6">
+              Get Started in <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#075E54] to-[#25D366]">4 Easy Steps</span>
+            </h2>
+            <p className="text-lg text-gray-600 mb-8 font-sans">
+              Launch your WhatsApp Business CRM in minutes. No technical knowledge required.
+            </p>
+            <Link 
+              href="/signup"
+              className="group inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white transition-all duration-200 bg-[#25D366] rounded-xl hover:bg-[#075E54] hover:shadow-lg"
+            >
+              Get Started Free
+              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </motion.div>
         </div>
 
         {/* Steps Grid */}
-        <div className="grid gap-8 md:grid-cols-3">
-          {steps.map((step, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.15 }}
-              transition={{ delay: i * 0.15, duration: 0.6 }}
-              whileHover={{ y: -6, transition: { duration: 0.2 } }}
-              className="relative overflow-hidden rounded-[20px] bg-white p-8 shadow-[0_8px_32px_rgba(7,94,84,0.04)] hover:shadow-[0_16px_48px_rgba(7,94,84,0.08)] transition-all border border-border"
-            >
-              {/* Faded Background Number */}
-              <div className="absolute -right-4 -top-8 text-[120px] font-black text-[var(--color-navy)] opacity-[0.03] pointer-events-none select-none font-heading">
-                {step.num}
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          {steps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="relative bg-white p-8 rounded-3xl border border-slate-200 shadow-sm overflow-hidden"
+              >
+                {/* Background Number */}
+                <span className="absolute -top-4 -right-2 text-8xl font-bold text-gray-100/70 font-heading select-none">
+                  {step.number}
+                </span>
 
-              {/* Icon Box */}
-              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-[14px] bg-gradient-to-br from-[var(--color-green-deep)] to-[var(--color-green-vivid)] shadow-md">
-                <step.icon className="h-6 w-6 text-white" />
-              </div>
-
-              {/* Content */}
-              <h3 className="mb-3 text-xl font-bold text-navy font-heading">
-                Step {step.num} — {step.title}
-              </h3>
-              <p className="text-gray leading-relaxed">
-                {step.desc}
-              </p>
-            </motion.div>
-          ))}
+                <div className="relative z-10">
+                  <div className="w-16 h-16 rounded-2xl bg-[#E8F8F5] border border-[#D1F2EB] flex items-center justify-center mb-6">
+                    <Icon className="w-8 h-8 text-[#00A884]" />
+                  </div>
+                  <h3 className="text-xl font-bold font-heading text-[#1A1A2E] mb-3">
+                    {step.title}
+                  </h3>
+                  <p className="text-gray-600 font-sans leading-relaxed">
+                    {step.description}
+                  </p>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
+
       </div>
     </section>
   );

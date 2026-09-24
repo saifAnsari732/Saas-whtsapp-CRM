@@ -2,79 +2,68 @@
 
 import { useEffect, useState, useRef } from "react";
 import { motion, useInView } from "framer-motion";
+import { Users, MessageSquare, ShieldCheck, Headphones } from "lucide-react";
 
-function Counter({ end, suffix = "", duration = 2 }: { end: number; suffix?: string; duration?: number }) {
+function Counter({ end, duration = 2 }: { end: number; duration?: number }) {
   const [count, setCount] = useState(0);
-  const ref = useRef(null);
+  const ref = useRef<HTMLSpanElement>(null);
   const isInView = useInView(ref, { once: true, amount: 0.5 });
 
   useEffect(() => {
-    if (isInView) {
-      let startTime: number | null = null;
-      const animateCount = (timestamp: number) => {
-        if (!startTime) startTime = timestamp;
-        const progress = Math.min((timestamp - startTime) / (duration * 1000), 1);
-        
-        // Easing out function for smoother stop
-        const easeOutQuart = 1 - Math.pow(1 - progress, 4);
-        
-        setCount(Math.floor(easeOutQuart * end));
-        
-        if (progress < 1) {
-          requestAnimationFrame(animateCount);
-        } else {
-          setCount(end); // Ensure we hit exactly the end number
-        }
-      };
-      
-      requestAnimationFrame(animateCount);
-    }
+    if (!isInView) return;
+    let startTime: number | null = null;
+    const animate = (ts: number) => {
+      if (!startTime) startTime = ts;
+      const progress = Math.min((ts - startTime) / (duration * 1000), 1);
+      const eased = 1 - Math.pow(1 - progress, 4);
+      setCount(Math.floor(eased * end));
+      if (progress < 1) requestAnimationFrame(animate);
+      else setCount(end);
+    };
+    requestAnimationFrame(animate);
   }, [isInView, end, duration]);
 
-  // For specific formatting (like 98.5)
-  const displayCount = end % 1 !== 0 && count === Math.floor(end) ? end : count;
-
-  return (
-    <span ref={ref}>
-      {displayCount}
-      {suffix}
-    </span>
-  );
+  return <span ref={ref}>{count}</span>;
 }
 
-export function StatsBar() {
+export default function StatsBar() {
   const stats = [
-    { value: 2400, suffix: "+", label: "Active Businesses" },
-    { value: 50, suffix: "M+", label: "Messages Sent/Mo" },
-    { value: 98.5, suffix: "%", label: "Avg Delivery Rate" },
-    { value: 24, suffix: "/7", label: "Automated Support", noCounter: true },
+    { icon: Users, value: 10000, suffix: "+", label: "Happy Businesses" },
+    { icon: MessageSquare, value: 500, suffix: "M+", label: "Messages Delivered" },
+    { icon: ShieldCheck, value: 99.9, suffix: "%", label: "Uptime Guarantee" },
+    { icon: Headphones, value: 24, suffix: "/7", label: "Customer Support" },
   ];
 
   return (
-    <section className="bg-[var(--color-navy)] py-12 lg:py-16">
-      <div className="container mx-auto px-4 md:px-8">
-        <div className="grid grid-cols-2 gap-y-8 md:grid-cols-4 md:gap-y-0 divide-x-0 md:divide-x md:divide-white/10">
-          {stats.map((stat, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.5 }}
-              transition={{ delay: i * 0.1, duration: 0.5 }}
-              className="flex flex-col items-center justify-center text-center px-4"
-            >
-              <div className="text-4xl md:text-5xl font-extrabold text-white font-heading mb-2">
-                {stat.noCounter ? (
-                  <span>{stat.value}{stat.suffix}</span>
-                ) : (
-                  <Counter end={stat.value} suffix={stat.suffix} />
-                )}
-              </div>
-              <p className="text-sm md:text-base font-medium text-white/70 uppercase tracking-widest font-heading">
-                {stat.label}
-              </p>
-            </motion.div>
-          ))}
+    <section className="bg-white border-y border-gray-100 py-16 relative z-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-10 md:gap-6">
+          {stats.map((stat, index) => {
+            const Icon = stat.icon;
+            return (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="flex flex-col items-center text-center group"
+              >
+                <div className="w-16 h-16 rounded-2xl bg-[#E8F8F5] flex items-center justify-center mb-5 shadow-sm border border-[#D1F2EB]">
+                  <Icon className="w-8 h-8 text-[#075E54]" />
+                </div>
+                <div className="flex items-center justify-center mb-1">
+                  <span className="text-3xl md:text-4xl font-heading font-extrabold text-[#1A1A2E] tracking-tight">
+                    <Counter end={stat.value} duration={2} />
+                    {stat.suffix}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm md:text-base font-medium text-slate-500">
+                  {stat.label}
+                </p>
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     </section>

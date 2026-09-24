@@ -138,7 +138,7 @@ function emptyButton(type: TemplateButton['type']): TemplateButton {
 export function TemplateManager() {
   const t = useTranslations('Settings.templates');
   const supabase = createClient();
-  const { user, loading: authLoading } = useAuth();
+  const { user, accountId, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -195,18 +195,20 @@ export function TemplateManager() {
       setLoading(false);
       return;
     }
-    fetchTemplates(user.id);
+    fetchTemplates(user.id, accountId || undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user?.id]);
+  }, [authLoading, user?.id, accountId]);
 
-  async function fetchTemplates(userId: string) {
+  async function fetchTemplates(userId: string, accId?: string) {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('message_templates')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+      let query = supabase.from('message_templates').select('*');
+      if (accId) {
+        query = query.eq('account_id', accId);
+      } else {
+        query = query.eq('user_id', userId);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
       if (error) throw error;
       setTemplates(data || []);
     } catch (err) {

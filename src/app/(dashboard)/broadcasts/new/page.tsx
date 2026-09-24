@@ -50,7 +50,7 @@ export default function NewBroadcastPage() {
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
   const [contactGroups, setContactGroups] = useState<{id: string; name: string}[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [variables, setVariables] = useState<Record<string, { type: 'static' | 'field'; value: string }>>({});
+  const [variables, setVariables] = useState<Record<string, { type: 'static' | 'field' | 'custom_field'; value: string }>>({});
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -261,6 +261,20 @@ export default function NewBroadcastPage() {
     }
   };
 
+  // Initialize variables when placeholders change
+  useEffect(() => {
+    if (placeholders.length > 0) {
+      const initial: Record<string, any> = {};
+      placeholders.forEach((ph, idx) => {
+        const key = ph.replace(/[\{\}]/g, '');
+        initial[key] = { type: 'field', value: idx === 0 ? 'name' : 'phone' };
+      });
+      setVariables(initial);
+    } else {
+      setVariables({});
+    }
+  }, [placeholders]);
+
   async function handleSend() {
     if (!name.trim()) {
       toast.error('Campaign Name is required');
@@ -312,6 +326,7 @@ export default function NewBroadcastPage() {
         headerMediaUrl: requiresMedia ? headerMediaUrl : undefined,
         scheduledAt: sendWhen === 'later' ? new Date(scheduleDate).toISOString() : undefined,
         delaySeconds: sendDelaySeconds,
+        batchDelayMs: sendDelaySeconds * 1000,
       } as any);
 
       toast.success(sendWhen === 'later' ? 'Campaign scheduled successfully!' : 'Campaign created and sending started!');
@@ -539,6 +554,92 @@ export default function NewBroadcastPage() {
             <div className="bg-muted/30 p-4 rounded-lg mt-4 border text-sm text-muted-foreground whitespace-pre-wrap">
               <strong>Template Preview:</strong><br/>
               {selectedTemplate.body_text}
+            </div>
+          )}
+
+          {/* Variable Mapping UI */}
+          {selectedTemplate && placeholders.length > 0 && (
+            <div className="space-y-4 pt-4 border-t mt-4">
+              <div className="flex items-center gap-2 text-primary font-semibold">
+                <Settings className="h-4 w-4" />
+                <h3>Template Variables Personalization</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Map placeholders (e.g. &#123;&#123;1&#125;&#125;) to contact fields or enter static values.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {placeholders.map((ph) => {
+                  const key = ph.replace(/[\{\}]/g, '');
+                  const current = variables[key] || { type: 'field', value: 'name' };
+                  return (
+                    <div key={ph} className="p-3 border rounded-lg bg-card space-y-2">
+                      <div className="flex items-center justify-between font-bold text-xs">
+                        <span>Variable {ph}</span>
+                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
+                          {current.type === 'field' ? 'Contact Field' : current.type === 'custom_field' ? 'Custom Field' : 'Static Text'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Select
+                          value={current.type}
+                          onValueChange={(val: any) => {
+                            setVariables(prev => ({
+                              ...prev,
+                              [key]: { type: val, value: val === 'field' ? 'name' : '' }
+                            }));
+                          }}
+                        >
+                          <SelectTrigger className="text-xs h-8">
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="field">Contact Field</SelectItem>
+                            <SelectItem value="static">Static Text</SelectItem>
+                            <SelectItem value="custom_field">Custom Field</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        {current.type === 'field' ? (
+                          <Select
+                            value={current.value || 'name'}
+                            onValueChange={(val) => {
+                              if (val) {
+                                setVariables(prev => ({
+                                  ...prev,
+                                  [key]: { type: 'field', value: val }
+                                }));
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="text-xs h-8">
+                              <SelectValue placeholder="Field" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="name">Name</SelectItem>
+                              <SelectItem value="phone">Phone Number</SelectItem>
+                              <SelectItem value="email">Email</SelectItem>
+                              <SelectItem value="company">Company</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            placeholder={current.type === 'static' ? "Static text..." : "Field ID..."}
+                            value={current.value || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setVariables(prev => ({
+                                ...prev,
+                                [key]: { type: current.type, value: val }
+                              }));
+                            }}
+                            className="text-xs h-8"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

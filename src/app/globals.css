@@ -156,10 +156,9 @@ html[data-mode="light"] {
 
 /* ---- ACCENT: primary color ---- */
 
-:root,
-html[data-theme="violet"] {
+:root {
   /* WaCRM Default Primary (WhatsApp Green) */
-  --primary: oklch(0.62 0.16 162); /* Emerald base for better contrast, but feels very WhatsApp */
+  --primary: oklch(0.62 0.16 162);
   --primary-foreground: oklch(0.985 0 0);
   --primary-hover: oklch(0.55 0.16 162);
   --primary-soft: oklch(0.62 0.16 162 / 0.12);
@@ -169,6 +168,19 @@ html[data-theme="violet"] {
   --sidebar-primary: oklch(0.62 0.16 162);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-ring: oklch(0.62 0.16 162);
+}
+
+html[data-theme="violet"] {
+  --primary: oklch(0.541 0.25 293);
+  --primary-foreground: oklch(0.985 0 0);
+  --primary-hover: oklch(0.62 0.23 293);
+  --primary-soft: oklch(0.541 0.25 293 / 0.12);
+  --primary-soft-2: oklch(0.541 0.25 293 / 0.22);
+  --ring: oklch(0.541 0.25 293);
+  --chart-1: oklch(0.541 0.25 293);
+  --sidebar-primary: oklch(0.541 0.25 293);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-ring: oklch(0.541 0.25 293);
 }
 
 html[data-theme="emerald"] {

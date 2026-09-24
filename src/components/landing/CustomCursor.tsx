@@ -1,130 +1,94 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
+import { motion, useSpring } from "framer-motion";
 
-interface Particle {
-  x: number;
-  y: number;
-  size: number;
-  color: string;
-  vx: number;
-  vy: number;
-  alpha: number;
-  rotation: number;
-  rotationSpeed: number;
-}
+export default function CustomCursor() {
+  const [isPointer, setIsPointer] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
-export function CustomCursor() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cursorX = useSpring(0, { stiffness: 600, damping: 30 });
+  const cursorY = useSpring(0, { stiffness: 600, damping: 30 });
+  
+  const dotX = useSpring(0, { stiffness: 1200, damping: 40 });
+  const dotY = useSpring(0, { stiffness: 1200, damping: 40 });
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    // Only run on desktop/devices with fine pointer
+    if (typeof window === "undefined" || !window.matchMedia("(pointer: fine)").matches) {
+      return;
+    }
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let animationFrameId: number;
-    let particles: Particle[] = [];
-
-    const colors = [
-      "#25D366", // WhatsApp Green
-      "#3B82F6", // Electric Blue
-      "#8B5CF6", // Purple
-      "#EC4899", // Pink
-      "#F59E0B", // Amber
-      "#10B981", // Emerald
-      "#06B6D4", // Cyan
-    ];
-
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+    const moveCursor = (e: MouseEvent) => {
+      cursorX.set(e.clientX - 16);
+      cursorY.set(e.clientY - 16);
+      dotX.set(e.clientX - 3);
+      dotY.set(e.clientY - 3);
+      if (!isVisible) setIsVisible(true);
     };
 
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-
-    const addParticles = (x: number, y: number) => {
-      const count = Math.floor(Math.random() * 3) + 2;
-      for (let i = 0; i < count; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = Math.random() * 2 + 0.5;
-        particles.push({
-          x,
-          y,
-          size: Math.random() * 6 + 3,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 0.5,
-          alpha: 1,
-          rotation: Math.random() * Math.PI,
-          rotationSpeed: (Math.random() - 0.5) * 0.1,
-        });
+    const handleMouseOver = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === "BUTTON" ||
+        target?.tagName === "A" ||
+        target?.closest("button") ||
+        target?.closest("a") ||
+        target?.getAttribute("role") === "button"
+      ) {
+        setIsPointer(true);
+      } else {
+        setIsPointer(false);
       }
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      addParticles(e.clientX, e.clientY);
+    const handleMouseLeave = () => {
+      setIsVisible(false);
     };
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length > 0) {
-        addParticles(e.touches[0].clientX, e.touches[0].clientY);
-      }
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("touchmove", handleTouchMove);
-
-    const render = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-
-        p.x += p.vx;
-        p.y += p.vy;
-        p.alpha -= 0.018;
-        p.rotation += p.rotationSpeed;
-
-        if (p.alpha <= 0) {
-          particles.splice(i, 1);
-          continue;
-        }
-
-        ctx.save();
-        ctx.globalAlpha = p.alpha;
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rotation);
-        ctx.fillStyle = p.color;
-
-        ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2.5);
-
-        ctx.restore();
-      }
-
-      if (particles.length > 150) {
-        particles = particles.slice(-150);
-      }
-
-      animationFrameId = requestAnimationFrame(render);
-    };
-
-    render();
+    window.addEventListener("mousemove", moveCursor);
+    window.addEventListener("mouseover", handleMouseOver);
+    document.addEventListener("mouseleave", handleMouseLeave);
 
     return () => {
-      window.removeEventListener("resize", resizeCanvas);
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("touchmove", handleTouchMove);
-      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener("mousemove", moveCursor);
+      window.removeEventListener("mouseover", handleMouseOver);
+      document.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, []);
+  }, [cursorX, cursorY, dotX, dotY, isVisible]);
+
+  if (!isVisible) return null;
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="pointer-events-none fixed inset-0 z-50 overflow-hidden"
-    />
+    <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
+      {/* Outer Glowing Ring */}
+      <motion.div
+        style={{
+          x: cursorX,
+          y: cursorY,
+        }}
+        animate={{
+          scale: isPointer ? 1.6 : 1,
+          borderColor: isPointer ? "#00A884" : "rgba(37, 211, 102, 0.4)",
+          backgroundColor: isPointer ? "rgba(0, 168, 132, 0.08)" : "transparent",
+        }}
+        transition={{ duration: 0.15 }}
+        className="w-8 h-8 rounded-full border-2 border-[#00A884]/40 fixed top-0 left-0 backdrop-blur-[0.5px]"
+      />
+
+      {/* Center Precision Dot */}
+      <motion.div
+        style={{
+          x: dotX,
+          y: dotY,
+        }}
+        animate={{
+          scale: isPointer ? 0.7 : 1,
+          backgroundColor: isPointer ? "#00A884" : "#25D366",
+        }}
+        transition={{ duration: 0.1 }}
+        className="w-1.5 h-1.5 rounded-full bg-[#00A884] fixed top-0 left-0 shadow-sm"
+      />
+    </div>
   );
 }

@@ -43,6 +43,27 @@ export function aiContextMessageLimit(): number {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_CONTEXT_MESSAGE_LIMIT
 }
 
+export function interpolatePromptVariables(
+  text: string | null | undefined,
+  contact?: { name?: string | null; phone?: string | null; email?: string | null; company?: string | null; tags?: string[] },
+  businessName?: string
+): string {
+  if (!text) return '';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  return text
+    .replace(/\{\{contact\.name\}\}/g, contact?.name || 'Customer')
+    .replace(/\{\{contact\.phone\}\}/g, contact?.phone || '')
+    .replace(/\{\{contact\.email\}\}/g, contact?.email || '')
+    .replace(/\{\{contact\.company\}\}/g, contact?.company || '')
+    .replace(/\{\{contact\.tags\}\}/g, (contact?.tags || []).join(', '))
+    .replace(/\{\{business\.name\}\}/g, businessName || 'ChatFlyr')
+    .replace(/\{\{current_date\}\}/g, dateStr)
+    .replace(/\{\{current_time\}\}/g, timeStr);
+}
+
 /**
  * Build the system prompt shared by draft + auto-reply. The account's
  * own `system_prompt` (business context / persona / tone) is appended
@@ -57,8 +78,10 @@ export function buildSystemPrompt(args: {
   knowledge?: string[]
   /** Active WhatsApp message template context sent to customer. */
   templateContext?: string | null
+  contact?: { name?: string | null; phone?: string | null; email?: string | null; company?: string | null; tags?: string[] }
+  businessName?: string
 }): string {
-  const { userPrompt, mode, knowledge, templateContext } = args
+  const { userPrompt, mode, knowledge, templateContext, contact, businessName } = args
   const parts: string[] = [
     'You are a customer-messaging assistant for a business that uses a WhatsApp CRM. ' +
       'You are shown the recent WhatsApp conversation between the business (assistant) and a customer (user). ' +
@@ -80,7 +103,8 @@ export function buildSystemPrompt(args: {
   }
 
   if (userPrompt && userPrompt.trim()) {
-    parts.push(`Business context and instructions:\n${userPrompt.trim()}`)
+    const interpolated = interpolatePromptVariables(userPrompt, contact, businessName)
+    parts.push(`Business context and instructions:\n${interpolated.trim()}`)
   }
 
   if (knowledge && knowledge.length > 0) {

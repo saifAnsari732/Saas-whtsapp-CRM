@@ -64,26 +64,31 @@ export async function POST(req: Request) {
               .eq('id', order.id);
               
             if (order.type === 'subscription') {
+              const billingCycle = order.metadata?.billing_cycle || 'monthly';
+              const daysToAdd = billingCycle === 'yearly' ? 365 : 30;
               const expires_at = new Date();
-              expires_at.setDate(expires_at.getDate() + 30);
+              expires_at.setDate(expires_at.getDate() + daysToAdd);
+              
+              const normalizedPlanId = (order.plan_id === 'all-in-one') ? 'allinone' : order.plan_id;
               
               await supabase
                 .from('accounts')
                 .update({
-                  subscription_plan: order.plan_id,
+                  subscription_plan: normalizedPlanId,
                   subscription_status: 'active',
                   subscription_expires_at: expires_at.toISOString(),
                   subscription_started_at: new Date().toISOString()
                 })
                 .eq('id', order.account_id);
             } else if (order.type === 'wallet_topup') {
+              const creditRupees = order.amount >= 100 ? Math.round(order.amount / 100) : order.amount;
               const { data: wallet } = await supabase
                 .from('wallets')
                 .select('balance')
                 .eq('account_id', order.account_id)
                 .single();
                 
-              const new_balance = (wallet?.balance || 0) + order.amount;
+              const new_balance = (wallet?.balance || 0) + creditRupees;
               
               if (wallet) {
                 await supabase.from('wallets').update({ balance: new_balance }).eq('account_id', order.account_id);
@@ -93,7 +98,7 @@ export async function POST(req: Request) {
               
               await supabase.from('wallet_transactions').insert({
                 account_id: order.account_id,
-                amount: order.amount,
+                amount: creditRupees,
                 type: 'credit',
                 description: 'Wallet Topup via Razorpay Webhook',
                 reference_id: payment.id

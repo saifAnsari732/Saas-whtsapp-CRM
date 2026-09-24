@@ -58,13 +58,17 @@ export async function POST(req: Request) {
 
     if (order.type === 'subscription') {
       // Update accounts table
+      const billingCycle = order.metadata?.billing_cycle || 'monthly';
+      const daysToAdd = billingCycle === 'yearly' ? 365 : 30;
       const expires_at = new Date();
-      expires_at.setDate(expires_at.getDate() + 30);
+      expires_at.setDate(expires_at.getDate() + daysToAdd);
+      
+      const normalizedPlanId = (order.plan_id === 'all-in-one') ? 'allinone' : order.plan_id;
       
       const { error: updateError } = await supabase
         .from('accounts')
         .update({
-          subscription_plan: order.plan_id,
+          subscription_plan: normalizedPlanId,
           subscription_status: 'active',
           subscription_expires_at: expires_at.toISOString(),
           subscription_started_at: new Date().toISOString()
@@ -74,6 +78,9 @@ export async function POST(req: Request) {
       if (updateError) throw updateError;
       
     } else if (order.type === 'wallet_topup') {
+      // Convert order.amount (in paise) to rupees for wallet balance
+      const creditRupees = order.amount >= 100 ? Math.round(order.amount / 100) : order.amount;
+      
       // Update wallet balance
       const { data: wallet } = await supabase
         .from('wallets')
@@ -81,7 +88,7 @@ export async function POST(req: Request) {
         .eq('account_id', profile.account_id)
         .single();
         
-      const new_balance = (wallet?.balance || 0) + order.amount;
+      const new_balance = (wallet?.balance || 0) + creditRupees;
       
       if (wallet) {
         await supabase.from('wallets').update({ balance: new_balance }).eq('account_id', profile.account_id);
@@ -91,7 +98,7 @@ export async function POST(req: Request) {
       
       await supabase.from('wallet_transactions').insert({
         account_id: profile.account_id,
-        amount: order.amount,
+        amount: creditRupees,
         type: 'credit',
         description: 'Wallet Topup via Razorpay',
         reference_id: razorpay_payment_id

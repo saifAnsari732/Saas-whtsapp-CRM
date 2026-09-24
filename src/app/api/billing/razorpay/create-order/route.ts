@@ -21,23 +21,46 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { plan_id, type = 'subscription', billing_cycle = 'monthly' } = body;
+    const { plan_id, type = 'subscription', billing_cycle = 'monthly', amount: customAmount } = body;
 
-    // Validate plan
-    const { data: plan } = await supabase
-      .from('billing_plans')
-      .select('*')
-      .eq('id', plan_id)
-      .single();
+    let total_amount = 0;
+    let gst_amount = 0;
+    let price = 0;
+    let planData: any = null;
 
-    if (!plan) {
-      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
+    if (type === 'wallet_topup') {
+      price = (customAmount || 100) * 100; // in paise
+      gst_amount = Math.round(price * 0.18);
+      total_amount = price + gst_amount;
+    } else {
+      // Validate plan
+      const { data: plan } = await supabase
+        .from('billing_plans')
+        .select('*')
+        .eq('id', plan_id)
+        .single();
+
+      if (!plan) {
+        // Fallback for starter testing plan (₹10 = 1000 paise)
+        if (plan_id === 'starter') {
+          price = billing_cycle === 'yearly' ? 9600 : 1000;
+          gst_amount = Math.round(price * 0.18);
+          total_amount = price + gst_amount;
+          planData = { id: 'starter', name: 'Starter (Testing)', price };
+        } else {
+          return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
+        }
+      } else {
+        price = billing_cycle === 'yearly' ? plan.price_yearly : plan.price_monthly;
+        // If starter plan, ensure test amount ₹10 (1000 paise)
+        if (plan.id === 'starter' && price > 10000) {
+          price = billing_cycle === 'yearly' ? 9600 : 1000;
+        }
+        gst_amount = Math.round(price * 0.18);
+        total_amount = price + gst_amount;
+        planData = plan;
+      }
     }
-
-    // Calculate amount
-    const price = billing_cycle === 'yearly' ? plan.price_yearly : plan.price_monthly;
-    const gst_amount = Math.round(price * 0.18);
-    const total_amount = price + gst_amount;
 
     // Create Razorpay order
     const auth = Buffer.from(
@@ -86,9 +109,14 @@ export async function POST(req: Request) {
       amount: total_amount,
       currency: 'INR',
       gst_amount,
-      plan: {
-        id: plan.id,
-        name: plan.name,
+      plan: planData ? {
+        id: planData.id,
+        name: planData.name,
+        price,
+        billing_cycle
+      } : {
+        id: 'wallet_topup',
+        name: 'Wallet Top-up',
         price,
         billing_cycle
       }

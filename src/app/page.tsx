@@ -1,21 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Navbar } from "@/components/landing/Navbar";
-import { HeroSection } from "@/components/landing/HeroSection";
-import { StatsBar } from "@/components/landing/StatsBar";
-import { HowItWorks } from "@/components/landing/HowItWorks";
-import { FeaturesGrid } from "@/components/landing/FeaturesGrid";
-import { TechServices } from "@/components/landing/TechServices";
-import { EmbeddedSignup } from "@/components/landing/EmbeddedSignup";
-import { CoexistenceSection } from "@/components/landing/CoexistenceSection";
-import { LiveDashboardSection } from "@/components/landing/LiveDashboardSection";
-import { MetaBadge } from "@/components/landing/MetaBadge";
-import { PricingSection } from "@/components/landing/PricingSection";
-import { Testimonials } from "@/components/landing/Testimonials";
-import { FinalCTA } from "@/components/landing/FinalCTA";
-import { Footer } from "@/components/landing/Footer";
-
-import { CustomCursor } from "@/components/landing/CustomCursor";
+import Navbar from "@/components/landing/Navbar";
+import HeroSection from "@/components/landing/HeroSection";
+import StatsBar from "@/components/landing/StatsBar";
+import FeaturesGrid from "@/components/landing/FeaturesGrid";
+import HowItWorks from "@/components/landing/HowItWorks";
+import TechServices from "@/components/landing/TechServices";
+import EmbeddedSignup from "@/components/landing/EmbeddedSignup";
+import PricingSection from "@/components/landing/PricingSection";
+import Testimonials from "@/components/landing/Testimonials";
+import FAQSection from "@/components/landing/FAQSection";
+import FinalCTA from "@/components/landing/FinalCTA";
+import Footer from "@/components/landing/Footer";
+import CustomCursor from "@/components/landing/CustomCursor";
+import WhatsAppFloatingButton from "@/components/landing/WhatsAppFloatingButton";
 
 export default async function LandingPage() {
   const supabase = await createClient();
@@ -28,24 +26,23 @@ export default async function LandingPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-white text-[var(--color-navy)] selection:bg-[var(--color-green-vivid)]/30 selection:text-[var(--color-navy)] relative">
+    <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-[#25D366]/30 selection:text-slate-900 relative">
       <CustomCursor />
       <Navbar />
-      <main className="flex-1">
+      <main className="w-full">
         <HeroSection />
         <StatsBar />
-        <HowItWorks />
         <FeaturesGrid />
+        <HowItWorks />
         <TechServices />
-        <CoexistenceSection />
-        <LiveDashboardSection />
         <EmbeddedSignup />
-        <MetaBadge />
         <PricingSection />
         <Testimonials />
+        <FAQSection />
         <FinalCTA />
       </main>
       <Footer />
+      <WhatsAppFloatingButton phoneNumber="9511450914" />
     </div>
   );
 }

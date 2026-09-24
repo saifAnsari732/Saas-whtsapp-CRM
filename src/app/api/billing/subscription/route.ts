@@ -35,9 +35,9 @@ export async function GET() {
     return NextResponse.json({
       status: 'trial',
       plan: null,
-      trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      trialEndsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
       subscriptionExpiresAt: null,
-      daysRemaining: 7,
+      daysRemaining: 5,
       isActive: true,
       isOwner,
       trialUsage: { messagesSent: 0, contactsCreated: 0, broadcastsSent: 0, templatesUsed: 0 },
@@ -100,8 +100,8 @@ export async function GET() {
     }
   }
 
-  if (isOwner) {
-    isActive = true; // Owner is NEVER blocked
+  if (!isActive) {
+    // If trial/subscription expired, block actions
   }
 
   const blockedFeatures = isActive ? [] : ['/inbox', '/broadcasts', '/automations', '/contacts', '/pipelines', '/flows', '/agents', '/dashboard/coexistence', '/dashboard/chats'];

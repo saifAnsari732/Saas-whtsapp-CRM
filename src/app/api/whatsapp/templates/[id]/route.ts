@@ -137,7 +137,9 @@ export async function PATCH(
       )
     }
 
-    if (!isDryRun()) {
+    const isNative = existing.meta_template_id?.startsWith('native-') || existing.meta_template_id?.startsWith('baileys-') || existing.meta_template_id?.startsWith('local-');
+
+    if (!isDryRun() && !isNative) {
       const { data: config, error: configError } = await supabase
         .from('whatsapp_config')
         .select('*')
@@ -277,7 +279,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Template not found.' }, { status: 404 })
     }
 
-    if (existing.meta_template_id && !isDryRun()) {
+    const isNative = existing.meta_template_id?.startsWith('native-') || existing.meta_template_id?.startsWith('baileys-') || existing.meta_template_id?.startsWith('local-');
+
+    if (existing.meta_template_id && !isDryRun() && !isNative) {
       const { data: config, error: configError } = await supabase
         .from('whatsapp_config')
         .select('*')

@@ -2,213 +2,177 @@
 
 import { motion } from "framer-motion";
 import { 
-  Globe, 
-  Search, 
-  Megaphone, 
-  Palette, 
-  Users, 
-  Smartphone, 
-  Cpu, 
-  MessageSquare, 
-  Layout,
-  ArrowRight
+  ShoppingCart, 
+  Heart, 
+  GraduationCap, 
+  Building2, 
+  Plane, 
+  BadgePercent,
+  ArrowRight,
+  TrendingUp,
+  ShieldCheck,
+  CheckCircle2
 } from "lucide-react";
+import Link from "next/link";
 
-export function TechServices() {
-  // Removed Google Ads, Social Media, and Graphic Design
-  const services = [
-    {
-      icon: Globe,
-      title: "Website Development",
-      desc: "Custom, high-performance websites built to convert.",
-      color: "from-blue-500 to-cyan-500",
-      shadow: "shadow-blue-500/20"
-    },
-    {
-      icon: Search,
-      title: "SEO Optimization",
-      desc: "Boost search engine rankings and drive organic traffic.",
-      color: "from-indigo-500 to-purple-500",
-      shadow: "shadow-indigo-500/20"
-    },
-    {
-      icon: Megaphone,
-      title: "Meta Ads",
-      desc: "Data-driven advertising across Facebook & Instagram.",
-      color: "from-purple-500 to-pink-500",
-      shadow: "shadow-purple-500/20"
-    },
-    {
-      icon: Palette,
-      title: "Brand Identity",
-      desc: "Crafting unique, memorable brands that resonate.",
-      color: "from-rose-500 to-orange-500",
-      shadow: "shadow-rose-500/20"
-    },
-    {
-      icon: Users,
-      title: "Lead Generation",
-      desc: "Strategic funnels and lead magnets to fill your pipeline.",
-      color: "from-teal-500 to-emerald-500",
-      shadow: "shadow-teal-500/20"
-    },
-    {
-      icon: Smartphone,
-      title: "App Development",
-      desc: "High-performance iOS and Android applications.",
-      color: "from-blue-600 to-indigo-600",
-      shadow: "shadow-blue-600/20"
-    },
-    {
-      icon: Cpu,
-      title: "AI Automation",
-      desc: "Smart AI agents and workflows to scale operations 24/7.",
-      color: "from-fuchsia-500 to-purple-600",
-      shadow: "shadow-fuchsia-500/20"
-    },
-    {
-      icon: MessageSquare,
-      title: "WhatsApp API",
-      desc: "Seamless API and CRM integrations to boost engagement.",
-      color: "from-[#25D366] to-[#075E54]",
-      shadow: "shadow-[#25D366]/20"
-    },
-    {
-      icon: Layout,
-      title: "WordPress Dev",
-      desc: "Easy-to-manage sites tailored to your unique needs.",
-      color: "from-cyan-500 to-teal-500",
-      shadow: "shadow-cyan-500/20"
-    }
-  ];
+const industries = [
+  {
+    title: "E-Commerce & Retail",
+    description: "Automate abandoned cart recovery, deliver instant order tracking & dynamic product catalogs on WhatsApp.",
+    icon: ShoppingCart,
+    tag: "98% Open Rate",
+    gradient: "from-emerald-500/15 via-teal-500/5 to-transparent",
+    iconBg: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+    badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    stats: "3.2x Higher Sales"
+  },
+  {
+    title: "Healthcare & Clinics",
+    description: "Send automated appointment confirmations, lab report alerts, health tips and pre-visit questionnaires securely.",
+    icon: Heart,
+    tag: "HIPAA Compliant",
+    gradient: "from-rose-500/15 via-pink-500/5 to-transparent",
+    iconBg: "bg-rose-500/10 text-rose-600 border-rose-500/20",
+    badgeColor: "bg-rose-50 text-rose-700 border-rose-200",
+    stats: "70% Fewer No-Shows"
+  },
+  {
+    title: "EdTech & Institutions",
+    description: "Streamline student admissions, course alerts, fee payment reminders and multi-agent student counselling.",
+    icon: GraduationCap,
+    tag: "Instant Support",
+    gradient: "from-blue-500/15 via-indigo-500/5 to-transparent",
+    iconBg: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+    badgeColor: "bg-blue-50 text-blue-700 border-blue-200",
+    stats: "4x Faster Admissions"
+  },
+  {
+    title: "Real Estate & Builders",
+    description: "Qualify high-intent property leads, send HD brochures, video walk-throughs & schedule site visits in 1 click.",
+    icon: Building2,
+    tag: "Lead Qualification",
+    gradient: "from-amber-500/15 via-orange-500/5 to-transparent",
+    iconBg: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+    badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
+    stats: "85% Response Rate"
+  },
+  {
+    title: "Travel & Hospitality",
+    description: "Share e-tickets, hotel check-in details, real-time flight updates and 24/7 automated concierge assistance.",
+    icon: Plane,
+    tag: "24/7 Concierge",
+    gradient: "from-cyan-500/15 via-sky-500/5 to-transparent",
+    iconBg: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
+    badgeColor: "bg-cyan-50 text-cyan-700 border-cyan-200",
+    stats: "Instant Check-In"
+  },
+  {
+    title: "BFSI & Fintech",
+    description: "Send fraud alerts, loan application status, automated EMI reminders and statements with bank-grade encryption.",
+    icon: BadgePercent,
+    tag: "Bank-Grade Security",
+    gradient: "from-violet-500/15 via-purple-500/5 to-transparent",
+    iconBg: "bg-violet-500/10 text-violet-600 border-violet-500/20",
+    badgeColor: "bg-violet-50 text-violet-700 border-violet-200",
+    stats: "100% Encrypted"
+  },
+];
 
-  // Duplicate for infinite marquee
-  const duplicatedServices = [...services, ...services];
-
+export default function TechServices() {
   return (
-    <section className="bg-white py-32 relative overflow-hidden">
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes scroll-left {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-scroll-left {
-          animation: scroll-left 40s linear infinite;
-        }
-        .animate-scroll-left:hover {
-          animation-play-state: paused;
-        }
-      `}} />
+    <section id="services" className="py-20 lg:py-24 bg-gradient-to-b from-white via-slate-50/60 to-white relative overflow-hidden">
+      {/* Background radial glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[#00A884]/5 rounded-full blur-3xl pointer-events-none -z-10" />
 
-      {/* Decorative Wavy Background Lines */}
-      <svg className="absolute inset-0 w-full h-full stroke-gray-100/50 [mask-image:radial-gradient(100%_100%_at_top_center,white,transparent)] z-0" aria-hidden="true">
-        <defs>
-          <pattern id="waves" width="200" height="200" x="50%" y="-1" patternUnits="userSpaceOnUse">
-            <path d="M100 200V.5M.5 .5H200" fill="none" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" strokeWidth="0" fill="url(#waves)" />
-      </svg>
-      
-      <div className="container mx-auto px-4 md:px-8 relative z-10 max-w-[1400px]">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10 relative z-10">
         
         {/* Header Section */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-20 gap-8">
-          <div className="max-w-2xl">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true, amount: 0.5 }}
-              className="mb-6 inline-flex items-center rounded-full bg-[var(--color-gray-light)] px-4 py-2 border border-border/50"
-            >
-              <span className="text-[13px] font-extrabold uppercase tracking-widest text-[var(--color-green-deep)] font-heading">
-                Beyond WhatsApp
-              </span>
-            </motion.div>
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.5 }}
-              transition={{ delay: 0.1 }}
-              className="text-4xl md:text-5xl lg:text-[56px] font-extrabold tracking-tight text-navy font-heading mb-6 leading-[1.1]"
-            >
-              Complete Tech & <br className="hidden md:block"/> Growth Solutions
-            </motion.h2>
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.5 }}
-              transition={{ delay: 0.2 }}
-              className="text-lg md:text-[19px] text-gray font-medium"
-            >
-              We don't just automate your messaging. We build, market, and scale your entire digital presence with our expert in-house team.
-            </motion.p>
-          </div>
-          
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, amount: 0.5 }}
-            transition={{ delay: 0.3 }}
-            className="hidden lg:block pb-2"
+        <div className="text-center max-w-3xl mx-auto mb-14">
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#E8F8F5] border border-[#D1F2EB] mb-4 shadow-2xs"
           >
-             <button className="group flex items-center gap-2 text-lg font-bold text-[var(--color-green-deep)] hover:text-[var(--color-green-vivid)] transition-colors">
-                Explore All Services 
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-green-light)] group-hover:bg-[var(--color-green-vivid)]/20 transition-colors">
-                  <ArrowRight className="h-4 w-4" />
-                </span>
-             </button>
+            <span className="w-2 h-2 rounded-full bg-[#00A884]" />
+            <span className="text-xs font-semibold text-[#00A884] uppercase tracking-wider">Built for Every Industry</span>
           </motion.div>
+          
+          <motion.h2
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 }}
+            className="text-3xl sm:text-4xl lg:text-[46px] font-extrabold text-[#111827] font-heading tracking-tight leading-tight mb-4"
+          >
+            Tailored Solutions for <span className="text-[#00A884]">Every Business</span>
+          </motion.h2>
+          
+          <motion.p
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.15 }}
+            className="text-base sm:text-lg text-slate-600 font-normal leading-relaxed"
+          >
+            Whether you operate in retail, healthcare, education or financial services, ChatFlyr provides customized WhatsApp automation designed to drive higher ROI.
+          </motion.p>
         </div>
-      </div>
 
-      {/* Infinite Scrolling Slider */}
-      <div className="relative w-full overflow-hidden py-10 z-10 flex">
-        {/* Left/Right Fade Gradients */}
-        <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-white to-transparent z-20 pointer-events-none"></div>
-        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-white to-transparent z-20 pointer-events-none"></div>
-        
-        <div className="flex w-max animate-scroll-left gap-8 px-4">
-          {duplicatedServices.map((service, i) => (
-            <div
-              key={i}
-              className="group relative flex w-[420px] shrink-0 items-center gap-6 rounded-[32px] bg-white p-6 pr-8 border border-gray-100 shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 cursor-default"
-            >
-              {/* Colorful Gradient Icon Box */}
-              <div className={`relative flex h-[80px] w-[80px] shrink-0 items-center justify-center rounded-[24px] bg-gradient-to-br ${service.color} ${service.shadow} shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3`}>
-                <service.icon className="h-8 w-8 text-white relative z-10" />
-                {/* Glow behind icon inside box */}
-                <div className="absolute inset-0 bg-white/20 blur-md rounded-[24px] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </div>
-              
-              <div className="flex flex-col py-2">
-                <h3 className="text-[20px] font-bold text-navy mb-2 font-heading group-hover:text-[var(--color-green-deep)] transition-colors">
-                  {service.title}
-                </h3>
-                <p className="text-[15px] text-gray leading-relaxed font-medium">
-                  {service.desc}
-                </p>
-              </div>
-              
-              {/* Subtle hover arrow */}
-              <div className="absolute top-6 right-6 opacity-0 -translate-x-3 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 bg-gray-50 p-2 rounded-full">
-                <ArrowRight className="h-4 w-4 text-[var(--color-green-deep)]" />
-              </div>
-            </div>
-          ))}
+        {/* 6 Cards Grid with High Visual Polish */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-7">
+          {industries.map((ind, i) => {
+            const Icon = ind.icon;
+            return (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: i * 0.08 }}
+                className="relative bg-white rounded-3xl p-7 shadow-sm border border-slate-200 flex flex-col justify-between overflow-hidden"
+              >
+                {/* Subtle colored accent top border gradient */}
+                <div className={`absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r ${ind.gradient.split(" ")[0]} to-transparent`} />
+
+                <div>
+                  {/* Top row: Icon + Pill Badge */}
+                  <div className="flex items-center justify-between mb-6">
+                    <div className={`w-13 h-13 rounded-2xl ${ind.iconBg} border flex items-center justify-center shadow-xs`}>
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <span className={`text-[11px] font-bold px-3 py-1 rounded-full border ${ind.badgeColor}`}>
+                      {ind.tag}
+                    </span>
+                  </div>
+
+                  {/* Title */}
+                  <h3 className="text-xl font-bold text-slate-900 mb-2.5 font-heading">
+                    {ind.title}
+                  </h3>
+
+                  {/* Description */}
+                  <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                    {ind.description}
+                  </p>
+                </div>
+
+                {/* Card Footer: Metrics + Link */}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                    <TrendingUp className="w-4 h-4 text-[#00A884]" />
+                    <span>{ind.stats}</span>
+                  </div>
+                  <span className="text-[#00A884] font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                    Explore <ArrowRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
-      </div>
-        
-      {/* Mobile CTA */}
-      <div className="mt-10 flex justify-center lg:hidden relative z-10">
-        <button className="group flex items-center gap-2 text-base font-bold text-[var(--color-green-deep)] hover:text-[var(--color-green-vivid)] transition-colors">
-            Explore All Services 
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-green-light)] group-hover:bg-[var(--color-green-vivid)]/20 transition-colors">
-              <ArrowRight className="h-4 w-4" />
-            </span>
-        </button>
-      </div>
 
+      </div>
     </section>
   );
 }
