@@ -47,14 +47,18 @@ export default function Navbar() {
             >
               Home
             </Link>
-            <div className="relative group cursor-pointer flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors">
-              <span>Services</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600" />
-            </div>
-            <div className="relative group cursor-pointer flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors">
-              <span>Features</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600" />
-            </div>
+            <Link
+              href="#services"
+              className="text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors"
+            >
+              Services
+            </Link>
+            <Link
+              href="#features"
+              className="text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors"
+            >
+              Features
+            </Link>
             <Link
               href="#pricing"
               className="text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors"
@@ -106,19 +110,19 @@ export default function Navbar() {
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-b border-gray-100 px-6 py-5 shadow-lg space-y-4">
-          <Link href="/" className="block text-[#00A884] font-semibold text-sm">
+          <Link href="/" onClick={() => setMobileMenuOpen(false)} className="block text-[#00A884] font-semibold text-sm">
             Home
           </Link>
-          <Link href="#services" className="block text-slate-700 font-medium text-sm">
+          <Link href="#services" onClick={() => setMobileMenuOpen(false)} className="block text-slate-700 font-medium text-sm">
             Services
           </Link>
-          <Link href="#features" className="block text-slate-700 font-medium text-sm">
+          <Link href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-slate-700 font-medium text-sm">
             Features
           </Link>
-          <Link href="#pricing" className="block text-slate-700 font-medium text-sm">
+          <Link href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-slate-700 font-medium text-sm">
             Pricing
           </Link>
-          <Link href="#contact" className="block text-slate-700 font-medium text-sm">
+          <Link href="#contact" onClick={() => setMobileMenuOpen(false)} className="block text-slate-700 font-medium text-sm">
             Contact
           </Link>
           <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
