@@ -8,7 +8,6 @@ import {
   Shield,
   Tags,
   User,
-  UsersRound,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -16,10 +15,7 @@ import {
 /**
  * Settings information architecture for the redesigned page.
  *
- * The flat tab strip became a grouped left rail with a new Overview
- * landing. The URL query param stays `?tab=` (deep-linkable, and it
- * keeps the existing links in sidebar.tsx / header.tsx working) — we
- * just map the old values onto the new sections.
+ * The flat tab strip became a grouped left rail with an Overview landing.
  */
 export const SETTINGS_SECTIONS = [
   'overview',
@@ -31,21 +27,19 @@ export const SETTINGS_SECTIONS = [
   'quick-replies',
   'fields',
   'deals',
-  'members',
   'api',
-  'superadmin',
 ] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 export const DEFAULT_SECTION: SettingsSection = 'overview';
 
-/** Rail grouping. `adminOnly` items are hidden for non-admins. */
+/** Rail grouping. */
 export interface SectionMeta {
   id: SettingsSection;
   label: string;
   icon: LucideIcon;
-  group: 'top' | 'account' | 'workspace' | 'admin';
+  group: 'top' | 'account' | 'workspace';
 }
 
 export const SECTION_META: Record<SettingsSection, SectionMeta> = {
@@ -58,28 +52,19 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'workspace' },
   fields: { id: 'fields', label: 'Fields & tags', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
-  members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'workspace' },
-  superadmin: { id: 'superadmin', label: 'Platform Admin', icon: Shield, group: 'admin' },
 };
 
 export const RAIL_GROUPS: { label: string | null; group: SectionMeta['group'] }[] = [
   { label: null, group: 'top' },
   { label: 'Account', group: 'account' },
   { label: 'Workspace', group: 'workspace' },
-  { label: 'System', group: 'admin' },
 ];
 
 function isSection(value: string | null): value is SettingsSection {
   return !!value && (SETTINGS_SECTIONS as readonly string[]).includes(value);
 }
 
-/**
- * Resolve a raw `?tab=` value to a section. Legacy tabs from the old
- * flat layout collapse onto their new home (Tags + Custom fields → the
- * merged "Fields & tags" section). Anything unknown falls back to the
- * Overview landing.
- */
 export function resolveSection(raw: string | null): SettingsSection {
   if (raw === 'tags' || raw === 'custom-fields') return 'fields';
   if (isSection(raw)) return raw;

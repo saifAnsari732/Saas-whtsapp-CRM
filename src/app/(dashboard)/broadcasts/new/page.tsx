@@ -803,7 +803,7 @@ export default function NewBroadcastPage() {
                 </div>
 
                 {/* WhatsApp Chat Wall & Message Bubble Container */}
-                <div className="p-4 min-h-[360px] max-h-[520px] overflow-y-auto flex flex-col justify-start gap-3 bg-[radial-gradient(#0000000a_1px,transparent_1px)] dark:bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:16px_16px]">
+                <div className="p-4 min-h-[560px] max-h-[720px] h-[640px] overflow-y-auto flex flex-col justify-start gap-3 bg-[radial-gradient(#0000000a_1px,transparent_1px)] dark:bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:16px_16px]">
                   
                   {/* System Date Badge */}
                   <div className="self-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-xs text-[10px] font-semibold text-slate-500 dark:text-slate-400 px-3 py-1 rounded-full shadow-2xs border border-slate-200/50 dark:border-slate-700/50">
@@ -866,10 +866,10 @@ export default function NewBroadcastPage() {
 
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-16 px-4 text-center text-slate-400 dark:text-slate-500 space-y-2">
-                      <MessageSquare className="h-10 w-10 stroke-[1.5] text-slate-300 dark:text-slate-700" />
-                      <p className="text-xs font-medium">
-                        Select a WhatsApp Template on the left to view real-time message layout.
+                    <div className="flex flex-col items-center justify-center h-full my-auto py-24 px-4 text-center text-slate-400 dark:text-slate-500 space-y-3">
+                      <MessageSquare className="h-12 w-12 stroke-[1.5] text-slate-300 dark:text-slate-700" />
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 max-w-xs">
+                        Select a WhatsApp Template on the left to view real-time message layout & preview.
                       </p>
                     </div>
                   )}
