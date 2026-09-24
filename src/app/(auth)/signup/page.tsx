@@ -75,13 +75,15 @@ function SignupPageInner() {
   if (success) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--color-gray-light)] px-4 font-sans">
-        <Link href="/" className="mb-8 flex items-center gap-2 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-gradient-to-br from-[var(--color-green-deep)] to-[var(--color-green-vivid)] shadow-sm">
-            <MessageSquare className="h-5 w-5 text-white" />
-          </div>
-          <span className="text-3xl font-black tracking-tight text-navy font-heading">
-            Botify.ai
-          </span>
+        <Link href="/" className="mb-8 flex items-center justify-center group">
+          <Image
+            src="/chatflyr-logo.png"
+            alt="ChatFlyr"
+            width={240}
+            height={70}
+            priority
+            className="h-14 sm:h-16 w-auto object-contain hover:scale-105 transition-transform"
+          />
         </Link>
 
         <div className="w-full max-w-[440px] rounded-[32px] border border-border/50 bg-white p-8 sm:p-12 shadow-[0_20px_60px_rgba(7,94,84,0.06)] text-center">
@@ -119,13 +121,15 @@ function SignupPageInner() {
       
       {/* Form Column */}
       <div className="flex flex-col items-center justify-center px-4 py-12 lg:px-8 relative z-10">
-        <Link href="/" className="mb-8 flex items-center gap-2 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-gradient-to-br from-[var(--color-green-deep)] to-[var(--color-green-vivid)] shadow-sm">
-            <MessageSquare className="h-5 w-5 text-white" />
-          </div>
-          <span className="text-3xl font-black tracking-tight text-navy font-heading">
-            Botify.ai
-          </span>
+        <Link href="/" className="mb-8 flex items-center justify-center group">
+          <Image
+            src="/chatflyr-logo.png"
+            alt="ChatFlyr"
+            width={240}
+            height={70}
+            priority
+            className="h-14 sm:h-16 w-auto object-contain hover:scale-105 transition-transform"
+          />
         </Link>
 
         <div className="w-full max-w-[440px] rounded-[32px] border border-border/50 bg-white p-8 sm:p-12 shadow-[0_20px_60px_rgba(7,94,84,0.06)] relative">
@@ -136,7 +140,7 @@ function SignupPageInner() {
             <p className="text-[15px] text-gray">
               {inviteToken
                 ? "Verify your email, then accept the invitation to join your team."
-                : "Get started with Botify.ai in seconds"}
+                : "Get started with ChatFlyr in seconds"}
             </p>
           </div>
 

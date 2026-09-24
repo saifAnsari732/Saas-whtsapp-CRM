@@ -61,13 +61,15 @@ function LoginPageInner() {
       
       {/* Form Column */}
       <div className="flex flex-col items-center justify-center px-4 py-12 lg:px-8 relative z-10">
-        <Link href="/" className="mb-8 flex items-center gap-2.5 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-gradient-to-br from-blue-600 to-emerald-600 shadow-md">
-            <MessageSquare className="h-5 w-5 text-white" />
-          </div>
-          <span className="text-3xl font-black tracking-tight text-slate-900 font-heading">
-            Botify.ai
-          </span>
+        <Link href="/" className="mb-8 flex items-center justify-center group">
+          <Image
+            src="/chatflyr-logo.png"
+            alt="ChatFlyr"
+            width={240}
+            height={70}
+            priority
+            className="h-14 sm:h-16 w-auto object-contain hover:scale-105 transition-transform"
+          />
         </Link>
 
         <div className="w-full max-w-[440px] rounded-[32px] border border-slate-200/80 bg-white p-8 sm:p-12 shadow-xl relative">
@@ -154,7 +156,7 @@ function LoginPageInner() {
       <div className="hidden lg:block relative bg-[var(--color-navy)] overflow-hidden">
         <Image
           src="/auth-login-bg.jpg"
-          alt="Botify.ai Authentication Background"
+          alt="ChatFlyr Authentication Background"
           fill
           className="object-cover object-center opacity-90"
           priority
