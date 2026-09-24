@@ -168,7 +168,7 @@ export default function DashboardPage() {
               <span className="inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider backdrop-blur-md">
                 Getting Started
               </span>
-              <h2 className="text-3xl font-extrabold tracking-tight">Welcome to Botify.ai CRM</h2>
+              <h2 className="text-3xl font-extrabold tracking-tight">Welcome to ChatFlyr CRM</h2>
               <p className="text-emerald-100 text-base leading-relaxed">
                 Connect your Meta WhatsApp Business API or Scan Coexistence QR to automate your sales, broadcast messages to thousands of customers, and manage chats effortlessly.
               </p>

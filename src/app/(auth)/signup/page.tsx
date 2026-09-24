@@ -240,7 +240,7 @@ function SignupPageInner() {
       <div className="hidden lg:block relative bg-[var(--color-navy)] overflow-hidden">
         <Image
           src="/auth-signup-bg.jpg"
-          alt="Botify.ai Authentication"
+          alt="ChatFlyr Authentication"
           fill
           className="object-cover object-center opacity-90"
           priority

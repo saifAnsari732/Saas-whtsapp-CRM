@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
-  const { profile, accountRole } = useAuth();
+  const { profile, isSuperAdmin } = useAuth();
   const { status, plan, daysRemaining, trialEndsAt, subscriptionExpiresAt, currentPlanLimits } = useSubscription();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -93,11 +93,9 @@ export default function ProfilePage() {
           <div className="text-center sm:text-left flex-1 space-y-2">
             <div className="flex flex-col sm:flex-row items-center gap-3">
               <h2 className="text-2xl font-bold">{profile.full_name || 'Anonymous User'}</h2>
-              <Badge variant="secondary" className="flex items-center gap-1 capitalize">
-                {accountRole === 'owner' ? <Shield className="h-3 w-3" /> : 
-                 accountRole === 'admin' ? <UserCog className="h-3 w-3" /> : 
-                 <UserIcon className="h-3 w-3" />}
-                {accountRole}
+              <Badge variant="secondary" className="flex items-center gap-1.5 capitalize font-semibold">
+                {isSuperAdmin ? <Shield className="h-3.5 w-3.5 text-purple-600" /> : <UserIcon className="h-3.5 w-3.5 text-emerald-600" />}
+                {isSuperAdmin ? 'Admin' : 'User'}
               </Badge>
             </div>
             <p className="text-muted-foreground">{profile.email}</p>

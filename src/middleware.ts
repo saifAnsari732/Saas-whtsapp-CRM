@@ -85,31 +85,70 @@ export async function middleware(request: NextRequest) {
     )
   }
 
-  // Subscription enforcement for API routes
-  if (user && request.nextUrl.pathname.startsWith('/api/')) {
+  // Subscription enforcement for both Pages and API routes
+  if (user) {
+    const pathname = request.nextUrl.pathname;
+    
+    // Always accessible regardless of subscription
+    const isExempt = 
+      pathname.startsWith('/billing') ||
+      pathname.startsWith('/settings') ||
+      pathname.startsWith('/profile') ||
+      pathname.startsWith('/api/billing') ||
+      pathname.startsWith('/api/auth') ||
+      pathname.startsWith('/api/whatsapp/webhook');
+
+    const GATED_PAGES = [
+      '/dashboard',
+      '/inbox',
+      '/broadcasts',
+      '/automations',
+      '/contacts',
+      '/pipelines',
+      '/flows',
+      '/keyword-flows',
+      '/agents'
+    ];
+
     const SUBSCRIPTION_GATED_API = [
       '/api/whatsapp/send',
       '/api/broadcasts',
       '/api/automations',
       '/api/contacts',
       '/api/flows',
+      '/api/keyword-flows',
     ];
 
-    const isGatedApi = SUBSCRIPTION_GATED_API.some(path => request.nextUrl.pathname.startsWith(path));
+    const isGatedPage = !isExempt && GATED_PAGES.some(path => pathname.startsWith(path));
+    const isGatedApi = !isExempt && SUBSCRIPTION_GATED_API.some(path => pathname.startsWith(path));
 
-    if (isGatedApi) {
-      // 1. Query profiles to get account_id and account_role
+    if (isGatedPage || isGatedApi) {
+      // 1. Query profile to get account_id, role and email
       const { data: profile } = await supabase
         .from('profiles')
-        .select('account_id, account_role')
+        .select('account_id, account_role, role, email')
         .eq('user_id', user.id)
         .single();
+
+      const ADMIN_EMAILS = [
+        'ansarisaifuddin732@gmail.com',
+        'kisandeveloper2@gmail.com',
+        ...(process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()) : []),
+        ...(process.env.NEXT_PUBLIC_ADMIN_EMAILS ? process.env.NEXT_PUBLIC_ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()) : [])
+      ];
+
+      const isPlatformAdmin = profile?.role === 'admin' || profile?.role === 'superadmin' || (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
+
+      // Platform admins have unconditional full access
+      if (isPlatformAdmin) {
+        return withRefreshedCookies(NextResponse.next());
+      }
 
       if (profile?.account_id) {
         // Query accounts for subscription_status and trial_ends_at
         const { data: account } = await supabase
           .from('accounts')
-          .select('subscription_status, subscription_plan, trial_ends_at, subscription_expires_at')
+          .select('subscription_status, subscription_plan, trial_ends_at, subscription_expires_at, created_at')
           .eq('id', profile.account_id)
           .single();
 
@@ -126,30 +165,41 @@ export async function middleware(request: NextRequest) {
             } else {
               isActive = true;
             }
-          } else if (account.subscription_status === 'trial') {
-            if (account.trial_ends_at) {
-              const trialEndsAt = new Date(account.trial_ends_at);
-              if (trialEndsAt > now) {
-                isActive = true;
-              }
+          } else {
+            let trialEndsAt = account.trial_ends_at ? new Date(account.trial_ends_at) : null;
+            if (!trialEndsAt && account.created_at) {
+              trialEndsAt = new Date(new Date(account.created_at).getTime() + 5 * 24 * 60 * 60 * 1000);
+            }
+            if (trialEndsAt && trialEndsAt > now) {
+              isActive = true;
+            } else if (!trialEndsAt) {
+              // Safety fallback for new accounts
+              isActive = true;
             }
           }
 
-            // 4. If expired: return JSON error
-            if (!isActive) {
+          // If trial or subscription is expired, block access and redirect to billing
+          if (!isActive) {
+            if (isGatedApi) {
               return withRefreshedCookies(
                 NextResponse.json({
                   error: "Subscription required",
                   code: "SUBSCRIPTION_EXPIRED",
-                  message: "Your trial has expired. Please upgrade to continue.",
+                  message: "Your trial has expired. Please upgrade your plan to continue.",
                   upgrade_url: "/billing"
                 }, { status: 403 })
-              )
+              );
+            } else {
+              const url = request.nextUrl.clone();
+              url.pathname = '/billing';
+              url.search = '?expired=true';
+              return withRefreshedCookies(NextResponse.redirect(url));
             }
           }
         }
       }
     }
+  }
 
   return supabaseResponse
 }

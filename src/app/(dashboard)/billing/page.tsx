@@ -101,6 +101,7 @@ const DEFAULT_PLANS = [
 export default function BillingPage() {
   const [currentPlan, setCurrentPlan] = useState("starter");
   const [trialStatus, setTrialStatus] = useState<"active" | "expired" | "none">("active");
+  const [subData, setSubData] = useState<any>(null);
   const [walletBalance, setWalletBalance] = useState(150);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [plansData, setPlansData] = useState(DEFAULT_PLANS);
@@ -134,6 +135,7 @@ export default function BillingPage() {
           setPlansData(plansRes.value);
         }
         if (subRes.status === 'fulfilled' && subRes.value) {
+          setSubData(subRes.value);
           setCurrentPlan(subRes.value.plan || "starter");
           setTrialStatus(subRes.value.status === 'trial' ? "active" : subRes.value.status === 'expired' ? "expired" : "none");
         }
@@ -248,33 +250,142 @@ export default function BillingPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-[1400px] space-y-12">
       
-      {/* 1. Trial / Subscription Status Banner */}
-      <section>
+      {/* 1. Trial / Subscription Status Banner & What You Can Do */}
+      <section className="space-y-6">
         {trialStatus === "active" && (
-          <div className="bg-gradient-to-r from-[#128C7E] to-[#25D366] text-white p-4 rounded-xl flex items-center justify-between shadow-md">
-            <div className="flex items-center gap-3">
-              <Sparkles className="h-6 w-6" />
-              <span className="font-semibold text-lg">🎉 You're on a 7-day free trial! 5 days remaining</span>
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg border border-emerald-500/30">
+            <div className="flex items-start md:items-center gap-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md shadow-inner">
+                <Sparkles className="h-5 w-5 text-yellow-300" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base md:text-lg">🎉 5-Day Free Trial Active! (All Features Unlocked)</h3>
+                <p className="text-xs md:text-sm text-emerald-100">
+                  You have full unlimited access to Bulk Broadcasts, WhatsApp Cloud API, QR Coexistence, Automations, AI & Shared Inbox ({subData?.daysRemaining ?? 5} days remaining).
+                </p>
+              </div>
             </div>
-            <Button variant="secondary" className="bg-white text-[#128C7E] hover:bg-gray-100 font-bold" onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>
-              Upgrade Now
+            <Button 
+              variant="secondary" 
+              className="bg-white text-emerald-800 hover:bg-emerald-50 font-extrabold shadow-sm shrink-0" 
+              onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
+            >
+              Choose a Plan →
             </Button>
           </div>
         )}
         
         {trialStatus === "expired" && (
-          <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white p-4 rounded-xl flex items-center gap-3 shadow-md">
-            <Shield className="h-6 w-6" />
-            <span className="font-semibold text-lg">⚠️ Your trial has expired. Choose a plan to continue.</span>
+          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg border border-red-500/30">
+            <div className="flex items-start md:items-center gap-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md shadow-inner">
+                <Shield className="h-5 w-5 text-yellow-300" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base md:text-lg">⚠️ Your 5-Day Free Trial Has Ended</h3>
+                <p className="text-xs md:text-sm text-red-100">
+                  All messaging, broadcasts, automations & coexistence actions are currently locked. Upgrade to an active plan below to resume messaging.
+                </p>
+              </div>
+            </div>
+            <Button 
+              variant="secondary" 
+              className="bg-white text-red-700 hover:bg-red-50 font-extrabold shadow-sm shrink-0" 
+              onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
+            >
+              Upgrade Plan Now →
+            </Button>
           </div>
         )}
 
         {trialStatus === "none" && (
-          <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-xl flex items-center gap-3 shadow-sm">
-            <Check className="h-6 w-6 text-[#25D366]" />
-            <span className="font-medium text-lg">✅ You're on the <span className="font-bold capitalize">{currentPlan}</span> plan</span>
+          <div className="bg-gradient-to-r from-emerald-500/10 via-background to-teal-500/10 border border-emerald-500/30 text-foreground p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600">
+                <Check className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base capitalize">Active Subscription: {currentPlan} Plan</h3>
+                <p className="text-xs text-muted-foreground">
+                  Your business account has full paid access to your plan features and monthly quotas.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold px-3 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 rounded-full">
+                Active
+              </span>
+            </div>
           </div>
         )}
+
+        {/* Feature Permissions / What You Can Do Card */}
+        <div className="bg-card rounded-2xl border border-border/70 p-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-4 mb-5">
+            <div>
+              <h3 className="text-base font-bold text-foreground">Your Plan Capabilities & Feature Permissions</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Summary of what features your account can access under this tier.</p>
+            </div>
+            <span className="text-xs font-extrabold uppercase tracking-wider px-2.5 py-1 bg-primary/10 text-primary rounded-md self-start sm:self-auto">
+              Tier: {trialStatus === 'active' ? 'Full Trial' : currentPlan}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/50">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              <span className="font-medium">Meta Cloud API</span>
+            </div>
+            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan !== 'starter' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
+              {trialStatus === 'active' || currentPlan !== 'starter' ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              ) : (
+                <X className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+              <span className="font-medium">QR Coexistence</span>
+            </div>
+            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/50">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              <span className="font-medium">Live Shared Inbox</span>
+            </div>
+            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan !== 'starter' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
+              {trialStatus === 'active' || currentPlan !== 'starter' ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              ) : (
+                <X className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+              <span className="font-medium">Bulk Broadcasts</span>
+            </div>
+            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan !== 'starter' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
+              {trialStatus === 'active' || currentPlan !== 'starter' ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              ) : (
+                <X className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+              <span className="font-medium">Automations</span>
+            </div>
+            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
+              {trialStatus === 'active' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone' ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              ) : (
+                <X className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+              <span className="font-medium">Visual Flow Builder</span>
+            </div>
+            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
+              {trialStatus === 'active' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone' ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              ) : (
+                <X className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+              <span className="font-medium">AI Smart Reply</span>
+            </div>
+            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/50">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              <span className="font-medium">Contacts Management</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* 2. Pricing Plans Section */}

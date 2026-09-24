@@ -1,0 +1,30 @@
+[
+  {
+    "id": "db3a697e-4160-4809-9667-971f556b9a37",
+    "user_id": "833e936e-29ff-4fb3-82e0-1c35cb6216f6",
+    "name": "FAQ bot",
+    "description": "Answer common questions automatically. Customer picks a topic from a list; the bot replies with the answer and ends.",
+    "status": "draft",
+    "trigger_type": "keyword",
+    "trigger_config": {
+      "keywords": [
+        "faq",
+        "question",
+        "info"
+      ],
+      "match_type": "contains"
+    },
+    "entry_node_id": "start",
+    "fallback_policy": {
+      "on_exhaust": "handoff",
+      "max_reprompts": 2,
+      "on_timeout_hours": 24,
+      "on_unknown_reply": "reprompt"
+    },
+    "execution_count": 0,
+    "last_executed_at": null,
+    "created_at": "2026-07-27T09:23:12.810451+00:00",
+    "updated_at": "2026-07-27T09:23:12.810451+00:00",
+    "account_id": "61740bf8-b21e-42dd-9ab3-9118bca90bc6"
+  }
+]

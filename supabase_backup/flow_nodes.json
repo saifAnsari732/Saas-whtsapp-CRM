@@ -1,0 +1,120 @@
+[
+  {
+    "id": "660e5d0f-3435-4eaa-b8ac-1097b113e2a3",
+    "flow_id": "db3a697e-4160-4809-9667-971f556b9a37",
+    "node_key": "start",
+    "node_type": "start",
+    "config": {
+      "next_node_key": "topics"
+    },
+    "position_x": 0,
+    "position_y": 0,
+    "created_at": "2026-07-27T09:23:13.076398+00:00"
+  },
+  {
+    "id": "51784617-627c-48ee-a3fd-d3b994d995a5",
+    "flow_id": "db3a697e-4160-4809-9667-971f556b9a37",
+    "node_key": "topics",
+    "node_type": "send_list",
+    "config": {
+      "text": "What can I help you with?",
+      "sections": [
+        {
+          "rows": [
+            {
+              "title": "Opening hours",
+              "reply_id": "hours",
+              "next_node_key": "answer_hours"
+            },
+            {
+              "title": "Pricing",
+              "reply_id": "pricing",
+              "next_node_key": "answer_pricing"
+            },
+            {
+              "title": "Refund policy",
+              "reply_id": "refunds",
+              "next_node_key": "answer_refunds"
+            }
+          ],
+          "title": "Common questions"
+        },
+        {
+          "rows": [
+            {
+              "title": "Talk to a human",
+              "reply_id": "human",
+              "next_node_key": "human_handoff"
+            }
+          ],
+          "title": "Other"
+        }
+      ],
+      "button_label": "View topics"
+    },
+    "position_x": 0,
+    "position_y": 0,
+    "created_at": "2026-07-27T09:23:13.076398+00:00"
+  },
+  {
+    "id": "e556441c-acc0-44c6-8594-1e5a713b41f8",
+    "flow_id": "db3a697e-4160-4809-9667-971f556b9a37",
+    "node_key": "answer_hours",
+    "node_type": "send_message",
+    "config": {
+      "text": "We're open Mon–Fri, 9am–6pm local time. Weekend support is limited to urgent issues.",
+      "next_node_key": "end"
+    },
+    "position_x": 0,
+    "position_y": 0,
+    "created_at": "2026-07-27T09:23:13.076398+00:00"
+  },
+  {
+    "id": "06e09679-5965-4763-982c-8240801e30dd",
+    "flow_id": "db3a697e-4160-4809-9667-971f556b9a37",
+    "node_key": "answer_pricing",
+    "node_type": "send_message",
+    "config": {
+      "text": "Our pricing starts at $9/mo. Visit https://example.com/pricing for the full breakdown.",
+      "next_node_key": "end"
+    },
+    "position_x": 0,
+    "position_y": 0,
+    "created_at": "2026-07-27T09:23:13.076398+00:00"
+  },
+  {
+    "id": "37617d04-d4f2-4d0f-a3ae-1d6c276af918",
+    "flow_id": "db3a697e-4160-4809-9667-971f556b9a37",
+    "node_key": "answer_refunds",
+    "node_type": "send_message",
+    "config": {
+      "text": "Refunds are honored within 30 days of purchase. Reply with your order number and we'll process it.",
+      "next_node_key": "end"
+    },
+    "position_x": 0,
+    "position_y": 0,
+    "created_at": "2026-07-27T09:23:13.076398+00:00"
+  },
+  {
+    "id": "694eda18-a8de-4fee-8e69-110385b5e3ea",
+    "flow_id": "db3a697e-4160-4809-9667-971f556b9a37",
+    "node_key": "human_handoff",
+    "node_type": "handoff",
+    "config": {
+      "note": "Customer asked to talk to a human from the FAQ bot."
+    },
+    "position_x": 0,
+    "position_y": 0,
+    "created_at": "2026-07-27T09:23:13.076398+00:00"
+  },
+  {
+    "id": "8b6ed79c-7b4b-4662-9908-c8746b9322c0",
+    "flow_id": "db3a697e-4160-4809-9667-971f556b9a37",
+    "node_key": "end",
+    "node_type": "end",
+    "config": {},
+    "position_x": 0,
+    "position_y": 0,
+    "created_at": "2026-07-27T09:23:13.076398+00:00"
+  }
+]

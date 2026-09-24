@@ -1,0 +1,54 @@
+[
+  {
+    "id": "5be8f3ad-cd05-4ec3-827a-4cf7015e9757",
+    "user_id": "f0f30bb1-d386-454e-a164-8d5b6be30206",
+    "full_name": "KISAN GROUPS",
+    "email": "kisangroups01@gmail.com",
+    "avatar_url": null,
+    "role": "user",
+    "created_at": "2026-09-09T09:23:46.027085+00:00",
+    "updated_at": "2026-09-09T09:23:46.027085+00:00",
+    "beta_features": [],
+    "account_id": "afd2d24f-5907-4c20-9a68-1c97f861bef7",
+    "account_role": "owner"
+  },
+  {
+    "id": "9898d674-72c4-4cd6-bf38-4a8a47bc7cb5",
+    "user_id": "d6c45f1e-f0c0-4c7d-90a0-00e2ab0d1453",
+    "full_name": "KISAN CHOICE",
+    "email": "ecokisanchoice@gmail.com",
+    "avatar_url": null,
+    "role": "user",
+    "created_at": "2026-09-24T07:59:20.05954+00:00",
+    "updated_at": "2026-09-24T07:59:20.05954+00:00",
+    "beta_features": [],
+    "account_id": "9101a5e6-c7cc-4942-bd5a-8b7c70c778e2",
+    "account_role": "owner"
+  },
+  {
+    "id": "c29956a8-9434-4754-87e1-c858b38372eb",
+    "user_id": "1e0aae03-ca03-4c08-9a0b-e60304307456",
+    "full_name": "saif Ansari",
+    "email": "ansarisaifuddin732@gmail.com",
+    "avatar_url": null,
+    "role": "admin",
+    "created_at": "2026-08-18T10:15:51.804722+00:00",
+    "updated_at": "2026-09-24T08:17:09.764315+00:00",
+    "beta_features": [],
+    "account_id": "ad6e5894-7670-4e9c-843a-366f59b7a04c",
+    "account_role": "owner"
+  },
+  {
+    "id": "7080d054-2933-4613-8ab2-0204b59961bb",
+    "user_id": "833e936e-29ff-4fb3-82e0-1c35cb6216f6",
+    "full_name": "saif",
+    "email": "kisandeveloper2@gmail.com",
+    "avatar_url": "https://yjurmdwekyqigdqyihyk.supabase.co/storage/v1/object/public/avatars/833e936e-29ff-4fb3-82e0-1c35cb6216f6/avatar-1785146607550.png",
+    "role": "admin",
+    "created_at": "2026-07-24T12:15:59.71373+00:00",
+    "updated_at": "2026-09-24T08:17:10.263545+00:00",
+    "beta_features": [],
+    "account_id": "61740bf8-b21e-42dd-9ab3-9118bca90bc6",
+    "account_role": "owner"
+  }
+]

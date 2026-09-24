@@ -24,7 +24,7 @@ export function GlobalSearch() {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const router = useRouter();
-  const { accountRole } = useAuth();
+  const { isSuperAdmin } = useAuth();
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -42,7 +42,7 @@ export function GlobalSearch() {
     router.push(href);
   };
 
-  const actions = QUICK_ACTIONS.filter(a => !a.ownerOnly || accountRole === 'owner');
+  const actions = QUICK_ACTIONS.filter(a => !a.ownerOnly || isSuperAdmin);
 
   const filteredActions = actions.filter(a => a.label.toLowerCase().includes(query.toLowerCase()));
 

@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Lock, CheckCircle2, MessageCircle, Users, Send } from "lucide-react";
@@ -8,7 +11,21 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 
 export function SubscriptionGate({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const { isSuperAdmin } = useAuth();
   const { isActive, loading, status, trialUsage, isOwner } = useSubscription();
+
+  // If expired, automatically redirect to billing page
+  useEffect(() => {
+    if (!loading && !isActive && !isSuperAdmin) {
+      router.replace('/billing?expired=true');
+    }
+  }, [loading, isActive, isSuperAdmin, router]);
+
+  // Platform admin has all powers and full access without restrictions
+  if (isSuperAdmin) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (
@@ -21,18 +38,18 @@ export function SubscriptionGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Owner is never blocked
-  if (isActive || isOwner) {
+  // Only active subscriptions or active trials proceed
+  if (isActive) {
     return <>{children}</>;
   }
 
   const title = status === 'expired' && !status.includes('trial') 
     ? "Subscription Expired" 
-    : "Your trial has expired";
+    : "Your 5-Day Trial Has Expired";
     
   const description = status === 'expired' && !status.includes('trial')
     ? "Your subscription has ended. Please renew to continue using all features."
-    : "Your 7-day free trial has come to an end. Purchase a plan to keep growing your business.";
+    : "Your 5-day free trial has come to an end. Purchase a plan to keep growing your business and unlock messaging.";
 
   return (
     <div className="flex min-h-[80vh] w-full items-center justify-center bg-gradient-to-br from-background via-muted/30 to-muted/80 p-4">

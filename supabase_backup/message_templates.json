@@ -1,0 +1,187 @@
+[
+  {
+    "id": "7e3de365-7dcf-4037-8236-6e1d6c554657",
+    "user_id": "833e936e-29ff-4fb3-82e0-1c35cb6216f6",
+    "name": "tech_mine",
+    "category": "Marketing",
+    "language": "en",
+    "header_type": "image",
+    "header_content": null,
+    "body_text": "_Namaste!  Sir_\n*Apne business ko digital banane ka sahi mauka yahi hai. TechMine Solution* ke saath payein top-tier digital services:\n✅Website Design: Aapki pehchan online banayein.\n✅App Development: Customers ke liye mobile access asan karein.\n✅AI Chatbot: 24/7 customer support automation.\nAaj hi shuru karein!",
+    "footer_text": null,
+    "buttons": [
+      {
+        "text": "Call phone number",
+        "type": "PHONE_NUMBER",
+        "phone_number": "+919905234866"
+      },
+      {
+        "url": "https://www.techmine.online/",
+        "text": "Visit website",
+        "type": "URL"
+      },
+      {
+        "text": "WhatsApp Official API",
+        "type": "QUICK_REPLY"
+      },
+      {
+        "text": "Website / App  Development",
+        "type": "QUICK_REPLY"
+      },
+      {
+        "text": "WhatsApp-chat Bot",
+        "type": "QUICK_REPLY"
+      },
+      {
+        "text": "Ai-Agent",
+        "type": "QUICK_REPLY"
+      }
+    ],
+    "status": "APPROVED",
+    "created_at": "2026-07-29T06:04:09.136821+00:00",
+    "updated_at": "2026-08-20T12:33:39.173509+00:00",
+    "sample_values": null,
+    "meta_template_id": "1711293676584140",
+    "rejection_reason": null,
+    "quality_score": null,
+    "header_handle": "https://scontent.whatsapp.net/v/t61.29466-34/691022611_1711293679917473_3991409540543614521_n.png?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=lHjNeBKXfQ8Q7kNvwG19-MM&_nc_oc=AdrDcZIlhj5Mp8SzeDMiF1_OHpoA6pvlmnZcQ6hbgIhFs7nqMTp_uxS0x-xmXMj-KEQ&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=FlGm-hPhpkR0INAjDfbdYw&_nc_tpa=Q5bMBQKSb3xczSQLwTkoKQNbfouNMmuGxtZQGKarbDMHXtYlIAbTSxarFeVYq8kmKOzogzytjV4qCOW7Ww&oh=01_Q5Aa5QE8mUAfNyv5P7v8licM9f7AhH2tN4MTEamdBN5kWOXJ6Q&oe=6AAE5217",
+    "header_media_url": "https://yjurmdwekyqigdqyihyk.supabase.co/storage/v1/object/public/chat-media/account-61740bf8-b21e-42dd-9ab3-9118bca90bc6/1785306525890-ChatGPT_Image_Jul_20_2026_06_16_03_PM.png",
+    "submission_error": null,
+    "last_submitted_at": null,
+    "account_id": "61740bf8-b21e-42dd-9ab3-9118bca90bc6",
+    "cards": null
+  },
+  {
+    "id": "81e9aff6-d7b7-45be-9dc2-d04b4386eb67",
+    "user_id": "833e936e-29ff-4fb3-82e0-1c35cb6216f6",
+    "name": "kisan_digital",
+    "category": "Marketing",
+    "language": "en",
+    "header_type": "image",
+    "header_content": null,
+    "body_text": "Namaste {{1}}! 🙏\nApne Business ko Online le jane ka waqt aa gaya hai! 🚀\nKisan India Plus aapke liye laya hai best Digital Solutions:\n✅ Custom Website Design\n✅ Mobile App Development\n✅ WhatsApp AI Chatbot",
+    "footer_text": null,
+    "buttons": [
+      {
+        "text": "Call phone number",
+        "type": "PHONE_NUMBER",
+        "phone_number": "+919511450928"
+      },
+      {
+        "url": "https://www.kisandigital.org/",
+        "text": "Visit website",
+        "type": "URL"
+      },
+      {
+        "text": "Website/ App Development",
+        "type": "QUICK_REPLY"
+      },
+      {
+        "text": "Ai-Chat Bot",
+        "type": "QUICK_REPLY"
+      },
+      {
+        "text": "WhatsApp Auto-reply Automation",
+        "type": "QUICK_REPLY"
+      }
+    ],
+    "status": "APPROVED",
+    "created_at": "2026-07-27T09:20:55.793765+00:00",
+    "updated_at": "2026-08-20T12:33:40.420086+00:00",
+    "sample_values": {
+      "body": [
+        "saif"
+      ]
+    },
+    "meta_template_id": "2124758734756977",
+    "rejection_reason": null,
+    "quality_score": null,
+    "header_handle": "https://scontent.whatsapp.net/v/t61.29466-34/643607618_2124758738090310_7480279669656021254_n.png?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=apAl9fNHvmwQ7kNvwG8XMuB&_nc_oc=AdrFEbLfDn8KuUwhNmfw8fpfqqrMf-Wv3TnBOMqZ8xHz5Ha3ifyoYlou904fbVkvrCI&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=FlGm-hPhpkR0INAjDfbdYw&_nc_tpa=Q5bMBQJ8DG8UnPscN1r0Taol9_DhDZTU2pS7OiXUa99J8pHGsvMaXyTEpALXlf7yD8nA3IzJ-dukUVi_ug&oh=01_Q5Aa5QGy8Ln6JXomcp62PINPWa2k1mzNdhkZOCZO603KlIfcVA&oe=6AAE6239",
+    "header_media_url": null,
+    "submission_error": null,
+    "last_submitted_at": null,
+    "account_id": "61740bf8-b21e-42dd-9ab3-9118bca90bc6",
+    "cards": null
+  },
+  {
+    "id": "cdb60009-cc84-4730-be41-55f800c6fe35",
+    "user_id": "833e936e-29ff-4fb3-82e0-1c35cb6216f6",
+    "name": "hello_world",
+    "category": "Utility",
+    "language": "en_US",
+    "header_type": "text",
+    "header_content": "Hello World",
+    "body_text": "Welcome and congratulations!! This message demonstrates your ability to send a WhatsApp message notification from the Cloud API, hosted by Meta. Thank you for taking the time to test with us.",
+    "footer_text": "WhatsApp Business Platform sample message",
+    "buttons": null,
+    "status": "APPROVED",
+    "created_at": "2026-08-20T12:33:40.845709+00:00",
+    "updated_at": "2026-08-20T12:33:40.484+00:00",
+    "sample_values": null,
+    "meta_template_id": "1586568289813065",
+    "rejection_reason": null,
+    "quality_score": null,
+    "header_handle": null,
+    "header_media_url": null,
+    "submission_error": null,
+    "last_submitted_at": null,
+    "account_id": "61740bf8-b21e-42dd-9ab3-9118bca90bc6",
+    "cards": null
+  },
+  {
+    "id": "c85e09ae-1c3d-404b-b71a-8722f6c0f88c",
+    "user_id": "833e936e-29ff-4fb3-82e0-1c35cb6216f6",
+    "name": "kisan_choice",
+    "category": "Marketing",
+    "language": "en",
+    "header_type": "image",
+    "header_content": null,
+    "body_text": "Hello 👋{{1}}\nBusiness Ka *Sunahara Mauka!* 🚀\nApne business ko naye level par le jaane ka mauka!\nKisan Choice Pvt. Ltd. ke saath judkar banaye ek strong aur profitable business partnership. 🤝\n\n✅ Distributors\n✅ Traders\n✅ Super Stockists\n✅ Regional Super Stockists\nWhy partner with us?\n• Quality FMCG Oil Products\n• Attractive Business Opportunities\n• Wide Distribution Network",
+    "footer_text": null,
+    "buttons": [
+      {
+        "text": "Call phone number",
+        "type": "PHONE_NUMBER",
+        "phone_number": "+916390049995"
+      },
+      {
+        "url": "https://www.kisangroups.co.in/",
+        "text": "Visit website",
+        "type": "URL"
+      },
+      {
+        "text": "Traders / Distributor",
+        "type": "QUICK_REPLY"
+      },
+      {
+        "text": "Distt  Super Stockist",
+        "type": "QUICK_REPLY"
+      },
+      {
+        "text": "Regional Super Stockist",
+        "type": "QUICK_REPLY"
+      },
+      {
+        "text": "Super Stockist",
+        "type": "QUICK_REPLY"
+      }
+    ],
+    "status": "APPROVED",
+    "created_at": "2026-08-19T05:26:13.271346+00:00",
+    "updated_at": "2026-09-09T09:33:26.508307+00:00",
+    "sample_values": {
+      "body": [
+        "saif Ansari"
+      ]
+    },
+    "meta_template_id": "1407999197876933",
+    "rejection_reason": null,
+    "quality_score": null,
+    "header_handle": "https://scontent.whatsapp.net/v/t61.29466-34/691561704_1407999201210266_5927579952922679278_n.png?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=zjR3gloBJ-4Q7kNvwGe9dmN&_nc_oc=Adol1EOfS8YwLG7_8nzX1AFXzcB7BHk7N_HKvB8Zj4iG1Np6LLnqEA0RebPaX7B6O7g&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=FlGm-hPhpkR0INAjDfbdYw&_nc_tpa=Q5bMBQKH3kT33efQ4sjZx6Pc0FvzRe-MppasKWV8mdqMIGCwoNozhqgkKKKhufZYSFNLbR5ZDU3OUuTtpw&oh=01_Q5Aa5QESy0nTMcYAbf7OrwplvHiu2WfW04DNLt_zTCrPleCyBg&oe=6AAE50AD",
+    "header_media_url": "https://yjurmdwekyqigdqyihyk.supabase.co/storage/v1/object/public/chat-media/account-61740bf8-b21e-42dd-9ab3-9118bca90bc6/1787118576908-kisanchoice-WB_Templt.png",
+    "submission_error": "Invalid parameter",
+    "last_submitted_at": "2026-09-09T09:33:26.437+00:00",
+    "account_id": "61740bf8-b21e-42dd-9ab3-9118bca90bc6",
+    "cards": null
+  }
+]

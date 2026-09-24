@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { MessageTemplate } from '@/types';
 import { useBroadcastSending } from '@/hooks/use-broadcast-sending';
 import { uploadAccountMedia } from '@/lib/storage/upload-media';
+import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Settings, Users, MessageSquare, Clock, X, Loader2, Info, UploadCloud } from 'lucide-react';
+import { Settings, Users, MessageSquare, Clock, X, Loader2, Info, UploadCloud, Smartphone } from 'lucide-react';
 
 export default function NewBroadcastPage() {
   const router = useRouter();
@@ -397,312 +398,388 @@ export default function NewBroadcastPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div className="mx-auto max-w-4xl bg-background text-foreground pb-20 mt-6">
-      <div className="flex items-center justify-between mb-6 pb-4 border-b">
-        <h1 className="text-2xl font-bold">Create New Campaign</h1>
-        <Button variant="ghost" size="icon" onClick={() => router.push('/broadcasts')}>
-          <X className="h-5 w-5" />
-        </Button>
-      </div>
-
-      <div className="space-y-8">
-        
-        {/* Basic Information */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-2 text-primary font-semibold border-b pb-2">
-            <Settings className="h-5 w-5" />
-            <h2>Basic Information</h2>
+      <div className="w-full px-4 sm:px-8 py-6 pb-24 max-w-7xl mx-auto">
+        {/* Top Header Row */}
+        <div className="flex items-center justify-between mb-8 pb-4 border-b border-border/80">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+              <span>Create New Campaign</span>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                Bulk Broadcast
+              </span>
+            </h1>
+            <p className="text-xs text-muted-foreground mt-1">
+              Configure campaign details, select target contact groups, and schedule automatic dispatches.
+            </p>
           </div>
-          
-          <div className="space-y-2">
-            <Label>Campaign Name *</Label>
-            <Input 
-              placeholder="e.g., Summer Sale Campaign" 
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="bg-card"
-            />
-          </div>
-        </section>
+          <Button variant="outline" size="sm" onClick={() => router.push('/broadcasts')} className="gap-1.5 rounded-xl border-border/80">
+            <X className="h-4 w-4" />
+            <span>Cancel</span>
+          </Button>
+        </div>
 
-        {/* Recipients */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-2 text-primary font-semibold border-b pb-2">
-            <Users className="h-5 w-5" />
-            <h2>Recipients *</h2>
-          </div>
-          
-          <Tabs value={recipientMode} onValueChange={(v: any) => setRecipientMode(v)} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="group" className="data-[state=active]:bg-primary data-[state=active]:text-white">Select Group</TabsTrigger>
-              <TabsTrigger value="numbers" className="data-[state=active]:bg-primary data-[state=active]:text-white">Paste Numbers</TabsTrigger>
-            </TabsList>
-            <TabsContent value="group" className="flex items-center gap-2">
-              <Select value={groupId} onValueChange={(v) => setGroupId(v || '')}>
-                <SelectTrigger className="bg-card w-full">
-                  <SelectValue placeholder="Choose a contact group..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Contacts</SelectItem>
-                  {contactGroups.map(g => (
-                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button type="button" variant="outline" onClick={() => setIsGroupModalOpen(true)}>
-                + New Group
-              </Button>
-            </TabsContent>
-            <TabsContent value="numbers">
-              <Textarea 
-                placeholder="Paste numbers separated by commas or newlines... (e.g. 919876543210, 919876543211)" 
-                className="min-h-[100px] bg-card"
-                value={pastedNumbers}
-                onChange={(e) => setPastedNumbers(e.target.value)}
-              />
-            </TabsContent>
-          </Tabs>
-
-          <div className="mt-4 p-5 rounded-xl border bg-emerald-50/40 border-emerald-100 space-y-4">
-            <div className="flex items-center justify-between border-b border-emerald-100 pb-3">
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-                <Clock className="h-4 w-4 text-emerald-600" />
-                <span>When to Send? *</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Configuration Cards (2 Columns) */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* Section 1: Basic Information */}
+            <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold border-b border-border/60 pb-3">
+                <Settings className="h-4 w-4 text-rose-500" />
+                <h2 className="text-xs uppercase tracking-wider">1. Basic Information</h2>
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-foreground">Campaign Name *</Label>
+                <Input 
+                  placeholder="e.g., Summer Sale Offer Campaign" 
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="bg-background border-border/80 text-sm focus:border-rose-500 transition-colors"
+                />
               </div>
             </div>
 
-            <RadioGroup value={sendWhen} onValueChange={(v: any) => setSendWhen(v)}>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="immediately" id="immed" />
-                <Label htmlFor="immed" className="font-semibold flex flex-col cursor-pointer">
-                  Send Immediately
-                  <span className="text-xs text-muted-foreground font-normal">Campaign will start as soon as it's created</span>
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2 mt-2">
-                <RadioGroupItem value="later" id="later" />
-                <Label htmlFor="later" className="font-semibold flex flex-col cursor-pointer">
-                  Schedule for Later
-                  <span className="text-xs text-muted-foreground font-normal">Choose a specific date and time</span>
-                </Label>
-              </div>
-            </RadioGroup>
-
-            {sendWhen === 'later' && (
-              <Input type="datetime-local" className="max-w-xs mt-3 bg-white" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
-            )}
-
-            {/* Message Delay per Message (Anti-Ban Guard) */}
-            <div className="pt-4 border-t border-emerald-100 space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                  <span>Message Sending Delay (Interval)</span>
-                  <span className="text-xs font-normal text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Anti-Ban Protection</span>
-                </Label>
+            {/* Section 2: Target Recipients */}
+            <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold border-b border-border/60 pb-3">
+                <Users className="h-4 w-4 text-rose-500" />
+                <h2 className="text-xs uppercase tracking-wider">2. Target Audience & Recipients *</h2>
               </div>
               
-              <div className="flex items-center gap-3">
-                <Select value={String(sendDelaySeconds)} onValueChange={(v) => setSendDelaySeconds(Number(v))}>
-                  <SelectTrigger className="w-48 bg-white font-medium border-emerald-200">
-                    <SelectValue placeholder="Select delay" />
+              <Tabs value={recipientMode} onValueChange={(v: any) => setRecipientMode(v)} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 p-1 bg-muted rounded-xl mb-4">
+                  <TabsTrigger value="group" className="rounded-lg font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs">Select Contact Group</TabsTrigger>
+                  <TabsTrigger value="numbers" className="rounded-lg font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs">Paste Direct Numbers</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="group" className="mt-0">
+                  <div className="flex items-center gap-2">
+                    <Select value={groupId} onValueChange={(v) => setGroupId(v || '')}>
+                      <SelectTrigger className="bg-background border-border/80 w-full">
+                        <SelectValue placeholder="Choose a contact group..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">⚡ All Contacts</SelectItem>
+                        {contactGroups.map(g => (
+                          <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button type="button" variant="outline" onClick={() => setIsGroupModalOpen(true)} className="shrink-0 font-semibold text-xs">
+                      + New Group
+                    </Button>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="numbers" className="mt-0">
+                  <Textarea 
+                    placeholder="Paste numbers separated by commas or newlines... (e.g. 919876543210, 919876543211)" 
+                    className="min-h-[100px] bg-background border-border/80 font-mono text-xs"
+                    value={pastedNumbers}
+                    onChange={(e) => setPastedNumbers(e.target.value)}
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* Section 3: Dispatch Timing & Delay */}
+            <div className="bg-rose-500/5 border border-rose-500/20 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-rose-500/20 pb-3">
+                <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-xs uppercase tracking-wider">
+                  <Clock className="h-4 w-4 text-rose-500" />
+                  <span>3. Dispatch Timing & Anti-Ban Protection *</span>
+                </div>
+              </div>
+
+              <RadioGroup value={sendWhen} onValueChange={(v: any) => setSendWhen(v)} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className={cn(
+                  "flex items-start space-x-3 p-3.5 rounded-xl border transition-all cursor-pointer",
+                  sendWhen === 'immediately' ? "bg-background border-rose-500 ring-1 ring-rose-500/40 shadow-xs" : "bg-card border-border/60 hover:border-border"
+                )}>
+                  <RadioGroupItem value="immediately" id="immed" className="mt-0.5" />
+                  <Label htmlFor="immed" className="font-semibold text-xs cursor-pointer space-y-1">
+                    <span className="block text-foreground font-bold">Send Immediately</span>
+                    <span className="text-[11px] text-muted-foreground font-normal block">Campaign starts dispatching right after creation</span>
+                  </Label>
+                </div>
+
+                <div className={cn(
+                  "flex items-start space-x-3 p-3.5 rounded-xl border transition-all cursor-pointer",
+                  sendWhen === 'later' ? "bg-background border-rose-500 ring-1 ring-rose-500/40 shadow-xs" : "bg-card border-border/60 hover:border-border"
+                )}>
+                  <RadioGroupItem value="later" id="later" className="mt-0.5" />
+                  <Label htmlFor="later" className="font-semibold text-xs cursor-pointer space-y-1">
+                    <span className="block text-foreground font-bold">Schedule for Later</span>
+                    <span className="text-[11px] text-muted-foreground font-normal block">Choose custom date & time slot</span>
+                  </Label>
+                </div>
+              </RadioGroup>
+
+              {sendWhen === 'later' && (
+                <div className="pt-2">
+                  <Label className="text-xs font-semibold text-foreground mb-1.5 block">Select Schedule Date & Time</Label>
+                  <Input type="datetime-local" className="bg-background max-w-sm border-border/80" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-rose-500/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="font-bold text-foreground text-xs flex items-center gap-2">
+                    <span>Message Interval (Anti-Ban Protection)</span>
+                    <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/30 px-2 py-0.5 rounded-full">Anti-Ban Guard</span>
+                  </Label>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <Select value={String(sendDelaySeconds)} onValueChange={(v) => setSendDelaySeconds(Number(v))}>
+                    <SelectTrigger className="w-52 bg-background font-semibold border-border/80 text-xs">
+                      <SelectValue placeholder="Select delay" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 Second (Fast)</SelectItem>
+                      <SelectItem value="2">2 Seconds</SelectItem>
+                      <SelectItem value="3">3 Seconds (Recommended)</SelectItem>
+                      <SelectItem value="5">5 Seconds (Safe)</SelectItem>
+                      <SelectItem value="10">10 Seconds (Very Safe)</SelectItem>
+                      <SelectItem value="15">15 Seconds (Extra Safe)</SelectItem>
+                      <SelectItem value="30">30 Seconds</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-[11px] text-muted-foreground font-medium">Wait {sendDelaySeconds}s between each message.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 4: WhatsApp Message Configuration */}
+            <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold border-b border-border/60 pb-3">
+                <MessageSquare className="h-4 w-4 text-rose-500" />
+                <h2 className="text-xs uppercase tracking-wider">4. Message Configuration & Template *</h2>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-foreground">Select WhatsApp Template *</Label>
+                <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v || '')} disabled={isLoadingTemplates}>
+                  <SelectTrigger className="bg-background border-border/80 font-medium">
+                    <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Choose an approved template..."} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">1 Second (Fast)</SelectItem>
-                    <SelectItem value="2">2 Seconds</SelectItem>
-                    <SelectItem value="3">3 Seconds (Recommended)</SelectItem>
-                    <SelectItem value="5">5 Seconds (Safe)</SelectItem>
-                    <SelectItem value="10">10 Seconds (Very Safe)</SelectItem>
-                    <SelectItem value="15">15 Seconds (Extra Safe)</SelectItem>
-                    <SelectItem value="30">30 Seconds</SelectItem>
+                    {templates.length === 0 && !isLoadingTemplates && (
+                      <SelectItem value="none" disabled>No approved templates found</SelectItem>
+                    )}
+                    {templates.map(t => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name} ({t.language})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                <span className="text-xs text-slate-500">Wait {sendDelaySeconds}s between each message dispatch.</span>
+                <p className="text-[11px] text-muted-foreground">Note: If template names appear as long identifiers, they correspond directly to approved WhatsApp Manager templates.</p>
               </div>
-            </div>
-          </div>
-        </section>
 
-        {/* Message Configuration */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-2 text-primary font-semibold border-b pb-2">
-            <MessageSquare className="h-5 w-5" />
-            <h2>Message Configuration</h2>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Select WhatsApp Template *</Label>
-            <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v || '')} disabled={isLoadingTemplates}>
-              <SelectTrigger className="bg-card">
-                <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Choose an approved template..."} />
-              </SelectTrigger>
-              <SelectContent>
-                {templates.length === 0 && !isLoadingTemplates && (
-                  <SelectItem value="none" disabled>No approved templates found</SelectItem>
-                )}
-                {templates.map(t => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {/* Fallback to showing ID if name is a UUID (happens if imported from 3rd party tools) */}
-                    {t.name} ({t.language})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">Note: If your template name looks like a long code (e.g. c85e09...), this is normal and comes directly from WhatsApp Manager.</p>
-          </div>
-
-          {selectedTemplate && (
-            <div className="bg-muted/30 p-4 rounded-lg mt-4 border text-sm text-muted-foreground whitespace-pre-wrap">
-              <strong>Template Preview:</strong><br/>
-              {selectedTemplate.body_text}
-            </div>
-          )}
-
-          {/* Variable Mapping UI */}
-          {selectedTemplate && placeholders.length > 0 && (
-            <div className="space-y-4 pt-4 border-t mt-4">
-              <div className="flex items-center gap-2 text-primary font-semibold">
-                <Settings className="h-4 w-4" />
-                <h3>Template Variables Personalization</h3>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Map placeholders (e.g. &#123;&#123;1&#125;&#125;) to contact fields or enter static values.
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {placeholders.map((ph) => {
-                  const key = ph.replace(/[\{\}]/g, '');
-                  const current = variables[key] || { type: 'field', value: 'name' };
-                  return (
-                    <div key={ph} className="p-3 border rounded-lg bg-card space-y-2">
-                      <div className="flex items-center justify-between font-bold text-xs">
-                        <span>Variable {ph}</span>
-                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
-                          {current.type === 'field' ? 'Contact Field' : current.type === 'custom_field' ? 'Custom Field' : 'Static Text'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Select
-                          value={current.type}
-                          onValueChange={(val: any) => {
-                            setVariables(prev => ({
-                              ...prev,
-                              [key]: { type: val, value: val === 'field' ? 'name' : '' }
-                            }));
-                          }}
-                        >
-                          <SelectTrigger className="text-xs h-8">
-                            <SelectValue placeholder="Type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="field">Contact Field</SelectItem>
-                            <SelectItem value="static">Static Text</SelectItem>
-                            <SelectItem value="custom_field">Custom Field</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        {current.type === 'field' ? (
-                          <Select
-                            value={current.value || 'name'}
-                            onValueChange={(val) => {
-                              if (val) {
+              {/* Variable Mapping UI */}
+              {selectedTemplate && placeholders.length > 0 && (
+                <div className="space-y-4 pt-4 border-t border-border/60">
+                  <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-xs">
+                    <Settings className="h-3.5 w-3.5 text-rose-500" />
+                    <h3>Template Variables Personalization</h3>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {placeholders.map((ph) => {
+                      const key = ph.replace(/[\{\}]/g, '');
+                      const current = variables[key] || { type: 'field', value: 'name' };
+                      return (
+                        <div key={ph} className="p-3 border border-border/80 rounded-xl bg-background space-y-2">
+                          <div className="flex items-center justify-between font-bold text-xs">
+                            <span>Variable {ph}</span>
+                            <span className="text-[10px] bg-rose-500/10 text-rose-600 border border-rose-500/30 px-2 py-0.5 rounded font-semibold">
+                              {current.type === 'field' ? 'Contact Field' : current.type === 'custom_field' ? 'Custom Field' : 'Static Text'}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Select
+                              value={current.type}
+                              onValueChange={(val: any) => {
                                 setVariables(prev => ({
                                   ...prev,
-                                  [key]: { type: 'field', value: val }
+                                  [key]: { type: val, value: val === 'field' ? 'name' : '' }
                                 }));
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="text-xs h-8">
-                              <SelectValue placeholder="Field" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="name">Name</SelectItem>
-                              <SelectItem value="phone">Phone Number</SelectItem>
-                              <SelectItem value="email">Email</SelectItem>
-                              <SelectItem value="company">Company</SelectItem>
-                            </SelectContent>
-                          </Select>
+                              }}
+                            >
+                              <SelectTrigger className="text-xs h-8 bg-card border-border/60">
+                                <SelectValue placeholder="Type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="field">Contact Field</SelectItem>
+                                <SelectItem value="static">Static Text</SelectItem>
+                                <SelectItem value="custom_field">Custom Field</SelectItem>
+                              </SelectContent>
+                            </Select>
+
+                            {current.type === 'field' ? (
+                              <Select
+                                value={current.value || 'name'}
+                                onValueChange={(val) => {
+                                  if (val) {
+                                    setVariables(prev => ({
+                                      ...prev,
+                                      [key]: { type: 'field', value: val }
+                                    }));
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="text-xs h-8 bg-card border-border/60">
+                                  <SelectValue placeholder="Field" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="name">Name</SelectItem>
+                                  <SelectItem value="phone">Phone Number</SelectItem>
+                                  <SelectItem value="email">Email</SelectItem>
+                                  <SelectItem value="company">Company</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                placeholder={current.type === 'static' ? "Static text..." : "Field ID..."}
+                                value={current.value || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setVariables(prev => ({
+                                    ...prev,
+                                    [key]: { type: current.type, value: val }
+                                  }));
+                                }}
+                                className="text-xs h-8 bg-card border-border/60"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {requiresMedia && (
+                <div className="space-y-3 pt-4 border-t border-border/60">
+                  <Label className="flex items-center gap-2 text-xs font-bold text-foreground">
+                    Header Media Attachment (Required)
+                  </Label>
+                  
+                  <div className="flex flex-col gap-3">
+                    <div className="flex gap-2">
+                      <Input 
+                        placeholder="https://example.com/image.jpg"
+                        value={headerMediaUrl}
+                        onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                        className="bg-background flex-1 text-xs"
+                      />
+                      
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept={selectedTemplate?.header_type === 'video' ? 'video/*' : selectedTemplate?.header_type === 'document' ? '.pdf,.doc,.docx' : 'image/*'}
+                        onChange={handleFileUpload}
+                      />
+                      <Button 
+                        type="button"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="gap-2 shrink-0 text-xs font-semibold"
+                      >
+                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                        Upload File
+                      </Button>
+                    </div>
+
+                    <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <Info className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
+                      <p>
+                        Paste a public URL or upload a file. 
+                        <strong className="text-rose-600 dark:text-rose-400 block mt-0.5">
+                          Uploaded media is saved directly into your account storage.
+                        </strong>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+
+          {/* Right Column: Live Message Preview & Campaign Trigger */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-6 bg-card border border-border/80 rounded-2xl p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                  <Smartphone className="h-4 w-4 text-rose-500" />
+                  Live Preview
+                </span>
+                <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  Real-time
+                </span>
+              </div>
+
+              {/* Message Bubble Card */}
+              <div className="bg-[#efeae2] dark:bg-slate-950 p-3 min-h-[260px] max-h-[380px] overflow-y-auto rounded-xl flex flex-col justify-end border border-slate-200 dark:border-slate-800">
+                {selectedTemplate ? (
+                  <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg p-3 shadow-xs text-xs space-y-2 max-w-[95%] self-start border border-slate-200 dark:border-slate-800 relative">
+                    {headerMediaUrl && (
+                      <div className="rounded-md overflow-hidden bg-slate-100 dark:bg-slate-800 max-h-32 flex items-center justify-center border border-slate-200">
+                        {selectedTemplate.header_type === 'video' ? (
+                          <video src={headerMediaUrl} controls className="w-full h-full object-cover" />
                         ) : (
-                          <Input
-                            placeholder={current.type === 'static' ? "Static text..." : "Field ID..."}
-                            value={current.value || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setVariables(prev => ({
-                                ...prev,
-                                [key]: { type: current.type, value: val }
-                              }));
-                            }}
-                            className="text-xs h-8"
-                          />
+                          <img src={headerMediaUrl} alt="Header Preview" className="w-full h-28 object-cover" />
                         )}
                       </div>
-                    </div>
-                  );
-                })}
+                    )}
+                    <p className="whitespace-pre-wrap font-sans leading-relaxed text-xs">
+                      {selectedTemplate.body_text}
+                    </p>
+                    {selectedTemplate.footer_text && (
+                      <p className="text-[10px] text-slate-400 border-t pt-1 font-medium">
+                        {selectedTemplate.footer_text}
+                      </p>
+                    )}
+                    <span className="text-[9px] text-slate-400 block text-right">
+                      12:00 PM
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-slate-400 dark:text-slate-600 text-xs">
+                    Select a WhatsApp Template on the left to preview message layout.
+                  </div>
+                )}
               </div>
-            </div>
-          )}
 
-          {requiresMedia && (
-            <div className="space-y-3 pt-4 border-t mt-4">
-              <Label className="flex items-center gap-2">
-                Media Attachment (Required)
-              </Label>
-              
-              <div className="flex flex-col gap-3">
-                <div className="flex gap-2">
-                  <Input 
-                    placeholder="https://example.com/image.jpg"
-                    value={headerMediaUrl}
-                    onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                    className="bg-card flex-1"
-                  />
-                  
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    accept={selectedTemplate?.header_type === 'video' ? 'video/*' : selectedTemplate?.header_type === 'document' ? '.pdf,.doc,.docx' : 'image/*'}
-                    onChange={handleFileUpload}
-                  />
-                  <Button 
-                    type="button"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="gap-2 shrink-0"
-                  >
-                    {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                    Upload File
-                  </Button>
-                </div>
-
-                <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <Info className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
-                  <p>
-                    You can either paste a URL or upload a file. 
-                    <strong className="text-primary block mt-1">
-                      Once uploaded, we will permanently link this file to this template so you don't have to upload it again next time!
-                    </strong>
-                  </p>
-                </div>
+              {/* Action Buttons */}
+              <div className="pt-2 border-t border-border/60 space-y-2">
+                <Button 
+                  onClick={handleSend} 
+                  disabled={isProcessing} 
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 text-xs shadow-xs rounded-xl transition-all"
+                >
+                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {isProcessing ? (sendWhen === 'later' ? 'Scheduling...' : 'Sending...') : (sendWhen === 'later' ? 'Schedule Campaign' : '🚀 Launch Campaign Now')}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => router.push('/broadcasts')}
+                  className="w-full text-xs font-semibold rounded-xl"
+                >
+                  Cancel
+                </Button>
               </div>
-            </div>
-          )}
-        </section>
-      </div>
 
-      {/* Footer Actions */}
-      <div className="mt-10 pt-6 border-t flex items-center justify-end gap-3 sticky bottom-0 bg-background/95 backdrop-blur z-10 py-4">
-        <Button variant="outline" onClick={() => router.push('/broadcasts')}>
-          Cancel
-        </Button>
-        <Button onClick={handleSend} disabled={isProcessing} className="bg-primary hover:bg-primary/90 text-primary-foreground min-w-[160px]">
-          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-          {isProcessing ? (sendWhen === 'later' ? 'Scheduling...' : 'Sending...') : (sendWhen === 'later' ? 'Schedule Campaign' : 'Send Campaign')}
-        </Button>
+            </div>
+          </div>
+
+        </div>
       </div>
-    </div>
     </div>
   );
 }

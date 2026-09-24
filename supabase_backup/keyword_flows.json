@@ -1,0 +1,29 @@
+[
+  {
+    "id": "c0add733-0bc6-4612-98f1-05916410175a",
+    "user_id": "833e936e-29ff-4fb3-82e0-1c35cb6216f6",
+    "name": "WhatsApp-chat Bot",
+    "keywords": [
+      "ok sir ham jald appse baat karenge"
+    ],
+    "template_id": "c85e09ae-1c3d-404b-b71a-8722f6c0f88c",
+    "is_active": false,
+    "created_at": "2026-08-09T11:15:53.155639+00:00",
+    "text_message": null
+  },
+  {
+    "id": "79f904a9-12e4-4489-94fe-28f283ef816c",
+    "user_id": "833e936e-29ff-4fb3-82e0-1c35cb6216f6",
+    "name": "kisanChoice",
+    "keywords": [
+      "Traders / Distributor",
+      "Distt  Super Stockist",
+      "Regional Super Stockist",
+      "Super Stockist"
+    ],
+    "template_id": null,
+    "is_active": true,
+    "created_at": "2026-08-19T10:15:17.679496+00:00",
+    "text_message": "contact This Number : 6390049995\nToll Free Number : 18008890860"
+  }
+]

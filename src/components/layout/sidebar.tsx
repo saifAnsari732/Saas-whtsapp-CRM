@@ -122,7 +122,7 @@ import { useTranslations } from "next-intl";
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
-  const { profile, profileLoading, account, accountRole, signOut } = useAuth();
+  const { profile, profileLoading, account, accountRole, isSuperAdmin, signOut } = useAuth();
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
   // Only surface the account-name strip when it actually carries
@@ -192,9 +192,9 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
       >
         {/* Logo row. On mobile we put a close button here; on desktop the
             close button is hidden since the sidebar is always-visible. */}
-        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border px-6">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <img src="/chatflyr-logo.png" alt="ChatFlyr" className="h-10 w-auto object-contain" />
+        <div className="flex h-20 shrink-0 items-center justify-between gap-2 border-b border-border px-5">
+          <Link href="/dashboard" className="flex items-center gap-2 py-1">
+            <img src="/chatflyr-logo.png" alt="ChatFlyr" className="h-14 max-h-14 w-auto object-contain transition-all" />
           </Link>
           <button
             type="button"
@@ -209,40 +209,31 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Main navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            <li className="mb-5 flex flex-col gap-2.5">
-              {/* Primary Button: Connect Cloud API */}
+            <li className="mb-4">
+              {/* Primary Action Button */}
               <Link
-                href="/settings?tab=whatsapp"
-                className="flex items-center justify-center gap-2.5 rounded-xl px-4 py-2.5 text-xs font-bold text-white transition-all bg-emerald-600 hover:bg-emerald-700 shadow-sm active:scale-95 duration-200"
+                href="/broadcasts/new"
+                className="flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-all active:scale-[0.98]"
               >
-                <Smartphone className="h-4 w-4" />
-                <span>Connect Cloud API</span>
+                <Radio className="h-4 w-4 shrink-0" />
+                <span>+ New Campaign</span>
               </Link>
 
-              {/* Secondary Button: Connect Coexistence */}
-              <Link
-                href="/dashboard/coexistence"
-                className="flex items-center justify-center gap-2.5 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 transition-all bg-slate-100 hover:bg-slate-200 border border-slate-200 shadow-sm active:scale-95 duration-200"
-              >
-                <Smartphone className="h-4 w-4 text-purple-600" />
-                <span>Connect Coexistence</span>
-              </Link>
-
-              {/* Quick Action Buttons */}
-              <div className="grid grid-cols-2 gap-2 mt-0.5">
+              {/* Secondary Status Links - Column layout */}
+              <div className="flex flex-col gap-2 mt-2">
                 <Link
-                  href="/inbox"
-                  className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-bold text-slate-700 transition-all bg-slate-100 hover:bg-slate-200 border border-slate-200 text-center leading-tight"
+                  href="/settings?tab=whatsapp"
+                  className="flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/40 shadow-xs transition-all"
                 >
-                  <MessageSquare className="h-3 w-3 text-emerald-600 shrink-0" />
-                  <span>Single Msg</span>
+                  <Smartphone className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                  <span>Cloud API Settings</span>
                 </Link>
                 <Link
-                  href="/broadcasts/new"
-                  className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-bold text-slate-700 transition-all bg-slate-100 hover:bg-slate-200 border border-slate-200 text-center leading-tight"
+                  href="/dashboard/coexistence"
+                  className="flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/40 shadow-xs transition-all"
                 >
-                  <Radio className="h-3 w-3 text-emerald-600 shrink-0" />
-                  <span>Bulk Msg</span>
+                  <Smartphone className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                  <span>QR Scan Connectivity</span>
                 </Link>
               </div>
             </li>
@@ -251,13 +242,14 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
+              const isRoseHighlighted =
+                item.href === "/broadcasts" ||
+                item.href === "/automations" ||
+                item.href === "/billing";
+
               const showUnreadDot =
                 item.href === "/inbox" && totalUnread > 0 && !isActive;
 
-              // Unlike the inbox dot, the notifications count stays visible
-              // even while the page is active — it reflects unread state
-              // (cleared by marking notifications read), not "currently
-              // viewing this section".
               const showNotificationBadge =
                 item.href === "/notifications" && unreadNotifications > 0;
 
@@ -266,11 +258,12 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                   <Link
                     href={item.href}
                     className={cn(
-                      // Taller on mobile so fingers can hit the row reliably (≥44px).
-                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 lg:py-2.5",
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 lg:py-2.5",
                       isActive
                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        : isRoseHighlighted
+                        ? "border border-rose-500/40 bg-rose-500/5 text-rose-600 dark:text-rose-400 hover:bg-rose-500/15 hover:border-rose-500/60"
+                        : "text-foreground/80 hover:bg-muted hover:text-foreground border border-transparent",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
@@ -329,7 +322,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               );
             })}
             
-            {accountRole === 'owner' && (
+            {isSuperAdmin && (
               <li>
                 <Link
                   href="/admin"

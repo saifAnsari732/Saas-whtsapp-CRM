@@ -102,6 +102,8 @@ interface AuthContextValue {
   canEditSettings: boolean;
   /** True if the caller can send messages and edit operational data (agent+). */
   canSendMessages: boolean;
+  /** True if caller is Platform Super Admin / System Admin. */
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -320,9 +322,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // dependencies downstream.
   const derived = useMemo(() => {
     const role = profile?.account_role ?? null;
+    const adminEmails = [
+      'ansarisaifuddin732@gmail.com',
+      'kisandeveloper2@gmail.com',
+      ...(process.env.NEXT_PUBLIC_ADMIN_EMAILS ? process.env.NEXT_PUBLIC_ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()) : [])
+    ];
+    const isSuperAdmin = Boolean(
+      profile?.role === 'admin' ||
+      profile?.role === 'superadmin' ||
+      (user?.email && adminEmails.includes(user.email.toLowerCase())) ||
+      (profile?.email && adminEmails.includes(profile.email.toLowerCase()))
+    );
+
     return {
       accountRole: role,
       accountId: profile?.account_id ?? null,
+      isSuperAdmin,
       isOwner: role === "owner",
       isAdmin: role === "admin",
       isAgent: role === "agent",
@@ -331,7 +346,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canEditSettings: role ? canEditSettingsFor(role) : false,
       canSendMessages: role ? canSendMessagesFor(role) : false,
     };
-  }, [profile?.account_role, profile?.account_id]);
+  }, [profile?.account_role, profile?.account_id, profile?.role, profile?.email, user?.email]);
 
   return (
     <AuthContext.Provider
@@ -383,6 +398,7 @@ export function useAuth(): AuthContextValue {
       canManageMembers: false,
       canEditSettings: false,
       canSendMessages: false,
+      isSuperAdmin: false,
     };
   }
   return ctx;

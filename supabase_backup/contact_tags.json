@@ -1,0 +1,62 @@
+[
+  {
+    "id": "546d6581-b521-4064-9e02-48dbb259f7fa",
+    "contact_id": "9e3c1534-4e28-47ea-a135-00eab50866f0",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-21T06:17:47.852059+00:00"
+  },
+  {
+    "id": "41d00cd5-6d5a-4c2d-a0e4-92dda1b39961",
+    "contact_id": "94f1e1ff-f57b-4e0e-9330-03186e540619",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-21T06:17:47.852059+00:00"
+  },
+  {
+    "id": "81d5fe45-8421-4850-b285-e113886393d7",
+    "contact_id": "ead60d6f-2aae-4fba-a9cc-12d92bdbd754",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-21T06:17:47.852059+00:00"
+  },
+  {
+    "id": "dcfa1a15-5beb-46be-8d38-e9d9ceab9e0e",
+    "contact_id": "4bb3ca08-9d0c-4cb2-b94e-9faa84dab227",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-21T06:17:47.852059+00:00"
+  },
+  {
+    "id": "fcfe1d55-2c47-48fe-a9ec-6ff9ed09fcc5",
+    "contact_id": "f1c51c34-d471-4573-834a-1d56b049fe04",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-21T06:17:47.852059+00:00"
+  },
+  {
+    "id": "b4a1d3d8-05d9-4fca-bd4b-29320b1c1b19",
+    "contact_id": "083c6218-2563-47be-b9da-43c333386c3f",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-21T06:17:47.852059+00:00"
+  },
+  {
+    "id": "8221dba9-1efd-4add-bede-eb395048e28a",
+    "contact_id": "43bef51a-e203-470a-a9f0-63c816ae2bbf",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-21T06:17:47.852059+00:00"
+  },
+  {
+    "id": "f0a0464c-3741-46b7-ad84-2977b7017972",
+    "contact_id": "9c02dc00-aed6-45f6-b5e8-2883251aac83",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-21T06:17:47.852059+00:00"
+  },
+  {
+    "id": "fd4329f2-90cc-4dcd-8739-5b28d5f42825",
+    "contact_id": "0837be68-c0d5-4c55-bdfa-796cfd11cd5f",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-21T06:37:49.418853+00:00"
+  },
+  {
+    "id": "97bc0479-56a9-4b89-aa10-e00977802857",
+    "contact_id": "69dea60a-947b-4aab-ba1b-d6092a38082d",
+    "tag_id": "24b3d568-24ff-48f7-bfd4-acc5c15a971e",
+    "created_at": "2026-08-26T08:16:37.995448+00:00"
+  }
+]

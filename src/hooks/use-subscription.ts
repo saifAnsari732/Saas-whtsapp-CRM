@@ -19,6 +19,9 @@ export interface SubscriptionState {
   } | null;
   blockedFeatures: string[];
   currentPlanLimits: { messages: number; contacts: number; users: number } | null;
+  planConfig?: any;
+  planFeatures?: any;
+  isTrial?: boolean;
   refresh: () => Promise<void>;
 }
 
@@ -60,6 +63,9 @@ export function useSubscription(): SubscriptionState {
         trialUsage: data.trialUsage,
         blockedFeatures: data.blockedFeatures,
         currentPlanLimits: data.currentPlanLimits,
+        planConfig: data.planConfig,
+        planFeatures: data.planFeatures,
+        isTrial: data.isTrial,
       });
     } catch (error) {
       console.error('Error fetching subscription:', error);
