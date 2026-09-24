@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { 
   Settings, 
@@ -51,6 +52,14 @@ export default function NewBroadcastPage() {
   const [recipientMode, setRecipientMode] = useState<'group' | 'numbers'>('group');
   const [groupId, setGroupId] = useState('');
   const [pastedNumbers, setPastedNumbers] = useState('');
+
+  const detectedNumbersList = useMemo(() => {
+    return pastedNumbers
+      .split(/[\n,]+/)
+      .map((n) => n.trim().replace(/\D/g, ""))
+      .filter((n) => n.length >= 8);
+  }, [pastedNumbers]);
+  const detectedNumbersCount = detectedNumbersList.length;
 
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [groupSelection, setGroupSelection] = useState<string>('create_new');
@@ -460,14 +469,46 @@ export default function NewBroadcastPage() {
           </div>
         </div>
 
+        {/* 4-Step Intuitive Workflow Guide */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="p-3 rounded-xl bg-card border border-border/80 shadow-xs flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-emerald-500/15 text-emerald-600 font-black text-xs flex items-center justify-center shrink-0">1</div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-foreground truncate">1. Campaign Title</p>
+              <p className="text-[10px] text-muted-foreground truncate">Name your broadcast</p>
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-card border border-border/80 shadow-xs flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-blue-500/15 text-blue-600 font-black text-xs flex items-center justify-center shrink-0">2</div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-foreground truncate">2. Target Audience</p>
+              <p className="text-[10px] text-muted-foreground truncate">Group or Paste Numbers</p>
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-card border border-border/80 shadow-xs flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-amber-500/15 text-amber-600 font-black text-xs flex items-center justify-center shrink-0">3</div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-foreground truncate">3. Delivery Timing</p>
+              <p className="text-[10px] text-muted-foreground truncate">Instant or Scheduled</p>
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-card border border-border/80 shadow-xs flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-purple-500/15 text-purple-600 font-black text-xs flex items-center justify-center shrink-0">4</div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-foreground truncate">4. Live Preview</p>
+              <p className="text-[10px] text-muted-foreground truncate">Verify & Launch</p>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Main Configuration Cards (7 Columns) */}
           <div className="lg:col-span-7 space-y-6">
             
             {/* Section 1: Basic Information */}
             <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold border-b border-border/60 pb-3">
-                <Settings className="h-4 w-4 text-rose-500" />
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold border-b border-border/60 pb-3">
+                <Settings className="h-4 w-4 text-emerald-500" />
                 <h2 className="text-xs uppercase tracking-wider">1. Basic Information</h2>
               </div>
               
@@ -477,28 +518,37 @@ export default function NewBroadcastPage() {
                   placeholder="e.g., Festive Offer Sale Campaign" 
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-background border-border/80 text-sm focus:border-rose-500 transition-colors rounded-xl"
+                  className="bg-background border-border/80 text-sm focus:border-emerald-500 transition-colors rounded-xl h-11"
                 />
               </div>
             </div>
 
             {/* Section 2: Target Recipients */}
             <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold border-b border-border/60 pb-3">
-                <Users className="h-4 w-4 text-rose-500" />
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold border-b border-border/60 pb-3">
+                <Users className="h-4 w-4 text-blue-500" />
                 <h2 className="text-xs uppercase tracking-wider">2. Target Audience & Recipients *</h2>
               </div>
               
               <Tabs value={recipientMode} onValueChange={(v: any) => setRecipientMode(v)} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 p-1 bg-muted rounded-xl mb-4">
-                  <TabsTrigger value="group" className="rounded-lg font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs py-2">Select Contact Group</TabsTrigger>
-                  <TabsTrigger value="numbers" className="rounded-lg font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs py-2">Paste Direct Numbers</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 p-1.5 bg-muted/80 rounded-xl mb-4 h-12 gap-1.5">
+                  <TabsTrigger value="group" className="rounded-lg font-bold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs py-2">
+                    🏷️ Select Contact Group
+                  </TabsTrigger>
+                  <TabsTrigger value="numbers" className="rounded-lg font-bold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs py-2 flex items-center justify-center gap-1.5">
+                    <span>📋 Paste Direct Numbers</span>
+                    {detectedNumbersCount > 0 && (
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded-full font-black">
+                        {detectedNumbersCount}
+                      </span>
+                    )}
+                  </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="group" className="mt-0">
+                <TabsContent value="group" className="mt-0 space-y-3">
                   <div className="flex items-center gap-2">
                     <Select value={groupId} onValueChange={(v) => setGroupId(v || '')}>
-                      <SelectTrigger className="bg-background border-border/80 w-full rounded-xl">
+                      <SelectTrigger className="bg-background border-border/80 w-full rounded-xl h-11">
                         <SelectValue placeholder="Choose a contact group..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -510,19 +560,42 @@ export default function NewBroadcastPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button type="button" variant="outline" onClick={() => setIsGroupModalOpen(true)} className="shrink-0 font-semibold text-xs rounded-xl">
+                    <Button type="button" variant="outline" onClick={() => setIsGroupModalOpen(true)} className="shrink-0 font-bold text-xs rounded-xl h-11 border-blue-500/30 text-blue-600 hover:bg-blue-500/10">
                       + New Group
                     </Button>
                   </div>
+                  <p className="text-[11px] text-muted-foreground">Select an existing audience group saved from your contacts or tags list.</p>
                 </TabsContent>
 
-                <TabsContent value="numbers" className="mt-0">
+                <TabsContent value="numbers" className="mt-0 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-foreground">Paste Phone Numbers (one per line or comma-separated)</span>
+                    <div className="flex items-center gap-2">
+                      {detectedNumbersCount > 0 && (
+                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[11px] font-bold">
+                          ✓ {detectedNumbersCount} Numbers Detected
+                        </Badge>
+                      )}
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setPastedNumbers("919876543210\n919876543211\n919876543212")} 
+                        className="text-[11px] h-7 rounded-lg"
+                      >
+                        Insert Sample
+                      </Button>
+                    </div>
+                  </div>
                   <Textarea 
-                    placeholder="Paste numbers separated by commas or newlines... (e.g. 919876543210, 919876543211)" 
-                    className="min-h-[100px] bg-background border-border/80 font-mono text-xs rounded-xl"
+                    placeholder="919876543210&#10;919876543211&#10;919876543212" 
+                    className="min-h-[120px] bg-background border-border/80 font-mono text-xs rounded-xl p-3 leading-relaxed"
                     value={pastedNumbers}
                     onChange={(e) => setPastedNumbers(e.target.value)}
                   />
+                  <p className="text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-xl border border-border/60">
+                    💡 Enter full numbers with country code prefix (e.g. 91 for India, 1 for USA). No + sign needed.
+                  </p>
                 </TabsContent>
               </Tabs>
             </div>

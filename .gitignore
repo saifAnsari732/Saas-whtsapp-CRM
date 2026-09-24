@@ -53,3 +53,4 @@ baileys_auth_info/
 !.dev.vars.example
 baileys_auth_info_*
 baileys_store_*.json
+service-account*.json

@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2 } from 'lucide-react';
+import { Radio, Plus, Loader2, Send, Users, CheckCircle2, Clock } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -180,55 +180,134 @@ export default function BroadcastsPage() {
         </div>
       )}
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-card border rounded-xl p-4 flex flex-col justify-center">
-          <span className="text-muted-foreground text-sm font-medium">Total Overall Recipients</span>
-          <span className="text-3xl font-bold">{broadcasts.reduce((acc, b) => acc + (b.total_recipients || 0), 0)}</span>
-        </div>
-        <div className="bg-card border rounded-xl p-4 flex flex-col justify-center">
-          <span className="text-muted-foreground text-sm font-medium">Total Messages Sent</span>
-          <span className="text-3xl font-bold text-primary">{broadcasts.reduce((acc, b) => acc + (b.sent_count || 0), 0)}</span>
-        </div>
-        <div className="bg-card border rounded-xl p-4 flex flex-col justify-center">
-          <span className="text-muted-foreground text-sm font-medium">Remaining / Failed</span>
-          <span className="text-3xl font-bold text-yellow-600">{broadcasts.reduce((acc, b) => acc + (b.failed_count || 0), 0)}</span>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between">
+      {/* Header Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/80">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t('subtitle')}
+          <h1 className="text-2xl font-extrabold text-foreground tracking-tight flex items-center gap-2.5">
+            <span>Broadcast Campaigns</span>
+            <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30">
+              Bulk Messaging
+            </span>
+          </h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Launch multi-recipient campaigns, track live delivery metrics, and automate bulk dispatches.
           </p>
         </div>
         <GatedButton
           canAct={canCreate}
           gateReason="create broadcasts"
           onClick={() => router.push('/broadcasts/new')}
-          className="bg-primary text-primary-foreground hover:bg-primary/90"
+          className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-5 rounded-xl shadow-lg shadow-emerald-600/20 gap-2 shrink-0"
         >
           <Plus className="h-4 w-4" />
-          {t('newBroadcast')}
+          <span>New Campaign</span>
         </GatedButton>
       </div>
 
+      {/* 3-Step Simple Guide Banner */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 rounded-2xl bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-cyan-500/5 border border-emerald-500/20 shadow-xs">
+        <div className="flex items-start gap-3">
+          <div className="h-8 w-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+            1
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-foreground">Step 1: Campaign Details</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Name your campaign and configure delivery interval timing with anti-ban guard.</p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <div className="h-8 w-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+            2
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-foreground">Step 2: Choose Audience</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Select a customer tag group OR paste phone numbers directly (no complex CSV required).</p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <div className="h-8 w-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+            3
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-foreground">Step 3: Select Template & Send</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Pick your WhatsApp template, verify the live phone preview, and launch instantly or schedule.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-muted-foreground text-xs font-semibold block">Total Recipients</span>
+            <span className="text-2xl font-extrabold text-foreground mt-1 block">
+              {broadcasts.reduce((acc, b) => acc + (b.total_recipients || 0), 0)}
+            </span>
+          </div>
+          <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
+            <Users className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-muted-foreground text-xs font-semibold block">Messages Sent</span>
+            <span className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 block">
+              {broadcasts.reduce((acc, b) => acc + (b.sent_count || 0), 0)}
+            </span>
+          </div>
+          <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+            <Send className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-muted-foreground text-xs font-semibold block">Delivered Rate</span>
+            <span className="text-2xl font-extrabold text-teal-600 dark:text-teal-400 mt-1 block">
+              {percent(
+                broadcasts.reduce((acc, b) => acc + (b.delivered_count || 0), 0),
+                broadcasts.reduce((acc, b) => acc + (b.total_recipients || 0), 0)
+              )}%
+            </span>
+          </div>
+          <div className="h-10 w-10 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center">
+            <CheckCircle2 className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-muted-foreground text-xs font-semibold block">Scheduled / Queued</span>
+            <span className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1 block">
+              {broadcasts.filter((b) => b.status === 'scheduled' || b.status === 'draft').length}
+            </span>
+          </div>
+          <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+            <Clock className="h-5 w-5" />
+          </div>
+        </div>
+      </div>
+
       {broadcasts.length === 0 ? (
-        <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-border bg-card">
-          <Radio className="mb-3 h-10 w-10 text-muted-foreground" />
-          <p className="text-sm font-medium text-foreground">{t('noBroadcastsYet')}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t('createFirst')}
+        <div className="flex h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-6 text-center">
+          <div className="h-14 w-14 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-4">
+            <Send className="h-7 w-7" />
+          </div>
+          <h3 className="text-base font-bold text-foreground">No Broadcast Campaigns Yet</h3>
+          <p className="mt-1 text-xs text-muted-foreground max-w-sm">
+            Create your first broadcast to dispatch promotions, updates, or alerts to multiple customers at once.
           </p>
           <GatedButton
             canAct={canCreate}
             gateReason="create broadcasts"
             onClick={() => router.push('/broadcasts/new')}
-            className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
+            className="mt-5 h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 rounded-xl shadow-md gap-2"
           >
             <Plus className="h-4 w-4" />
-            {t('newBroadcast')}
+            <span>Create First Campaign</span>
           </GatedButton>
         </div>
       ) : (

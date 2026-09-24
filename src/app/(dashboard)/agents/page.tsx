@@ -1,89 +1,89 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Bot, Sparkles, Settings2, BarChart3 } from 'lucide-react';
+import { useState } from 'react';
+import { Bot, Sparkles, Settings2, BarChart3, Clock, Zap } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ChatbotStudio } from '@/components/chatbot/chatbot-studio';
 import { AiPlayground } from '@/components/agents/ai-playground';
 import { AiUsageCard } from '@/components/agents/ai-usage';
 import { AiConfig } from '@/components/settings/ai-config';
 import { useAuth } from '@/hooks/use-auth';
 import { canEditSettings } from '@/lib/auth/roles';
 
-type Tab = 'playground' | 'setup' | 'usage';
+type Tab = 'chatbot' | 'setup' | 'playground' | 'usage';
 
 export default function AgentsPage() {
   const { accountRole } = useAuth();
   const canViewUsage = accountRole ? canEditSettings(accountRole) : false;
-  const [tab, setTab] = useState<Tab>('playground');
-  const [decided, setDecided] = useState(false);
-
-  // Land first-time users on Setup, returning users on the Playground.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch('/api/ai/config');
-        const data = await res.json().catch(() => ({}));
-        if (!cancelled) setTab(data?.configured ? 'playground' : 'setup');
-      } catch {
-        if (!cancelled) setTab('setup');
-      } finally {
-        if (!cancelled) setDecided(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [tab, setTab] = useState<Tab>('chatbot');
 
   return (
-    <div>
-      <div className="flex items-center gap-2">
-        <Bot className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          AI Agents
-        </h1>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
+              <Bot className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-foreground">
+                AI Chatbot & Follow-ups
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                Smart automated replies, custom persona prompts, keyword triggers, and multi-step lead follow-up sequences.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Your bring-your-own-key AI agent — set it up, then test it in the
-        playground before it replies to customers in the inbox.
-      </p>
 
-      {decided && (
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setTab(v as Tab)}
-          className="mt-6"
-        >
-          <TabsList>
-            <TabsTrigger value="playground">
-              <Sparkles className="mr-1.5 h-4 w-4" /> Playground
-            </TabsTrigger>
-            <TabsTrigger value="setup">
-              <Settings2 className="mr-1.5 h-4 w-4" /> Setup
-            </TabsTrigger>
-            {canViewUsage && (
-              <TabsTrigger value="usage">
-                <BarChart3 className="mr-1.5 h-4 w-4" /> Usage
-              </TabsTrigger>
-            )}
-          </TabsList>
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as Tab)}
+        className="w-full"
+      >
+        <TabsList className="w-full grid grid-cols-2 sm:grid-cols-4 gap-2 !h-auto group-data-horizontal/tabs:!h-auto overflow-visible p-1.5 bg-muted/70 dark:bg-muted/30 border border-border/80 rounded-2xl shadow-inner mb-6">
+          <TabsTrigger value="chatbot" className="min-h-[46px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs flex items-center justify-center gap-2">
+            <Zap className="h-4 w-4 text-emerald-500 shrink-0" />
+            <span>Chatbot & Follow-ups</span>
+          </TabsTrigger>
 
-          <TabsContent value="playground" className="mt-4">
-            <AiPlayground onGoToSetup={() => setTab('setup')} />
-          </TabsContent>
+          <TabsTrigger value="setup" className="min-h-[46px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs flex items-center justify-center gap-2">
+            <Settings2 className="h-4 w-4 text-blue-500 shrink-0" />
+            <span>AI Provider & Keys</span>
+          </TabsTrigger>
 
-          <TabsContent value="setup" className="mt-4">
-            <AiConfig />
-          </TabsContent>
+          <TabsTrigger value="playground" className="min-h-[46px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs flex items-center justify-center gap-2">
+            <Sparkles className="h-4 w-4 text-violet-500 shrink-0" />
+            <span>AI Raw Playground</span>
+          </TabsTrigger>
 
           {canViewUsage && (
-            <TabsContent value="usage" className="mt-4">
-              <AiUsageCard />
-            </TabsContent>
+            <TabsTrigger value="usage" className="min-h-[46px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs flex items-center justify-center gap-2">
+              <BarChart3 className="h-4 w-4 text-amber-500 shrink-0" />
+              <span>Token Usage</span>
+            </TabsTrigger>
           )}
-        </Tabs>
-      )}
+        </TabsList>
+
+        <TabsContent value="chatbot" className="mt-0">
+          <ChatbotStudio />
+        </TabsContent>
+
+        <TabsContent value="setup" className="mt-0">
+          <AiConfig />
+        </TabsContent>
+
+        <TabsContent value="playground" className="mt-0">
+          <AiPlayground onGoToSetup={() => setTab('setup')} />
+        </TabsContent>
+
+        {canViewUsage && (
+          <TabsContent value="usage" className="mt-0">
+            <AiUsageCard />
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }
