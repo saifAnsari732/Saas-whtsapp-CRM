@@ -194,10 +194,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border px-6">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <img src="/chatflyr-logo.png" alt="ChatFlyr" className="h-7 w-auto" />
-            <span className="text-xl font-black tracking-tight text-foreground font-heading">
-              ChatFlyr
-            </span>
+            <img src="/chatflyr-logo.png" alt="ChatFlyr" className="h-10 w-auto object-contain" />
           </Link>
           <button
             type="button"

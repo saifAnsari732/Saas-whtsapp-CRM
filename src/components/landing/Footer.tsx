@@ -9,8 +9,7 @@ export default function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-8 mb-12">
           <div className="col-span-2">
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <Image src="/chatflyr-logo.png" alt="ChatFlyr" width={120} height={32} className="h-8 w-auto" />
-              <span className="text-xl font-bold text-[#1A1A2E] font-heading">ChatFlyr</span>
+              <Image src="/chatflyr-logo.png" alt="ChatFlyr" width={180} height={48} className="h-12 sm:h-14 w-auto object-contain" />
             </Link>
             <p className="text-gray-500 mb-6 max-w-sm">
               The ultimate WhatsApp SaaS CRM for growing businesses. Automate, scale, and engage with your customers effortlessly.

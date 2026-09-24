@@ -26,16 +26,16 @@ export default function Navbar() {
       }`}
     >
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10">
-        <div className="flex justify-between items-center h-14 sm:h-16">
+        <div className="flex justify-between items-center h-16 sm:h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5">
             <Image
               src="/chatflyr-logo.png"
               alt="ChatFlyr"
-              width={220}
-              height={56}
+              width={280}
+              height={80}
               priority
-              className="h-11 sm:h-12 md:h-14 w-auto object-contain"
+              className="h-14 sm:h-16 md:h-20 w-auto object-contain transition-all"
             />
           </Link>
 
