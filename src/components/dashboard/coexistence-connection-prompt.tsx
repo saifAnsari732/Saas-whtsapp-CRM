@@ -17,13 +17,22 @@ export function CoexistenceConnectionPrompt({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check if dismissed in session
+    const isDismissed = sessionStorage.getItem("coexistence_prompt_dismissed");
+    if (isDismissed === "true") {
+      setIsOpen(false);
+      setLoading(false);
+      return;
+    }
+
     // Fetch coexistence connection status
     const fetchStatus = async () => {
       try {
         setLoading(true);
-        const res = await fetch("/api/whatsapp/baileys/stats");
+        const res = await fetch("/api/whatsapp/coexistence/status", { method: "POST" });
         const data = await res.json();
-        setCoexistanceStatus(data.status || "disconnected");
+        const status = data.state || data.status || "disconnected";
+        setCoexistanceStatus(status);
       } catch (err) {
         console.error("Failed to fetch coexistence status:", err);
         setCoexistanceStatus("disconnected");
@@ -32,72 +41,54 @@ export function CoexistenceConnectionPrompt({
       }
     };
 
-//  
-// 
-//     
     fetchStatus();
-    // Optionally poll for status changes
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleDismiss = () => {
     setIsOpen(false);
+    sessionStorage.setItem("coexistence_prompt_dismissed", "true");
     onDismiss?.();
   };
 
-  // Only show if coexistence is not connected
-  if (loading || coexistanceStatus === "connected" || !isOpen) {
+  const isConnected = coexistanceStatus === "connected" || coexistanceStatus === "open" || coexistanceStatus === "PAIRED";
+
+  // Only show top banner if coexistence is not connected and prompt is open
+  if (loading || isConnected || !isOpen) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center sm:p-0">
-      <div className="relative w-full max-w-md transform rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-6 shadow-2xl transition-all sm:w-96">
-        {/* Close button */}
-        <button
-          onClick={handleDismiss}
-          className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-700/50 hover:text-slate-200 transition-all"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        {/* Icon */}
-        <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-purple-500/20">
-          <AlertCircle className="h-6 w-6 text-purple-400" />
+    <div className="mb-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-foreground shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
+            <Smartphone className="h-5 w-5" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+              <span>Coexistence Phone QR Engine Optional</span>
+            </h4>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Connect your active WhatsApp phone via QR scanner to enable live mobile chat sync and phone broadcasts alongside Meta Cloud API.
+            </p>
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="mb-6">
-          <h3 className="mb-2 text-lg font-bold text-white">
-            Coexistence Connection Required
-          </h3>
-          <p className="text-sm text-slate-300 leading-relaxed">
-            This feature requires a Coexistence connection. Please connect your
-            WhatsApp account through the Coexistence setup to access this
-            functionality.
-          </p>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:gap-2">
-          <Button
-            variant="ghost"
-            onClick={handleDismiss}
-            className="flex-1 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white transition-all"
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          <Link href="/dashboard/coexistence">
+            <Button size="sm" className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl px-4 py-2">
+              <Smartphone className="mr-1.5 h-3.5 w-3.5" />
+              Connect QR
+            </Button>
+          </Link>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleDismiss} 
+            className="text-xs text-muted-foreground hover:text-foreground rounded-xl"
           >
             Dismiss
           </Button>
-          <Link
-            href="/dashboard/coexistence"
-            className="flex-1"
-            onClick={handleDismiss}
-          >
-            <Button className="w-full rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-lg shadow-purple-500/30 transition-all active:scale-95">
-              <Smartphone className="mr-2 h-4 w-4" />
-              Connect Now
-            </Button>
-          </Link>
         </div>
       </div>
     </div>

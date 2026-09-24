@@ -17,7 +17,26 @@ import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Settings, Users, MessageSquare, Clock, X, Loader2, Info, UploadCloud, Smartphone } from 'lucide-react';
+import { 
+  Settings, 
+  Users, 
+  MessageSquare, 
+  Clock, 
+  X, 
+  Loader2, 
+  Info, 
+  UploadCloud, 
+  Smartphone,
+  Phone,
+  ExternalLink,
+  Reply,
+  CheckCheck,
+  Rocket,
+  Sparkles,
+  Send,
+  ShieldCheck,
+  UserCheck
+} from 'lucide-react';
 
 export default function NewBroadcastPage() {
   const router = useRouter();
@@ -71,6 +90,27 @@ export default function NewBroadcastPage() {
     return [...new Set(matches)].sort();
   }, [selectedTemplate]);
 
+  // Compute live replaced body text for WhatsApp Preview
+  const previewBodyText = useMemo(() => {
+    if (!selectedTemplate?.body_text) return '';
+    let text = selectedTemplate.body_text;
+    placeholders.forEach((ph) => {
+      const key = ph.replace(/[\{\}]/g, '');
+      const varConfig = variables[key];
+      if (varConfig) {
+        if (varConfig.type === 'static' && varConfig.value) {
+          text = text.replaceAll(ph, varConfig.value);
+        } else if (varConfig.type === 'field') {
+          const fieldName = varConfig.value || 'name';
+          text = text.replaceAll(ph, `[${fieldName.toUpperCase()}]`);
+        } else if (varConfig.type === 'custom_field' && varConfig.value) {
+          text = text.replaceAll(ph, `[${varConfig.value}]`);
+        }
+      }
+    });
+    return text;
+  }, [selectedTemplate, placeholders, variables]);
+
   useEffect(() => {
     async function fetchTemplates() {
       setIsLoadingTemplates(true);
@@ -114,8 +154,6 @@ export default function NewBroadcastPage() {
     fetchTemplates();
   }, [supabase, searchParams]);
 
-
-
   // Pre-fill the header media URL if the template already has one saved permanently
   useEffect(() => {
     if (selectedTemplate && requiresMedia && selectedTemplate.header_media_url) {
@@ -133,12 +171,9 @@ export default function NewBroadcastPage() {
       setIsUploading(true);
       toast.info('Uploading media...');
       
-      // Upload to chat-media bucket
       const { publicUrl } = await uploadAccountMedia('chat-media', file);
-      
       setHeaderMediaUrl(publicUrl);
 
-      // Permanently save it to the template in the database
       const { error } = await supabase
         .from('message_templates')
         .update({ header_media_url: publicUrl })
@@ -147,7 +182,6 @@ export default function NewBroadcastPage() {
       if (error) {
         console.error("Failed to update template permanent URL:", error);
       } else {
-        // Update local state so it doesn't revert
         setTemplates(prev => prev.map(t => 
           t.id === selectedTemplateId ? { ...t, header_media_url: publicUrl } : t
         ));
@@ -159,12 +193,11 @@ export default function NewBroadcastPage() {
       toast.error('Failed to upload file');
     } finally {
       setIsUploading(false);
-      // Reset input
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-    const handleSaveGroup = async () => {
+  const handleSaveGroup = async () => {
     setIsSavingGroup(true);
     const supabase = createClient();
     try {
@@ -177,7 +210,6 @@ export default function NewBroadcastPage() {
          throw new Error("Failed to load user profile");
       }
 
-      // 1. Create tag if needed
       if (groupSelection === 'create_new') {
         if (!newGroupName.trim()) {
            toast.error("Please enter a group name");
@@ -199,16 +231,13 @@ export default function NewBroadcastPage() {
         }
       }
       
-      // 2. Add numbers if provided
       if (groupNumbers.trim()) {
         const numbers = groupNumbers.split(/[\n,]+/).map(n => n.trim().replace(/\D/g, '')).filter(Boolean);
         
         if (numbers.length > 0) {
-          // Find existing contacts
           const { data: existingContacts } = await supabase.from('contacts').select('id, phone').eq('account_id', profile.account_id).in('phone', numbers);
           const existingPhones = new Set((existingContacts || []).map(c => c.phone));
           
-          // Insert new ones
           const newNumbers = numbers.filter(n => !existingPhones.has(n));
           if (newNumbers.length > 0) {
             const contactsToInsert = newNumbers.map(phone => ({
@@ -224,7 +253,6 @@ export default function NewBroadcastPage() {
             }
           }
           
-          // Re-fetch all to get their IDs
           const { data: allContacts } = await supabase.from('contacts').select('id').eq('account_id', profile.account_id).in('phone', numbers);
           
           if (allContacts && tagId) {
@@ -232,7 +260,6 @@ export default function NewBroadcastPage() {
                contact_id: c.id,
                tag_id: tagId
              }));
-             // Insert and ignore duplicates using onConflict
              const { error: ctErr } = await supabase.from('contact_tags').upsert(contactTags, { onConflict: 'contact_id,tag_id' });
              if (ctErr) {
                console.error("Contact tags insert error:", ctErr);
@@ -247,7 +274,6 @@ export default function NewBroadcastPage() {
       setGroupNumbers('');
       toast.success("Group saved successfully");
       
-      // Instead of window reload, just refresh tags
       const { data: tags } = await supabase.from('tags').select('id, name').eq('account_id', profile.account_id).order('name');
       if (tags) {
         setContactGroups(tags);
@@ -262,7 +288,6 @@ export default function NewBroadcastPage() {
     }
   };
 
-  // Initialize variables when placeholders change
   useEffect(() => {
     if (placeholders.length > 0) {
       const initial: Record<string, any> = {};
@@ -398,13 +423,14 @@ export default function NewBroadcastPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div className="w-full px-4 sm:px-8 py-6 pb-24 max-w-7xl mx-auto">
-        {/* Top Header Row */}
-        <div className="flex items-center justify-between mb-8 pb-4 border-b border-border/80">
+      
+      <div className="w-full px-4 sm:px-8 py-6 pb-28 max-w-7xl mx-auto">
+        {/* Top Header Row with Action Buttons */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-5 border-b border-border/80">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+            <h1 className="text-2xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
               <span>Create New Campaign</span>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30">
                 Bulk Broadcast
               </span>
             </h1>
@@ -412,15 +438,31 @@ export default function NewBroadcastPage() {
               Configure campaign details, select target contact groups, and schedule automatic dispatches.
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => router.push('/broadcasts')} className="gap-1.5 rounded-xl border-border/80">
-            <X className="h-4 w-4" />
-            <span>Cancel</span>
-          </Button>
+          
+          <div className="flex items-center gap-3 shrink-0">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => router.push('/broadcasts')} 
+              className="gap-1.5 rounded-xl border-border/80 text-xs font-semibold px-4"
+            >
+              <X className="h-4 w-4" />
+              <span>Cancel</span>
+            </Button>
+            <Button 
+              onClick={handleSend} 
+              disabled={isProcessing} 
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all gap-2"
+            >
+              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+              <span>{isProcessing ? (sendWhen === 'later' ? 'Scheduling...' : 'Sending...') : (sendWhen === 'later' ? 'Schedule Campaign' : '🚀 Launch Campaign Now')}</span>
+            </Button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Configuration Cards (2 Columns) */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Main Configuration Cards (7 Columns) */}
+          <div className="lg:col-span-7 space-y-6">
             
             {/* Section 1: Basic Information */}
             <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-xs space-y-4">
@@ -432,10 +474,10 @@ export default function NewBroadcastPage() {
               <div className="space-y-2">
                 <Label className="text-xs font-semibold text-foreground">Campaign Name *</Label>
                 <Input 
-                  placeholder="e.g., Summer Sale Offer Campaign" 
+                  placeholder="e.g., Festive Offer Sale Campaign" 
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-background border-border/80 text-sm focus:border-rose-500 transition-colors"
+                  className="bg-background border-border/80 text-sm focus:border-rose-500 transition-colors rounded-xl"
                 />
               </div>
             </div>
@@ -449,24 +491,26 @@ export default function NewBroadcastPage() {
               
               <Tabs value={recipientMode} onValueChange={(v: any) => setRecipientMode(v)} className="w-full">
                 <TabsList className="grid w-full grid-cols-2 p-1 bg-muted rounded-xl mb-4">
-                  <TabsTrigger value="group" className="rounded-lg font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs">Select Contact Group</TabsTrigger>
-                  <TabsTrigger value="numbers" className="rounded-lg font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs">Paste Direct Numbers</TabsTrigger>
+                  <TabsTrigger value="group" className="rounded-lg font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs py-2">Select Contact Group</TabsTrigger>
+                  <TabsTrigger value="numbers" className="rounded-lg font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs py-2">Paste Direct Numbers</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="group" className="mt-0">
                   <div className="flex items-center gap-2">
                     <Select value={groupId} onValueChange={(v) => setGroupId(v || '')}>
-                      <SelectTrigger className="bg-background border-border/80 w-full">
+                      <SelectTrigger className="bg-background border-border/80 w-full rounded-xl">
                         <SelectValue placeholder="Choose a contact group..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">⚡ All Contacts</SelectItem>
                         {contactGroups.map(g => (
-                          <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                          <SelectItem key={g.id} value={g.id}>
+                            🏷️ {g.name || 'Unnamed Group'}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button type="button" variant="outline" onClick={() => setIsGroupModalOpen(true)} className="shrink-0 font-semibold text-xs">
+                    <Button type="button" variant="outline" onClick={() => setIsGroupModalOpen(true)} className="shrink-0 font-semibold text-xs rounded-xl">
                       + New Group
                     </Button>
                   </div>
@@ -475,7 +519,7 @@ export default function NewBroadcastPage() {
                 <TabsContent value="numbers" className="mt-0">
                   <Textarea 
                     placeholder="Paste numbers separated by commas or newlines... (e.g. 919876543210, 919876543211)" 
-                    className="min-h-[100px] bg-background border-border/80 font-mono text-xs"
+                    className="min-h-[100px] bg-background border-border/80 font-mono text-xs rounded-xl"
                     value={pastedNumbers}
                     onChange={(e) => setPastedNumbers(e.target.value)}
                   />
@@ -519,7 +563,7 @@ export default function NewBroadcastPage() {
               {sendWhen === 'later' && (
                 <div className="pt-2">
                   <Label className="text-xs font-semibold text-foreground mb-1.5 block">Select Schedule Date & Time</Label>
-                  <Input type="datetime-local" className="bg-background max-w-sm border-border/80" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+                  <Input type="datetime-local" className="bg-background max-w-sm border-border/80 rounded-xl" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
                 </div>
               )}
 
@@ -533,7 +577,7 @@ export default function NewBroadcastPage() {
                 
                 <div className="flex items-center gap-3">
                   <Select value={String(sendDelaySeconds)} onValueChange={(v) => setSendDelaySeconds(Number(v))}>
-                    <SelectTrigger className="w-52 bg-background font-semibold border-border/80 text-xs">
+                    <SelectTrigger className="w-56 bg-background font-semibold border-border/80 text-xs rounded-xl">
                       <SelectValue placeholder="Select delay" />
                     </SelectTrigger>
                     <SelectContent>
@@ -561,7 +605,7 @@ export default function NewBroadcastPage() {
               <div className="space-y-2">
                 <Label className="text-xs font-semibold text-foreground">Select WhatsApp Template *</Label>
                 <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v || '')} disabled={isLoadingTemplates}>
-                  <SelectTrigger className="bg-background border-border/80 font-medium">
+                  <SelectTrigger className="bg-background border-border/80 font-medium rounded-xl">
                     <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Choose an approved template..."} />
                   </SelectTrigger>
                   <SelectContent>
@@ -575,7 +619,7 @@ export default function NewBroadcastPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground">Note: If template names appear as long identifiers, they correspond directly to approved WhatsApp Manager templates.</p>
+                <p className="text-[11px] text-muted-foreground">Select from Meta-approved WhatsApp Business templates for bulk broadcast dispatch.</p>
               </div>
 
               {/* Variable Mapping UI */}
@@ -607,7 +651,7 @@ export default function NewBroadcastPage() {
                                 }));
                               }}
                             >
-                              <SelectTrigger className="text-xs h-8 bg-card border-border/60">
+                              <SelectTrigger className="text-xs h-8 bg-card border-border/60 rounded-lg">
                                 <SelectValue placeholder="Type" />
                               </SelectTrigger>
                               <SelectContent>
@@ -629,7 +673,7 @@ export default function NewBroadcastPage() {
                                   }
                                 }}
                               >
-                                <SelectTrigger className="text-xs h-8 bg-card border-border/60">
+                                <SelectTrigger className="text-xs h-8 bg-card border-border/60 rounded-lg">
                                   <SelectValue placeholder="Field" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -650,7 +694,7 @@ export default function NewBroadcastPage() {
                                     [key]: { type: current.type, value: val }
                                   }));
                                 }}
-                                className="text-xs h-8 bg-card border-border/60"
+                                className="text-xs h-8 bg-card border-border/60 rounded-lg"
                               />
                             )}
                           </div>
@@ -673,7 +717,7 @@ export default function NewBroadcastPage() {
                         placeholder="https://example.com/image.jpg"
                         value={headerMediaUrl}
                         onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                        className="bg-background flex-1 text-xs"
+                        className="bg-background flex-1 text-xs rounded-xl"
                       />
                       
                       <input
@@ -688,7 +732,7 @@ export default function NewBroadcastPage() {
                         variant="outline"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
-                        className="gap-2 shrink-0 text-xs font-semibold"
+                        className="gap-2 shrink-0 text-xs font-semibold rounded-xl"
                       >
                         {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
                         Upload File
@@ -709,62 +753,139 @@ export default function NewBroadcastPage() {
               )}
             </div>
 
+            {/* Bottom Form Action Buttons */}
+            <div className="flex items-center justify-between p-4 bg-card border border-border/80 rounded-2xl shadow-xs">
+              <Button 
+                variant="outline" 
+                onClick={() => router.push('/broadcasts')} 
+                className="gap-1.5 rounded-xl border-border/80 text-xs font-semibold px-5"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSend} 
+                disabled={isProcessing} 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all gap-2"
+              >
+                {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                <span>{isProcessing ? (sendWhen === 'later' ? 'Scheduling...' : 'Sending...') : (sendWhen === 'later' ? 'Schedule Campaign' : '🚀 Launch Campaign Now')}</span>
+              </Button>
+            </div>
+
           </div>
 
-          {/* Right Column: Live Message Preview & Campaign Trigger */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-6 bg-card border border-border/80 rounded-2xl p-5 shadow-xs space-y-4">
+          {/* Right Column: Live Message Preview & Campaign Trigger (5 Columns) */}
+          <div className="lg:col-span-5">
+            <div className="sticky top-6 bg-card border border-border/80 rounded-2xl p-5 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
                   <Smartphone className="h-4 w-4 text-rose-500" />
-                  Live Preview
+                  Live WhatsApp Preview
                 </span>
-                <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Real-time
                 </span>
               </div>
 
-              {/* Message Bubble Card */}
-              <div className="bg-[#efeae2] dark:bg-slate-950 p-3 min-h-[260px] max-h-[380px] overflow-y-auto rounded-xl flex flex-col justify-end border border-slate-200 dark:border-slate-800">
-                {selectedTemplate ? (
-                  <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg p-3 shadow-xs text-xs space-y-2 max-w-[95%] self-start border border-slate-200 dark:border-slate-800 relative">
-                    {headerMediaUrl && (
-                      <div className="rounded-md overflow-hidden bg-slate-100 dark:bg-slate-800 max-h-32 flex items-center justify-center border border-slate-200">
-                        {selectedTemplate.header_type === 'video' ? (
-                          <video src={headerMediaUrl} controls className="w-full h-full object-cover" />
-                        ) : (
-                          <img src={headerMediaUrl} alt="Header Preview" className="w-full h-28 object-cover" />
-                        )}
-                      </div>
-                    )}
-                    <p className="whitespace-pre-wrap font-sans leading-relaxed text-xs">
-                      {selectedTemplate.body_text}
-                    </p>
-                    {selectedTemplate.footer_text && (
-                      <p className="text-[10px] text-slate-400 border-t pt-1 font-medium">
-                        {selectedTemplate.footer_text}
+              {/* Realistic Phone Mockup Shell */}
+              <div className="bg-[#efeae2] dark:bg-[#0b141a] rounded-2xl overflow-hidden border border-slate-300 dark:border-slate-800 shadow-md">
+                {/* Phone Header Strip */}
+                <div className="bg-[#075e54] dark:bg-[#1f2c34] text-white px-4 py-2.5 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs text-white shadow-xs">
+                    CF
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-xs font-bold truncate">ChatFlyr Business</h4>
+                    <p className="text-[10px] text-emerald-200 truncate">Official Business Account</p>
+                  </div>
+                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                </div>
+
+                {/* WhatsApp Chat Wall & Message Bubble Container */}
+                <div className="p-4 min-h-[360px] max-h-[520px] overflow-y-auto flex flex-col justify-start gap-3 bg-[radial-gradient(#0000000a_1px,transparent_1px)] dark:bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:16px_16px]">
+                  
+                  {/* System Date Badge */}
+                  <div className="self-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-xs text-[10px] font-semibold text-slate-500 dark:text-slate-400 px-3 py-1 rounded-full shadow-2xs border border-slate-200/50 dark:border-slate-700/50">
+                    TODAY
+                  </div>
+
+                  {selectedTemplate ? (
+                    <div className="bg-white dark:bg-[#202c33] text-slate-800 dark:text-slate-100 rounded-xl p-3.5 shadow-sm text-xs space-y-2.5 max-w-[92%] self-start border border-slate-200/80 dark:border-slate-700/60 relative group">
+                      
+                      {/* Optional Header Media */}
+                      {headerMediaUrl && (
+                        <div className="rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 max-h-52">
+                          {selectedTemplate.header_type === 'video' ? (
+                            <video src={headerMediaUrl} controls className="w-full max-h-48 object-contain bg-black" />
+                          ) : (
+                            <img src={headerMediaUrl} alt="Header Preview" className="w-full max-h-48 object-contain bg-slate-50 dark:bg-slate-900" />
+                          )}
+                        </div>
+                      )}
+
+                      {/* Header Text (if text header type) */}
+                      {selectedTemplate.header_type === 'text' && selectedTemplate.header_content && (
+                        <div className="font-bold text-sm text-slate-900 dark:text-white">
+                          {selectedTemplate.header_content}
+                        </div>
+                      )}
+
+                      {/* Main Message Body Text */}
+                      <p className="whitespace-pre-wrap font-sans leading-relaxed text-xs text-slate-800 dark:text-slate-100">
+                        {previewBodyText || selectedTemplate.body_text}
                       </p>
-                    )}
-                    <span className="text-[9px] text-slate-400 block text-right">
-                      12:00 PM
-                    </span>
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-slate-400 dark:text-slate-600 text-xs">
-                    Select a WhatsApp Template on the left to preview message layout.
-                  </div>
-                )}
+
+                      {/* Footer Text */}
+                      {selectedTemplate.footer_text && (
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-700/50 pt-1.5 font-medium">
+                          {selectedTemplate.footer_text}
+                        </p>
+                      )}
+
+                      {/* Time & Double Checkmark */}
+                      <div className="flex items-center justify-end gap-1 text-[9px] text-slate-400 dark:text-slate-500 pt-0.5">
+                        <span>12:00 PM</span>
+                        <CheckCheck className="h-3 w-3 text-blue-500" />
+                      </div>
+
+                      {/* Template Buttons Preview */}
+                      {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
+                        <div className="mt-3 border-t border-slate-200/80 dark:border-slate-700/80 divide-y divide-slate-200/80 dark:divide-slate-700/80 -mx-3.5 -mb-3.5 rounded-b-xl overflow-hidden">
+                          {selectedTemplate.buttons.map((btn: any, idx: number) => (
+                            <div 
+                              key={idx} 
+                              className="py-2.5 px-3 text-center font-bold text-xs text-[#00a884] dark:text-[#00a884] flex items-center justify-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                            >
+                              {btn.type === 'URL' ? <ExternalLink className="h-3.5 w-3.5" /> : btn.type === 'PHONE_NUMBER' ? <Phone className="h-3.5 w-3.5" /> : <Reply className="h-3.5 w-3.5" />}
+                              <span>{btn.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 px-4 text-center text-slate-400 dark:text-slate-500 space-y-2">
+                      <MessageSquare className="h-10 w-10 stroke-[1.5] text-slate-300 dark:text-slate-700" />
+                      <p className="text-xs font-medium">
+                        Select a WhatsApp Template on the left to view real-time message layout.
+                      </p>
+                    </div>
+                  )}
+
+                </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="pt-2 border-t border-border/60 space-y-2">
+              {/* Sidebar Action Trigger */}
+              <div className="pt-3 border-t border-border/60 space-y-2">
                 <Button 
                   onClick={handleSend} 
                   disabled={isProcessing} 
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 text-xs shadow-xs rounded-xl transition-all"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 text-xs shadow-md rounded-xl transition-all gap-2"
                 >
-                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  {isProcessing ? (sendWhen === 'later' ? 'Scheduling...' : 'Sending...') : (sendWhen === 'later' ? 'Schedule Campaign' : '🚀 Launch Campaign Now')}
+                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                  <span>{isProcessing ? (sendWhen === 'later' ? 'Scheduling...' : 'Sending...') : (sendWhen === 'later' ? 'Schedule Campaign' : '🚀 Launch Campaign Now')}</span>
                 </Button>
                 <Button 
                   variant="outline" 
@@ -783,6 +904,3 @@ export default function NewBroadcastPage() {
     </div>
   );
 }
-
-
-
