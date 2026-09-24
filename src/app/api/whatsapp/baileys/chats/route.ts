@@ -11,13 +11,37 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const store = global.waStores?.[user.id];
     const userSocket = global.waSockets?.[user.id];
 
-    let chats = [];
+    // If socket is connected, actively fetch all participating groups from WhatsApp
+    if (userSocket) {
+      try {
+        const participatingGroups = await userSocket.groupFetchAllParticipating();
+        if (participatingGroups) {
+          if (!global.waStores) global.waStores = {};
+          if (!global.waStores[user.id]) global.waStores[user.id] = { chats: {}, messages: {} };
+          const store = global.waStores[user.id];
+          if (!store.chats) store.chats = {};
 
-    if (userSocket && store && store.chats) {
-      // Baileys Connection Active: Fetch from in-memory store which contains both DMs and Groups
+          for (const [gid, gdata] of Object.entries(participatingGroups as Record<string, any>)) {
+            store.chats[gid] = {
+              id: gid,
+              name: gdata.subject || gid,
+              conversationTimestamp: gdata.creation || Math.floor(Date.now() / 1000),
+              unreadCount: 0,
+              type: 'group'
+            };
+          }
+        }
+      } catch (groupErr) {
+        console.warn("Could not fetch participating groups from WhatsApp socket:", groupErr);
+      }
+    }
+
+    const store = global.waStores?.[user.id];
+    let chats: any[] = [];
+
+    if (store && store.chats && Object.keys(store.chats).length > 0) {
       const allChats = Object.values(store.chats) as any[];
       chats = allChats
         .filter(c => c.id && (c.id.endsWith('@s.whatsapp.net') || c.id.endsWith('@g.us')))
@@ -38,20 +62,12 @@ export async function GET() {
             type: isGroup ? 'group' : 'direct',
           };
         });
-    } else {
-      // Fallback: Cloud API Mode. Fetch from Supabase `conversations` table
-      const { data: profile } = await supabase.from('profiles').select('account_id').eq('user_id', user.id).single();
-      if (!profile?.account_id) {
-        return NextResponse.json({ error: "WhatsApp not connected" }, { status: 400 });
-      }
+    }
 
-      // Check if Cloud API is actually connected for this account
-      const { data: config } = await supabase.from('whatsapp_configurations').select('phone_number_id').eq('account_id', profile.account_id).single();
-      if (!config?.phone_number_id) {
-        return NextResponse.json({ error: "WhatsApp not connected" }, { status: 400 });
-      }
-
-      const { data: dbConversations, error } = await supabase
+    // Also merge DB contacts and conversations if available
+    const { data: profile } = await supabase.from('profiles').select('account_id').eq('user_id', user.id).maybeSingle();
+    if (profile?.account_id) {
+      const { data: dbConversations } = await supabase
         .from('conversations')
         .select(`
           id,
@@ -63,16 +79,24 @@ export async function GET() {
         .eq('account_id', profile.account_id)
         .order('last_message_at', { ascending: false })
         .limit(100);
-        
-      if (error) throw error;
 
-      chats = (dbConversations || []).map((conv: any) => ({
-        id: conv.contacts?.phone ? `${conv.contacts.phone}@s.whatsapp.net` : conv.id,
-        name: conv.contacts?.name || conv.contacts?.phone || 'Unknown',
-        unreadCount: conv.unread_count || 0,
-        conversationTimestamp: conv.last_message_at ? Math.floor(new Date(conv.last_message_at).getTime() / 1000) : Math.floor(Date.now() / 1000),
-        type: 'direct' // Cloud API typically only handles direct messages
-      }));
+      if (dbConversations && dbConversations.length > 0) {
+        const existingIds = new Set(chats.map(c => c.id));
+        for (const conv of dbConversations as any[]) {
+          const phone = conv.contacts?.phone;
+          const jid = phone ? `${phone.replace(/\D/g, '')}@s.whatsapp.net` : null;
+          if (jid && !existingIds.has(jid)) {
+            existingIds.add(jid);
+            chats.push({
+              id: jid,
+              name: conv.contacts?.name || phone,
+              unreadCount: conv.unread_count || 0,
+              conversationTimestamp: conv.last_message_at ? Math.floor(new Date(conv.last_message_at).getTime() / 1000) : Math.floor(Date.now() / 1000),
+              type: 'direct'
+            });
+          }
+        }
+      }
     }
 
     return NextResponse.json({
