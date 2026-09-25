@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getAdminDb, admin } from '@/lib/firebase/admin';
+import { getAdminDb } from '@/lib/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const PLAN_PRICES_PAISE: Record<string, { name: string; monthly: number; yearly: number }> = {
   essential: { name: 'Essential', monthly: 99900, yearly: 1138800 },  // ₹999/mo, ₹11,388/yr (5% OFF)
@@ -87,7 +88,7 @@ export async function POST(req: Request) {
 
               // Increment coupon used_count in Firestore
               await fDb.collection('coupons').doc(cDoc.id).update({
-                used_count: admin.firestore.FieldValue.increment(1)
+                used_count: FieldValue.increment(1)
               });
             }
           }

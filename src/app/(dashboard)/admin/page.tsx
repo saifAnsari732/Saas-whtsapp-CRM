@@ -469,7 +469,7 @@ export default function AdminPage() {
             </div>
           </CardContent>
         </Card>
-      ) : (
+      ) : activeTab === 'payments' ? (
         /* Payments & Transactions Tab */
         <Card className="shadow-sm border-border/70">
           <CardHeader className="pb-4">
