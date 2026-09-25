@@ -47,6 +47,7 @@ import { TemplatePerformance } from '@/components/dashboard/template-performance
 import { BroadcastAnalytics } from '@/components/dashboard/broadcast-analytics'
 import { TeamActivityCard } from '@/components/dashboard/team-activity-card'
 import { MetricCard } from '@/components/dashboard/metric-card'
+import { WhatsAppLiveGuide } from '@/components/dashboard/whatsapp-live-guide'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTranslations } from 'next-intl'
 
@@ -96,7 +97,16 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[] | null>(() => getCached('wacrm_dash_activity'))
   const [activityLoading, setActivityLoading] = useState(() => !getCached('wacrm_dash_activity'))
 
-  const [waConfig, setWaConfig] = useState<{ connected?: boolean; reason?: string } | null>(() => getCached('wacrm_dash_waconfig'))
+  const [waConfig, setWaConfig] = useState<{ 
+    connected?: boolean; 
+    reason?: string;
+    phone_info?: {
+      id?: string;
+      display_phone_number?: string;
+      verified_name?: string;
+      quality_rating?: string;
+    }
+  } | null>(() => getCached('wacrm_dash_waconfig'))
   const [msgAnalytics, setMsgAnalytics] = useState<{ delivered: number, seen: number, failed: number, pending: number } | null>(() => getCached('wacrm_dash_msganalytics'))
 
   const [templatePerf, setTemplatePerf] = useState<TemplatePerformanceData | null>(() => getCached('wacrm_dash_templateperf'))
@@ -175,6 +185,14 @@ export default function DashboardPage() {
     [series],
   )
 
+  const handleDisconnectSuccess = useCallback(() => {
+    setWaConfig(null)
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('wacrm_dash_waconfig')
+    }
+    loadAll()
+  }, [loadAll])
+
   const isConnected = waConfig?.connected === true || (metrics && metrics.activeConversations.current > 0)
   const hasNoData = !metrics && !waConfig && metricsLoading
 
@@ -208,6 +226,14 @@ export default function DashboardPage() {
             <Skeleton className="h-80 rounded-2xl lg:col-span-2" />
           </div>
         </div>
+      )}
+
+      {/* WhatsApp Connected Live Status & Tier Limit Guide Banner */}
+      {isConnected && !hasNoData && waConfig?.connected && (
+        <WhatsAppLiveGuide
+          waConfig={waConfig}
+          onDisconnectSuccess={handleDisconnectSuccess}
+        />
       )}
 
       {/* Welcome Setup Checklist when not connected */}

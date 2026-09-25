@@ -222,3 +222,22 @@ All live data from Supabase was thoroughly audited and exported into structured 
 ### 6. Shared Team Inbox & UI Usability Enhancements
 - **Tab & Button UI Optimization**: Increased button sizes, improved active tab visual contrast, and made section tab bars scrollable for seamless navigation across responsive viewports.
 - **Enhanced Chat & Group Display**: Consolidated direct customer contacts and group chats into a single unified inbox search and filter view.
+
+### 7. Meta WhatsApp Cloud API Live Dashboard Verification & Auto-Redirect
+- **Live Connected Hero Banner**: Replaced generic welcome banner with a real-time **Meta Cloud API Live & Verified Status Hero Banner** on `/dashboard`, displaying the verified business name, live display phone number, quality rating, webhook sync indicator (200 OK), and direct action links (Open Inbox, Send Campaign, AI Auto-Reply, API Settings).
+- **Embedded Signup 1-Click Auto-Save**: Enhanced the Facebook OAuth exchange pipeline in `whatsapp-config.tsx` to automatically persist credentials and redirect directly to `/dashboard` upon completion without requiring manual re-saving.
+- **Resilient Webhook Verification**: Updated `/api/whatsapp/webhook` GET verification handler with environment variable fallback (`META_VERIFY_TOKEN`) to guarantee immediate Meta developer console webhook verification.
+
+### 8. Meta Cloud API Messaging Limits Guide & One-Click Disconnect
+- **Live Limits & Account Tier Breakdown**: Added expandable guide in `whatsapp-live-guide.tsx` on `/dashboard` showcasing Meta messaging tiers: Tier 1 (1k/day standard), Tier 2 (10k/day growth), Tier 3 (100k/day pro), and Tier 4 (unlimited enterprise), with 3 concrete steps to level up account tiers.
+- **Confirmation Disconnect Modal**: Integrated a clean confirmation dialog allowing users to invoke `DELETE /api/whatsapp/config` to safely unbind Cloud API credentials without losing local customer chat records or history.
+
+### 9. Fast Coexistence Architecture Guide & SaaS UI Overhaul
+- **Comprehensive Coexistence Guide Component (`src/components/dashboard/coexistence-guide.tsx`)**: Placed directly below the QR connect interface on `/dashboard/coexistence`. Features:
+  - Clear explanation in bilingual Hinglish/Hindi & English explaining what Coexistence is (*"Phone bhi chalega + CRM bhi chalega"*).
+  - 3-step visual workflow architecture: 1-Click QR Scan, Real-Time Bi-Directional Sync, and Supercharged Automations.
+  - Side-by-side SaaS comparison matrix: Coexistence (Phone QR) vs Official Meta Cloud API (phone app usage, group broadcasts, template approval, per-message costs, suitability).
+  - Key Superpowers breakdown: WhatsApp Group Broadcaster, 24/7 AI Auto-Reply Studio, Scheduled Group Reminders, Direct Number Bulk Dispatch, Shared Team Inbox, Anti-Ban Protection Buffer.
+  - Safe usage & anti-ban guidelines (safe warmup, volume pacing, personal chat activity).
+  - Interactive FAQ accordion addressing phone battery/internet, safety, and simultaneous app usage.
+- **SaaS-Grade UI & Color Scheme Upgrade**: Redesigned header with animated pulse status indicator, high-tech emerald-to-teal glass gradient cards, jewel-toned feature chips, and modern gradient buttons with micro-interactions.

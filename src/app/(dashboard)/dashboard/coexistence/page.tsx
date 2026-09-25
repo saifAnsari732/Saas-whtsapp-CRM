@@ -38,6 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChatbotStudio } from "@/components/chatbot/chatbot-studio";
+import { CoexistenceGuide } from "@/components/dashboard/coexistence-guide";
 
 type Schedule = { id: string; group_jid: string; group_name: string; message_text: string; schedule_time: string; is_active: boolean; last_sent_at: string | null; created_at: string };
 type BaileysChat = { id: string; name?: string; type?: string; unreadCount?: number; conversationTimestamp?: number };
@@ -489,27 +490,31 @@ export default function CoexistenceSetupPage() {
     <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Top Header Card */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 bg-card border border-border/80 rounded-2xl shadow-xs">
+        {/* Top Header Card - SaaS Grade */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 bg-gradient-to-r from-card via-card to-emerald-950/20 border border-border/80 rounded-3xl shadow-sm">
           <div className="flex items-center gap-4">
             <Link href="/dashboard">
-              <Button variant="outline" size="sm" className="rounded-xl border-border/80">
-                <ArrowLeft className="h-4 w-4 mr-2" />
+              <Button variant="outline" size="sm" className="rounded-xl border-border/80 hover:bg-muted font-bold text-xs">
+                <ArrowLeft className="h-4 w-4 mr-1.5" />
                 Back
               </Button>
             </Link>
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-500 border border-emerald-500/30 shadow-inner">
                 <Smartphone className="h-6 w-6" />
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                  <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", isConnected ? "bg-emerald-400" : isChecking ? "bg-amber-400" : "bg-rose-400")} />
+                  <span className={cn("relative inline-flex rounded-full h-3 w-3", isConnected ? "bg-emerald-500" : isChecking ? "bg-amber-500" : "bg-rose-500")} />
+                </span>
               </div>
               <div>
-                <h1 className="text-xl font-extrabold text-foreground flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-black text-foreground flex items-center gap-2">
                   <span>Fast Coexistence</span>
-                  <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30 text-[10px] uppercase font-bold">
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] uppercase font-black tracking-wider">
                     QR Sync Engine
                   </Badge>
                 </h1>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Run WhatsApp directly on your physical mobile phone while automating replies & bulk broadcasts.
                 </p>
               </div>
@@ -523,19 +528,19 @@ export default function CoexistenceSetupPage() {
                 size="sm" 
                 onClick={() => fetchChatsAndGroups(true)} 
                 disabled={fetchingChats}
-                className="rounded-xl text-xs font-semibold gap-1.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                className="rounded-xl text-xs font-bold gap-1.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", fetchingChats && "animate-spin")} />
                 <span>Fetch Groups & Chats</span>
               </Button>
             )}
 
-            <Badge className={cn("px-4 py-2 border text-xs font-bold rounded-xl flex items-center gap-2", 
+            <Badge className={cn("px-4 py-2 border text-xs font-black rounded-xl flex items-center gap-2 shadow-xs", 
               isConnected 
-                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" 
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" 
                 : isChecking 
-                  ? "bg-amber-500/10 text-amber-600 border-amber-500/30" 
-                  : "bg-rose-500/10 text-rose-600 border-rose-500/30"
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30" 
+                  : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30"
             )}>
               <span className={cn("h-2.5 w-2.5 rounded-full animate-pulse", 
                 isConnected ? "bg-emerald-500" : isChecking ? "bg-amber-500" : "bg-rose-500"
@@ -547,13 +552,13 @@ export default function CoexistenceSetupPage() {
 
         {/* VIEW 0: CHECKING / CONNECTING IN PROGRESS (Prevents false disconnect UI flash on refresh) */}
         {!isConnected && isChecking && !qrCodeBase64 && (
-          <Card className="border-border/80 bg-card rounded-2xl p-12 text-center shadow-xs">
+          <Card className="border-border/80 bg-card rounded-3xl p-12 text-center shadow-xs">
             <div className="flex flex-col items-center justify-center space-y-4 max-w-md mx-auto">
-              <div className="h-14 w-14 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                <Loader2 className="h-7 w-7 animate-spin" />
+              <div className="h-16 w-16 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                <Loader2 className="h-8 w-8 animate-spin" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-lg font-bold text-foreground">Syncing WhatsApp Connection</h3>
+                <h3 className="text-lg font-black text-foreground">Syncing WhatsApp Connection</h3>
                 <p className="text-xs text-muted-foreground">
                   Validating your linked WhatsApp session and restoring active conversations...
                 </p>
@@ -564,50 +569,64 @@ export default function CoexistenceSetupPage() {
 
         {/* VIEW 1: DISCONNECTED (NO QR YET & NOT CHECKING) */}
         {!isConnected && !isChecking && !qrCodeBase64 && (
-          <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 via-card to-card rounded-2xl shadow-sm overflow-hidden">
-            <CardHeader className="p-8">
+          <Card className="relative border border-emerald-500/30 bg-gradient-to-br from-emerald-950/30 via-card to-teal-950/20 rounded-3xl shadow-xl overflow-hidden">
+            <div className="absolute top-0 right-0 -mt-12 -mr-12 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+            
+            <CardHeader className="p-6 sm:p-8 relative z-10">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="space-y-3 max-w-xl">
-                  <Badge className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30 font-bold px-3 py-1 text-xs">
+                <div className="space-y-3 max-w-2xl">
+                  <Badge className="bg-emerald-500/20 text-emerald-500 dark:text-emerald-400 border-emerald-500/35 font-extrabold px-3 py-1 text-xs">
                     ⚡ Instant WhatsApp Coexistence
                   </Badge>
-                  <CardTitle className="text-3xl font-extrabold text-foreground">
+                  <CardTitle className="text-2xl sm:text-3xl lg:text-4xl font-black text-foreground tracking-tight">
                     Connect Your Phone QR Code
                   </CardTitle>
-                  <CardDescription className="text-sm text-muted-foreground leading-relaxed">
+                  <CardDescription className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                     Link your active WhatsApp phone number in seconds. Use your existing phone app alongside ChatFlyr CRM for automated replies, contact group broadcasts, and scheduled messages.
                   </CardDescription>
                 </div>
                 
-                <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-3xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 shadow-inner">
-                  <QrCode className="h-14 w-14" />
+                <div className="flex h-24 w-24 sm:h-28 sm:w-28 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-500/15 to-teal-500/15 text-emerald-500 border border-emerald-500/30 shadow-inner">
+                  <QrCode className="h-12 w-12 sm:h-14 sm:w-14" />
                 </div>
               </div>
             </CardHeader>
             
-            <CardContent className="p-8 pt-0 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-y border-border/60">
-                <div className="flex items-start gap-3 p-3 rounded-xl bg-background border border-border/60">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+            <CardContent className="p-6 sm:p-8 pt-0 space-y-6 relative z-10">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-y border-border/70">
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-card/80 border border-border/80 shadow-xs hover:border-emerald-500/30 transition-colors">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 shrink-0">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
                   <div>
-                    <h4 className="text-xs font-bold">Simultaneous Usage</h4>
-                    <p className="text-[11px] text-muted-foreground">Keep using WhatsApp on your phone while CRM automations run in background.</p>
+                    <h4 className="text-xs sm:text-sm font-bold text-foreground">Simultaneous Usage</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Keep using WhatsApp on your phone while CRM automations run in background.
+                    </p>
                   </div>
                 </div>
                 
-                <div className="flex items-start gap-3 p-3 rounded-xl bg-background border border-border/60">
-                  <ShieldCheck className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-card/80 border border-border/80 shadow-xs hover:border-teal-500/30 transition-colors">
+                  <div className="p-2 rounded-xl bg-teal-500/10 text-teal-500 shrink-0">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
                   <div>
-                    <h4 className="text-xs font-bold">No Account Loss</h4>
-                    <p className="text-[11px] text-muted-foreground">Maintains regular mobile session without disrupting existing contacts or chats.</p>
+                    <h4 className="text-xs sm:text-sm font-bold text-foreground">No Account Loss</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Maintains regular mobile session without disrupting existing contacts or chats.
+                    </p>
                   </div>
                 </div>
                 
-                <div className="flex items-start gap-3 p-3 rounded-xl bg-background border border-border/60">
-                  <Zap className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-card/80 border border-border/80 shadow-xs hover:border-indigo-500/30 transition-colors">
+                  <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 shrink-0">
+                    <Zap className="h-5 w-5" />
+                  </div>
                   <div>
-                    <h4 className="text-xs font-bold">Instant Setup</h4>
-                    <p className="text-[11px] text-muted-foreground">Scan QR code using WhatsApp Link a Device feature for 1-click connection.</p>
+                    <h4 className="text-xs sm:text-sm font-bold text-foreground">Instant Setup</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Scan QR code using WhatsApp Link a Device feature for 1-click connection.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -616,7 +635,7 @@ export default function CoexistenceSetupPage() {
                 onClick={handleCreateInstance} 
                 disabled={loading} 
                 size="lg" 
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 text-sm rounded-xl shadow-md transition-all gap-2"
+                className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-4 text-sm sm:text-base rounded-2xl shadow-lg shadow-emerald-600/25 transition-all hover:scale-[1.008] active:scale-[0.99] gap-2.5 cursor-pointer"
               >
                 {loading ? (
                   <>
@@ -636,41 +655,44 @@ export default function CoexistenceSetupPage() {
 
         {/* VIEW 2: DISCONNECTED (QR CODE DISPLAY) */}
         {!isConnected && qrCodeBase64 && (
-          <Card className="border-emerald-500/30 bg-card rounded-2xl shadow-md overflow-hidden">
-            <CardHeader className="text-center pb-2">
-              <Badge className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30 mb-2 w-fit mx-auto font-bold px-3 py-1">
+          <Card className="border border-emerald-500/30 bg-gradient-to-br from-card via-card to-emerald-950/10 rounded-3xl shadow-xl overflow-hidden">
+            <CardHeader className="text-center pb-2 pt-6">
+              <Badge className="bg-emerald-500/20 text-emerald-500 dark:text-emerald-400 border-emerald-500/40 mb-3 w-fit mx-auto font-black px-4 py-1.5 text-xs">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 mr-2 animate-pulse" />
                 WAITING FOR PHONE SCAN
               </Badge>
-              <CardTitle className="text-2xl font-bold">Scan QR Code with WhatsApp</CardTitle>
-              <CardDescription className="text-xs text-muted-foreground">
+              <CardTitle className="text-2xl sm:text-3xl font-black text-foreground">Scan QR Code with WhatsApp</CardTitle>
+              <CardDescription className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto mt-1">
                 Open WhatsApp on your phone → Settings → Linked Devices → Link a Device
               </CardDescription>
             </CardHeader>
             
-            <CardContent className="flex flex-col items-center gap-6 p-6">
-              <div className="bg-white p-6 rounded-2xl shadow-xl border-4 border-emerald-500/20">
+            <CardContent className="flex flex-col items-center gap-6 p-6 sm:p-8">
+              <div className="relative bg-white p-6 sm:p-8 rounded-3xl shadow-2xl border-4 border-emerald-500/30">
                 <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-64 h-64 object-contain" />
               </div>
               
-              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-4 py-2 rounded-xl">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/80 px-4 py-2.5 rounded-xl border border-border/70">
                 <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-500" />
                 <span>QR code refreshes automatically. Scan within 2 minutes.</span>
               </div>
               
               <div className="flex gap-3 w-full max-w-sm">
-                <Button onClick={() => setQrCodeBase64(null)} variant="outline" className="flex-1 rounded-xl text-xs font-semibold">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
+                <Button onClick={() => setQrCodeBase64(null)} variant="outline" className="flex-1 rounded-xl text-xs font-bold">
+                  <ArrowLeft className="h-4 w-4 mr-1.5" />
                   Back
                 </Button>
-                <Button onClick={handleCreateInstance} variant="outline" className="flex-1 rounded-xl text-xs font-semibold border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10">
-                  <QrCode className="h-4 w-4 mr-2" />
+                <Button onClick={handleCreateInstance} variant="outline" className="flex-1 rounded-xl text-xs font-bold border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10">
+                  <QrCode className="h-4 w-4 mr-1.5" />
                   Refresh QR
                 </Button>
               </div>
             </CardContent>
           </Card>
         )}
+
+        {/* ALWAYS RENDER THE RICH COEXISTENCE GUIDE BELOW CONNECTION VIEWS */}
+        <CoexistenceGuide />
 
         {/* VIEW 3: CONNECTED DASHBOARD */}
         {isConnected && (

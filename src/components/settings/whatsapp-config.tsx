@@ -225,8 +225,34 @@ export function WhatsAppConfig() {
           setAccessToken(data.accessToken);
           setTokenEdited(true);
           setShowAdvanced(true);
-          
-          toast.success('Successfully connected to Facebook. Please click Save to finalize.');
+
+          // Auto-save configuration with default/env verify token for instant connection
+          try {
+            const saveRes = await fetch('/api/whatsapp/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                phone_number_id: data.phoneNumberId,
+                waba_id: data.wabaId || null,
+                access_token: data.accessToken,
+                verify_token: 'saifansari123',
+              }),
+            });
+
+            const saveData = await saveRes.json();
+            if (saveRes.ok) {
+              setConnectionStatus('connected');
+              toast.success('🎉 WhatsApp Connected Successfully! Redirecting to Dashboard...', { duration: 3000 });
+              setTimeout(() => {
+                window.location.href = '/dashboard';
+              }, 1200);
+              return;
+            }
+          } catch (autoSaveErr) {
+            console.warn('Auto-save attempt failed, falling back to manual save:', autoSaveErr);
+          }
+
+          toast.success('Connected to Facebook. Click "Save Changes" below to finalize.');
         } catch (err: any) {
           console.error('Exchange error:', err);
           toast.error(err.message || 'Failed to fetch WhatsApp account details.');

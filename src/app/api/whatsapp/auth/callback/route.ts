@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   // We use the actual request host to ensure the redirect URI exactly matches
   // what the frontend used, avoiding domain mismatch errors.
   const protocol = req.headers.get('x-forwarded-proto') || 'https';
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'saas-whtsapp-crm-pq3m.onrender.com';
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'saas-whtsapp-crm.onrender.com';
   const baseUrl = `${protocol}://${host}`;
   const settingsUrl = new URL('/settings', baseUrl);
   settingsUrl.searchParams.set('tab', 'whatsapp');
