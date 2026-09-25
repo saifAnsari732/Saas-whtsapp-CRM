@@ -189,3 +189,36 @@ All live data from Supabase was thoroughly audited and exported into structured 
 - All Firebase client and admin configurations are stored securely in `.env.local`.
 - Supabase credentials remain preserved as an inactive fallback to guarantee business continuity.
 - Tokens and secrets continue to use AES-256-GCM encryption with `ENCRYPTION_KEY`.
+
+---
+
+## 8. Recent Working Features Added (September 24–25, 2026)
+
+### 1. Coexistence Session Auto-Adoption & Connection Stability
+- **Global Mutex Connection Locking**: Implemented `global.waConnectionLocks` in Baileys service to prevent race conditions during concurrent socket initialization.
+- **Companion Pairing Fix**: Corrected credential validation by checking `creds.me.id` alongside `creds.registered`, preventing automatic disconnection on page refresh for linked multi-device WhatsApp companion sessions.
+- **Session Folder Auto-Adoption**: Server automatically scans and adopts existing registered session folders on disk upon startup or reconnect.
+- **Direct Contacts & Group Fetching**: Optimized `/api/whatsapp/baileys/chats` to fetch all 1,988 contacts directly from Firestore as well as active WhatsApp groups for complete conversation listing.
+
+### 2. Primary Database Activation (Firebase Firestore & Auth) & 100% Data Sync
+- **Primary Backend Shift**: Full transition to **Firebase Firestore** (`whatsapp-saas-7ab44`, region `asia-south2`) and Firebase Auth for all CRUD operations and user session management.
+- **100% Zero-Loss Migration**: Successfully exported, validated, and synchronized 5,857 records across 24 database collections (1,988 contacts, 3,452 broadcast recipients, 216 messages, 66 conversations, 45 broadcasts, 15 pipeline stages, 4 profiles, 4 accounts, etc.).
+- **Dual Config Continuity**: Supabase backup database maintained locally as an offline fallback while Firestore handles 100% of live traffic.
+
+### 3. AI Chatbot Studio & Multi-Step Automated Follow-Up Engine
+- **AI Chatbot Studio (`/dashboard/chatbot`)**: Built visual management interface for AI auto-reply rules and personas (Sales Representative, Customer Support, Lead Qualifier, Custom Prompt).
+- **Automated Follow-Up Runner (`src/lib/chatbot/*`)**: Multi-step sequential follow-ups triggered after initial contact, featuring customizable typing delays, retry limits, and status tracking.
+- **Keyword & Intent Matching**: Flexible triggers for inbound messages based on exact, partial, or regex keyword rules.
+
+### 4. Pricing Plan Restructuring & 5% OFF Yearly Billing Discount
+- **Removal of ₹10 Starter Plan**: Removed the legacy ₹10 testing plan from the Landing Page (`PricingSection.tsx`), Billing Page (`billing/page.tsx`), Admin Page (`admin/page.tsx`), `plan-features.ts`, and Razorpay order creation endpoints. Baseline paid tier set to Essential (₹999/mo).
+- **5% OFF Yearly Billing**: Updated yearly billing logic with a prominent `(Save 5% OFF)` badge and accurate annual price calculation (`monthlyPrice * 0.95 * 12`): Essential (₹949/mo billed annually), Growth (₹1,899/mo), and Enterprise (₹3,799/mo).
+
+### 5. Platform Admin Coupon Management Console & User Checkout Coupon System
+- **Admin Coupon Management (`/admin` - Coupons Tab)**: Platform admins can create discount promo codes with percentage (`%`) or fixed (`₹`) discounts, set maximum usage limits, select expiry dates, toggle coupon status (`Active`/`Inactive`/`Expired`), and delete coupons.
+- **User Checkout Coupon Validation**: Integrated "Have a Promo or Coupon Code?" widget on `/billing` page with real-time validation via `/api/billing/coupons/apply`.
+- **Server-Side Razorpay Discount Engine**: Discount calculation enforced on the server within `/api/billing/razorpay/create-order` endpoint, updating coupon `used_count` directly in the Firestore `coupons` collection.
+
+### 6. Shared Team Inbox & UI Usability Enhancements
+- **Tab & Button UI Optimization**: Increased button sizes, improved active tab visual contrast, and made section tab bars scrollable for seamless navigation across responsive viewports.
+- **Enhanced Chat & Group Display**: Consolidated direct customer contacts and group chats into a single unified inbox search and filter view.
