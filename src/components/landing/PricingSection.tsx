@@ -36,33 +36,10 @@ interface Plan {
 
 const plans: Plan[] = [
   {
-    id: "starter",
-    name: "Starter (Testing)",
-    monthlyPrice: 10,
-    yearlyPrice: 8,
-    headerBg: "bg-[#1d68f2]", // Crisp Royal Blue
-    btnBg: "bg-slate-100 hover:bg-slate-200 text-slate-800",
-    popular: false,
-    services: [
-      { name: "WhatsApp API", icon: MessageSquare, value: "Basic 2K msg", included: true },
-      { name: "Website", icon: Globe, value: "Not included", included: false },
-      { name: "Chatbot", icon: Bot, value: "Basic", included: true },
-      { name: "AI Agent", icon: BrainCircuit, value: "Not included", included: false },
-      { name: "SEO", icon: Search, value: "Not included", included: false },
-      { name: "AI Automation", icon: Workflow, value: "Not included", included: false },
-    ],
-    features: [
-      "1 WhatsApp Number",
-      "2,000 Contacts",
-      "1 User",
-      "Basic CRM Templates",
-    ],
-  },
-  {
     id: "essential",
     name: "Essential",
     monthlyPrice: 999,
-    yearlyPrice: 799,
+    yearlyPrice: 949,
     headerBg: "bg-[#00A884]", // Vibrant Emerald WhatsApp Green
     btnBg: "bg-slate-100 hover:bg-slate-200 text-slate-800",
     popular: false,
@@ -85,7 +62,7 @@ const plans: Plan[] = [
     id: "growth",
     name: "Growth",
     monthlyPrice: 1999,
-    yearlyPrice: 1599,
+    yearlyPrice: 1899,
     headerBg: "bg-[#111c24]", // Sleek Deep Navy/Charcoal
     btnBg: "bg-[#00A884] hover:bg-[#008f70] text-white",
     popular: true,
@@ -108,7 +85,7 @@ const plans: Plan[] = [
     id: "all-in-one",
     name: "All-In-One",
     monthlyPrice: 3999,
-    yearlyPrice: 3199,
+    yearlyPrice: 3799,
     headerBg: "bg-[#8b3cfc]", // Vibrant Violet Purple
     btnBg: "bg-slate-100 hover:bg-slate-200 text-slate-800",
     popular: false,
@@ -169,13 +146,13 @@ export default function PricingSection() {
               />
             </button>
             <span className={`text-sm font-bold ${isYearly ? "text-slate-900" : "text-slate-400"}`}>
-              Yearly <span className="text-[#00A884] text-xs font-semibold bg-[#E8F8F5] border border-[#D1F2EB] px-2 py-0.5 rounded-full ml-1">Save 20%</span>
+              Yearly <span className="text-[#00A884] text-xs font-semibold bg-[#E8F8F5] border border-[#D1F2EB] px-2 py-0.5 rounded-full ml-1">Save 5% OFF</span>
             </span>
           </div>
         </div>
 
-        {/* 4 Cards Grid - Exactly Matching Reference Screenshot */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+        {/* 3 Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch max-w-6xl mx-auto">
           {plans.map((plan) => {
             const price = isYearly ? plan.yearlyPrice : plan.monthlyPrice;
 

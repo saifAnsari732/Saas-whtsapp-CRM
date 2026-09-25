@@ -70,42 +70,6 @@ export const PLAN_CONFIGS: Record<string, PlanFeatureConfig> = {
     badge: 'Free Trial'
   },
 
-  starter: {
-    id: 'starter',
-    name: 'Starter Plan',
-    price: 10,
-    period: 'month',
-    maxMessages: 2000,
-    maxContacts: 2000,
-    maxAgents: 1,
-    features: {
-      metaApi: true,
-      qrCoexistence: false,
-      sharedInbox: true,
-      broadcasts: false,
-      automations: false,
-      flows: false,
-      aiReply: false,
-      pipelines: false,
-      templates: true,
-      webhooks: false,
-      exportContacts: false,
-      prioritySupport: false
-    },
-    allowedRoutes: [
-      '/dashboard',
-      '/inbox',
-      '/dashboard/chats',
-      '/contacts',
-      '/notifications',
-      '/billing',
-      '/settings',
-      '/profile'
-    ],
-    description: 'Single user, 2,000 WhatsApp Cloud API messages, direct 1-to-1 live chats.',
-    badge: 'Starter'
-  },
-
   essential: {
     id: 'essential',
     name: 'Essential Plan',
@@ -287,8 +251,7 @@ export function getPlanConfig(planId: string | null | undefined, isTrial: boolea
   const normalized = planId.toLowerCase().replace(/[-_]/g, '');
   if (normalized === 'allinone') return PLAN_CONFIGS.allinone;
   if (normalized === 'growth') return PLAN_CONFIGS.growth;
-  if (normalized === 'essential') return PLAN_CONFIGS.essential;
-  if (normalized === 'starter') return PLAN_CONFIGS.starter;
+  if (normalized === 'essential' || normalized === 'starter') return PLAN_CONFIGS.essential;
   if (normalized === 'enterprise') return PLAN_CONFIGS.enterprise;
   return PLAN_CONFIGS.trial;
 }

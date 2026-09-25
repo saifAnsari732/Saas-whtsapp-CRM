@@ -7,32 +7,12 @@ import { TransactionHistory, Transaction } from "@/components/billing/transactio
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, Wallet, CreditCard, ExternalLink, Loader2, Sparkles, Shield, MessageSquare, Globe, Bot, BrainCircuit, Search, Workflow, CheckCircle2 } from "lucide-react";
+import { Check, X, Wallet, CreditCard, ExternalLink, Loader2, Sparkles, Shield, MessageSquare, Globe, Bot, BrainCircuit, Search, Workflow, CheckCircle2, Tag, Percent } from "lucide-react";
 import { motion } from "framer-motion";
+import { Input } from "@/components/ui/input";
 
 // Default Plan data that matches landing page
 const DEFAULT_PLANS = [
-  {
-    id: "starter",
-    name: "Starter (Testing)",
-    price: 10,
-    gradient: "from-blue-500 to-blue-600",
-    popular: false,
-    services: [
-      { name: "WhatsApp API", icon: MessageSquare, value: "Basic 2K msg", included: true },
-      { name: "Website", icon: Globe, value: "", included: false },
-      { name: "Chatbot", icon: Bot, value: "Basic", included: true },
-      { name: "AI Agent", icon: BrainCircuit, value: "", included: false },
-      { name: "SEO", icon: Search, value: "", included: false },
-      { name: "AI Automation", icon: Workflow, value: "", included: false },
-    ],
-    features: [
-      "1 WhatsApp Number",
-      "2,000 Contacts",
-      "1 User",
-      "Basic CRM Templates"
-    ]
-  },
   {
     id: "essential",
     name: "Essential",
@@ -99,7 +79,7 @@ const DEFAULT_PLANS = [
 ];
 
 export default function BillingPage() {
-  const [currentPlan, setCurrentPlan] = useState("starter");
+  const [currentPlan, setCurrentPlan] = useState("essential");
   const [trialStatus, setTrialStatus] = useState<"active" | "expired" | "none">("active");
   const [subData, setSubData] = useState<any>(null);
   const [walletBalance, setWalletBalance] = useState(150);
@@ -107,6 +87,11 @@ export default function BillingPage() {
   const [plansData, setPlansData] = useState(DEFAULT_PLANS);
   const [isYearly, setIsYearly] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(true);
+
+  // Coupon state
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
   
   // Checkout state
   const [checkoutData, setCheckoutData] = useState<{
@@ -124,19 +109,19 @@ export default function BillingPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [plansRes, subRes, walletRes, txRes] = await Promise.allSettled([
+        const [plansRes, subRes, walletRes] = await Promise.allSettled([
           fetch('/api/billing/plans').then(res => res.ok ? res.json() : null),
           fetch('/api/billing/subscription').then(res => res.ok ? res.json() : null),
           fetch('/api/billing/wallet').then(res => res.ok ? res.json() : null),
-          fetch('/api/billing/wallet').then(res => res.ok ? res.json() : null)
         ]);
 
         if (plansRes.status === 'fulfilled' && plansRes.value && plansRes.value.length > 0) {
-          setPlansData(plansRes.value);
+          const filtered = plansRes.value.filter((p: any) => p.id !== 'starter');
+          if (filtered.length > 0) setPlansData(filtered);
         }
         if (subRes.status === 'fulfilled' && subRes.value) {
           setSubData(subRes.value);
-          setCurrentPlan(subRes.value.plan || "starter");
+          setCurrentPlan(subRes.value.plan || "essential");
           setTrialStatus(subRes.value.status === 'trial' ? "active" : subRes.value.status === 'expired' ? "expired" : "none");
         }
         if (walletRes.status === 'fulfilled' && walletRes.value && walletRes.value.wallet) {
@@ -161,6 +146,33 @@ export default function BillingPage() {
     fetchData();
   }, []);
 
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setApplyingCoupon(true);
+    try {
+      const res = await fetch('/api/billing/coupons/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: couponInput.trim(),
+          plan_id: 'essential',
+          billing_cycle: isYearly ? 'yearly' : 'monthly'
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setAppliedCoupon(data.coupon);
+        toast.success(`Coupon '${data.coupon.code}' applied successfully!`);
+      } else {
+        toast.error(data.error || 'Invalid coupon code');
+      }
+    } catch (err) {
+      toast.error('Failed to apply coupon');
+    } finally {
+      setApplyingCoupon(false);
+    }
+  };
+
   const handleCreateOrder = async (amount: number, type: 'subscription' | 'wallet_topup', planId?: string) => {
     try {
       setIsLoading(true);
@@ -171,10 +183,19 @@ export default function BillingPage() {
       const res = await fetch('/api/billing/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, type, plan_id: planId }),
+        body: JSON.stringify({ 
+          amount, 
+          type, 
+          plan_id: planId,
+          billing_cycle: isYearly ? 'yearly' : 'monthly',
+          coupon_code: appliedCoupon?.code
+        }),
       });
 
-      if (!res.ok) throw new Error("Failed to create order");
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to create order");
+      }
       const data = await res.json();
       
       setCheckoutData({
@@ -183,8 +204,8 @@ export default function BillingPage() {
         type,
         planId,
       });
-    } catch (error) {
-      toast.error("Failed to initialize payment");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to initialize payment");
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -388,7 +409,36 @@ export default function BillingPage() {
         </div>
       </section>
 
-      {/* 2. Pricing Plans Section */}
+      {/* 2. Coupon Code Entry Section */}
+      <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm max-w-xl mx-auto space-y-3">
+        <div className="flex items-center gap-2">
+          <Tag className="h-5 w-5 text-emerald-600" />
+          <h3 className="font-extrabold text-sm text-foreground">Have a Promo or Coupon Code?</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input 
+            placeholder="Enter Coupon Code (e.g. SAVE50)" 
+            value={couponInput}
+            onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+            className="h-10 text-xs font-mono font-bold uppercase tracking-wider"
+          />
+          <Button 
+            onClick={handleApplyCoupon} 
+            disabled={applyingCoupon || !couponInput.trim()}
+            className="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm shrink-0"
+          >
+            {applyingCoupon ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply Coupon"}
+          </Button>
+        </div>
+        {appliedCoupon && (
+          <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-xs font-bold">
+            <span>✓ Coupon '{appliedCoupon.code}' Applied! ({appliedCoupon.discount_type === 'percentage' ? `${appliedCoupon.discount_value}% OFF` : `₹${appliedCoupon.discount_value} OFF`})</span>
+            <button onClick={() => setAppliedCoupon(null)} className="text-red-500 hover:underline">Remove</button>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Pricing Plans Section */}
       <section id="pricing" className="space-y-6 relative">
         <div className="text-center space-y-4">
           <h2 className="text-3xl font-bold tracking-tight text-navy">Simple, transparent pricing</h2>
@@ -403,15 +453,15 @@ export default function BillingPage() {
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${isYearly ? 'translate-x-8' : 'translate-x-1'}`} />
             </button>
             <span className={`text-sm font-bold ${isYearly ? "text-slate-900" : "text-gray-400"}`}>
-              Yearly <span className="text-[var(--color-green-vivid, #25D366)] ml-1">(Save 20%)</span>
+              Yearly <span className="text-[var(--color-green-vivid, #25D366)] ml-1 font-bold">(Save 5% OFF)</span>
             </span>
           </div>
         </div>
         
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-start mt-8">
+        <div className="grid md:grid-cols-3 gap-6 items-start mt-8 max-w-6xl mx-auto">
           {plansData.map((plan, i) => {
             const isCurrentPlan = currentPlan === plan.id;
-            const price = isYearly ? Math.round(plan.price * 0.8 * 12) : plan.price;
+            const price = isYearly ? Math.round(plan.price * 0.95 * 12) : plan.price;
             const period = isYearly ? "/yr" : "/mo";
             
             return (
