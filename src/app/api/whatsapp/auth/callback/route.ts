@@ -52,9 +52,23 @@ export async function GET(req: NextRequest) {
     }
 
     // Successfully retrieved the access token
+    let finalToken = tokenData.access_token;
+
+    // Exchange short-lived token for a long-lived access token (lasts 60 days instead of 1 hour)
+    try {
+      const longLivedUrl = `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${clientId}&client_secret=${clientSecret}&fb_exchange_token=${tokenData.access_token}`;
+      const longLivedRes = await fetch(longLivedUrl);
+      const longLivedData = await longLivedRes.json();
+      if (longLivedRes.ok && longLivedData.access_token) {
+        finalToken = longLivedData.access_token;
+      }
+    } catch (llErr) {
+      console.warn('Long-lived token exchange warning (continuing with base token):', llErr);
+    }
+
     // We redirect the user back to the settings page with the token in the URL.
     // The frontend will intercept this, exchange it for WABA IDs, and clear it from the URL.
-    settingsUrl.searchParams.set('accessToken', tokenData.access_token);
+    settingsUrl.searchParams.set('accessToken', finalToken);
     
     return NextResponse.redirect(settingsUrl);
 

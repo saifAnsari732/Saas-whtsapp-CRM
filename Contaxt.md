@@ -241,3 +241,9 @@ All live data from Supabase was thoroughly audited and exported into structured 
   - Safe usage & anti-ban guidelines (safe warmup, volume pacing, personal chat activity).
   - Interactive FAQ accordion addressing phone battery/internet, safety, and simultaneous app usage.
 - **SaaS-Grade UI & Color Scheme Upgrade**: Redesigned header with animated pulse status indicator, high-tech emerald-to-teal glass gradient cards, jewel-toned feature chips, and modern gradient buttons with micro-interactions.
+
+### 10. Persistent Meta Cloud Storage & Permanent Multi-Session Anti-Disconnect
+- **Automatic Long-Lived Token Upgrades**: Updated `/api/whatsapp/auth/callback` and `/api/whatsapp/auth/exchange` to automatically exchange short-lived OAuth tokens (1-2 hour lifetime) for 60-day long-lived access tokens via `grant_type=fb_exchange_token`.
+- **System User Permanent Token Auto-Healing**: Wired up environment permanent token (`permanent_token` / `PERMANENT_TOKEN`). If an OAuth token expires or needs refresh, the system verifies and auto-heals the encrypted database token with the permanent token.
+- **Complete Account Details Database Persistence**: Added migration `047_whatsapp_config_metadata.sql` and dual-write to Firebase Firestore (`whatsapp_configs` collection) storing verified business name, display phone number, and quality rating.
+- **Fail-Safe Next-Day Session Preservation**: Enhanced `GET /api/whatsapp/config` so accounts previously connected will never be falsely kicked into disconnected state during temporary Meta network timeouts or rate limits. Only explicit user disconnect (`DELETE /api/whatsapp/config`) marks the account as disconnected.

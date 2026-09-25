@@ -91,23 +91,44 @@ export async function POST(req: NextRequest) {
 
     const phoneNumberId = phoneData.data[0].id;
 
-    // 3. Save to database
-    // We encrypt the token if the existing logic expects it, but looking at the current API
-    // the POST /api/whatsapp/config handles encryption. Let's just use that logic by calling it directly,
-    // or replicating the upsert here.
-    // It's better to just replicate the payload and call the existing config logic if possible, 
-    // or encrypt it here.
-    // Let's just do a direct upsert here and let the token be plaintext for a moment, or we need to encrypt it.
-    // Looking at `/api/whatsapp/config`, it encrypts using `process.env.ENCRYPTION_KEY`.
-    
-    // Instead of duplicating encryption logic, we can return the fetched details to the frontend, 
-    // and let the frontend call the existing `handleSave` with the new data!
-    // Yes! That's much safer and reuses existing logic.
+    // Check if a permanent System User token exists in environment
+    const envPermanentToken = process.env.PERMANENT_TOKEN || process.env.permanent_token;
+    let tokenToPersist = accessToken;
+
+    if (envPermanentToken) {
+      try {
+        const permCheck = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}`, {
+          headers: { Authorization: `Bearer ${envPermanentToken}` }
+        });
+        if (permCheck.ok) {
+          console.log('[exchange] Verified permanent System User token works for this phone number. Using it for perpetual connection.');
+          tokenToPersist = envPermanentToken;
+        }
+      } catch (pErr) {
+        console.warn('[exchange] Permanent token test error:', pErr);
+      }
+    }
+
+    // If not using permanent token, exchange short-lived token for long-lived 60-day token
+    if (tokenToPersist === accessToken && clientId && clientSecret) {
+      try {
+        const llRes = await fetch(
+          `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${clientId}&client_secret=${clientSecret}&fb_exchange_token=${accessToken}`
+        );
+        const llData = await llRes.json();
+        if (llRes.ok && llData.access_token) {
+          tokenToPersist = llData.access_token;
+          console.log('[exchange] Successfully upgraded to 60-day long-lived token');
+        }
+      } catch (llErr) {
+        console.warn('[exchange] Long-lived token exchange warning:', llErr);
+      }
+    }
 
     return NextResponse.json({
       wabaId,
       phoneNumberId,
-      accessToken,
+      accessToken: tokenToPersist,
       message: "Successfully fetched WhatsApp details"
     });
   } catch (error: any) {
