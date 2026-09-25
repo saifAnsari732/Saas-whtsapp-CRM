@@ -125,10 +125,10 @@ function SignupPageInner() {
           <Image
             src="/chatflyr-logo.png"
             alt="ChatFlyr"
-            width={240}
-            height={70}
+            width={300}
+            height={85}
             priority
-            className="h-14 sm:h-16 w-auto object-contain hover:scale-105 transition-transform"
+            className="h-16 sm:h-20 w-auto object-contain hover:scale-105 transition-transform"
           />
         </Link>
 

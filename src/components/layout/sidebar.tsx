@@ -185,15 +185,15 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           "transition-transform duration-200 ease-out will-change-transform",
           open ? "translate-x-0" : "-translate-x-full",
           // Desktop: static, always visible — reset all the mobile framing.
-          "lg:static lg:z-0 lg:w-60 lg:translate-x-0 lg:transition-none",
+          "lg:static lg:z-0 lg:w-64 lg:translate-x-0 lg:transition-none",
         )}
         aria-label="Primary"
       >
         {/* Logo row. On mobile we put a close button here; on desktop the
             close button is hidden since the sidebar is always-visible. */}
-        <div className="flex h-20 shrink-0 items-center justify-between gap-2 border-b border-border px-5">
-          <Link href="/dashboard" className="flex items-center gap-2 py-1">
-            <img src="/chatflyr-logo.png" alt="ChatFlyr" className="h-14 max-h-14 w-auto object-contain transition-all" />
+        <div className="flex h-22 shrink-0 items-center justify-between gap-2 border-b border-border  sm:px-5">
+          <Link href="/dashboard" className="flex items-center ">
+            <img src="/chatflyr-logo.png" alt="ChatFlyr" className="h-3 sm:h-20 max-h-30  object-contain transition-all hover:scale-105 duration-200" />
           </Link>
           <button
             type="button"

@@ -37,6 +37,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ChatbotStudio } from "@/components/chatbot/chatbot-studio";
 
 type Schedule = { id: string; group_jid: string; group_name: string; message_text: string; schedule_time: string; is_active: boolean; last_sent_at: string | null; created_at: string };
 type BaileysChat = { id: string; name?: string; type?: string; unreadCount?: number; conversationTimestamp?: number };
@@ -54,6 +55,7 @@ interface Template {
 }
 
 export default function CoexistenceSetupPage() {
+  const [activeTab, setActiveTab] = useState<string>("chats");
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string>(() => {
@@ -723,37 +725,39 @@ export default function CoexistenceSetupPage() {
               </Card>
             </div>
 
-            <Card className="rounded-2xl border-border/80 shadow-xs">
+            <Card className="rounded-2xl border-border/80 shadow-xs bg-gradient-to-r from-card via-card to-purple-500/5">
               <CardContent className="p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-2xl">
+                    <div className="p-3 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-2xl border border-purple-500/20 shadow-xs">
                       <Bot className="h-6 w-6" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="font-bold text-sm text-foreground">AI Auto-Reply & Follow-up Engine</p>
-                        <Badge variant="outline" className={cn("px-2.5 py-0.5 font-bold text-[10px] rounded-lg", autoReplyEnabled ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-muted text-muted-foreground")}>
-                          {autoReplyEnabled ? "ON" : "OFF"}
+                        <Badge variant="outline" className={cn("px-2.5 py-0.5 font-bold text-[10px] rounded-lg", autoReplyEnabled ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-purple-500/10 text-purple-600 border-purple-500/30")}>
+                          {autoReplyEnabled ? "ACTIVE (ON)" : "AI STUDIO READY"}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">Automated instant replies, keyword triggers, and lead follow-up sequences for incoming WhatsApp Coexistence messages.</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Automated AI replies, keyword match triggers, and multi-step lead follow-up drip sequences for incoming WhatsApp Coexistence messages.</p>
                     </div>
                   </div>
 
-                  <Link href="/agents">
-                    <Button size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 shrink-0">
-                      <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
-                      Configure Chatbot & Follow-ups
-                    </Button>
-                  </Link>
+                  <Button 
+                    size="sm" 
+                    onClick={() => setActiveTab("chatbot")}
+                    className="rounded-xl text-xs font-bold gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md shadow-purple-600/20 shrink-0"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Open AI Chatbot & Follow-ups Studio
+                  </Button>
                 </div>
               </CardContent>
             </Card>
 
-            <Tabs defaultValue="chats" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               {/* ENHANCED TAB NAVIGATION BUTTONS: FULLY VISIBLE & NO SCROLLBAR */}
-              <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 !h-auto group-data-horizontal/tabs:!h-auto overflow-visible p-2 bg-muted/70 dark:bg-muted/30 border border-border/80 rounded-2xl shadow-inner">
+              <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 !h-auto group-data-horizontal/tabs:!h-auto overflow-visible p-2 bg-muted/70 dark:bg-muted/30 border border-border/80 rounded-2xl shadow-inner">
                 {/* TAB 1: CHATS */}
                 <TabsTrigger 
                   value="chats" 
@@ -768,7 +772,21 @@ export default function CoexistenceSetupPage() {
                   </span>
                 </TabsTrigger>
 
-                {/* TAB 2: BULK DISPATCH */}
+                {/* TAB 2: AI AUTO-REPLY & FOLLOW-UPS */}
+                <TabsTrigger 
+                  value="chatbot" 
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-purple-600/30 data-[state=active]:border-purple-400 flex items-center justify-center gap-2"
+                >
+                  <div className="p-1.5 rounded-lg bg-purple-500/15 data-[state=active]:bg-white/20 shrink-0">
+                    <Bot className="h-4 w-4 shrink-0" />
+                  </div>
+                  <span className="truncate">AI Bot & Follow-ups</span>
+                  <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-800 dark:text-purple-200 border border-purple-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
+                    Studio
+                  </span>
+                </TabsTrigger>
+
+                {/* TAB 3: BULK DISPATCH */}
                 <TabsTrigger 
                   value="messaging" 
                   className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:border-blue-400 flex items-center justify-center gap-2"
@@ -782,7 +800,7 @@ export default function CoexistenceSetupPage() {
                   </span>
                 </TabsTrigger>
 
-                {/* TAB 3: GROUPS */}
+                {/* TAB 4: GROUPS */}
                 <TabsTrigger 
                   value="groups" 
                   className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-violet-600/30 data-[state=active]:border-violet-400 flex items-center justify-center gap-2"
@@ -796,7 +814,7 @@ export default function CoexistenceSetupPage() {
                   </span>
                 </TabsTrigger>
 
-                {/* TAB 4: SCHEDULES */}
+                {/* TAB 5: SCHEDULES */}
                 <TabsTrigger 
                   value="schedules" 
                   className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-600 data-[state=active]:to-orange-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-amber-600/30 data-[state=active]:border-amber-400 flex items-center justify-center gap-2"
@@ -810,10 +828,10 @@ export default function CoexistenceSetupPage() {
                   </span>
                 </TabsTrigger>
 
-                {/* TAB 5: SETTINGS */}
+                {/* TAB 6: SETTINGS */}
                 <TabsTrigger 
                   value="settings" 
-                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-700 data-[state=active]:to-slate-900 dark:data-[state=active]:from-slate-700 dark:data-[state=active]:to-slate-800 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-slate-700/30 data-[state=active]:border-slate-500 flex items-center justify-center gap-2 col-span-2 sm:col-span-1"
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-700 data-[state=active]:to-slate-900 dark:data-[state=active]:from-slate-700 dark:data-[state=active]:to-slate-800 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-slate-700/30 data-[state=active]:border-slate-500 flex items-center justify-center gap-2"
                 >
                   <div className="p-1.5 rounded-lg bg-slate-500/15 data-[state=active]:bg-white/20 shrink-0">
                     <Settings className="h-4 w-4 shrink-0" />
@@ -956,7 +974,12 @@ export default function CoexistenceSetupPage() {
                 </Card>
               </TabsContent>
 
-              {/* TAB 2: BULK DISPATCH (Includes Paste Numbers + Groups!) */}
+              {/* TAB 2: AI AUTO-REPLY CHATBOT & FOLLOW-UPS STUDIO */}
+              <TabsContent value="chatbot" className="space-y-6 mt-6">
+                <ChatbotStudio />
+              </TabsContent>
+
+              {/* TAB 3: BULK DISPATCH (Includes Paste Numbers + Groups!) */}
               <TabsContent value="messaging" className="space-y-6 mt-6">
                 <Card className="rounded-2xl border-border/80 shadow-xs">
                   <CardHeader className="border-b border-border/80 bg-muted/20">

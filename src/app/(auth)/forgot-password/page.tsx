@@ -82,10 +82,10 @@ export default function ForgotPasswordPage() {
             <Image
               src="/chatflyr-logo.png"
               alt="ChatFlyr"
-              width={200}
-              height={60}
+              width={280}
+              height={80}
               priority
-              className="h-12 w-auto object-contain"
+              className="h-16 sm:h-18 w-auto object-contain hover:scale-105 transition-transform"
             />
           </Link>
           <CardTitle className="text-xl text-foreground">Reset password</CardTitle>

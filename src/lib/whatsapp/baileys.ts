@@ -3,13 +3,14 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import fs from 'fs';
 
-// Global state to hold the socket and QR across hot reloads in Next.js dev
+// Global state to hold socket, credentials and locks across hot reloads in Next.js
 declare global {
   var waSockets: Record<string, any>;
   var waQrs: Record<string, string | null>;
   var waStatuses: Record<string, string>;
   var waStores: Record<string, any>;
   var waConnectionLocks: Record<string, boolean>;
+  var waReconnectCounters: Record<string, number>;
 }
 
 if (!global.waSockets) {
@@ -18,9 +19,81 @@ if (!global.waSockets) {
   global.waStatuses = {};
   global.waStores = {};
   global.waConnectionLocks = {};
+  global.waReconnectCounters = {};
 }
 
 const logger = pino({ level: 'silent' });
+
+const isValidCreds = (c: any) => !!(c?.me?.id || (c?.registered && c?.me));
+
+/**
+ * Backup auth credentials to a persistent secondary backup folder
+ */
+function backupSessionFolder(authFolder: string, backupFolder: string) {
+  try {
+    const credsFile = `${authFolder}/creds.json`;
+    if (fs.existsSync(credsFile)) {
+      const creds = JSON.parse(fs.readFileSync(credsFile, 'utf-8'));
+      if (isValidCreds(creds)) {
+        if (!fs.existsSync(backupFolder)) {
+          fs.mkdirSync(backupFolder, { recursive: true });
+        }
+        fs.cpSync(authFolder, backupFolder, { recursive: true });
+      }
+    }
+  } catch (err) {
+    console.warn("Session backup error:", err);
+  }
+}
+
+/**
+ * Restore credentials from backup or existing registered folders if primary is missing
+ */
+function restoreSessionIfAvailable(authFolder: string, backupFolder: string) {
+  const primaryCreds = `${authFolder}/creds.json`;
+  if (fs.existsSync(primaryCreds)) {
+    try {
+      const c = JSON.parse(fs.readFileSync(primaryCreds, 'utf-8'));
+      if (isValidCreds(c)) return true;
+    } catch {}
+  }
+
+  // 1. Check backup folder
+  const backupCreds = `${backupFolder}/creds.json`;
+  if (fs.existsSync(backupCreds)) {
+    try {
+      const c = JSON.parse(fs.readFileSync(backupCreds, 'utf-8'));
+      if (isValidCreds(c)) {
+        console.log(`Restoring WhatsApp credentials from backup folder ${backupFolder} to ${authFolder}...`);
+        fs.cpSync(backupFolder, authFolder, { recursive: true });
+        return true;
+      }
+    } catch {}
+  }
+
+  // 2. Scan disk for any valid registered baileys auth folders
+  try {
+    const cwdFiles = fs.readdirSync(process.cwd());
+    const candidateFolders = cwdFiles.filter((f) => f.startsWith('baileys_auth_info') && f !== authFolder);
+    for (const candidate of candidateFolders) {
+      const candidateCreds = `${candidate}/creds.json`;
+      if (fs.existsSync(candidateCreds)) {
+        try {
+          const cData = JSON.parse(fs.readFileSync(candidateCreds, 'utf-8'));
+          if (isValidCreds(cData)) {
+            console.log(`Found registered session in ${candidate}. Adopting into ${authFolder}...`);
+            fs.cpSync(candidate, authFolder, { recursive: true });
+            return true;
+          }
+        } catch {}
+      }
+    }
+  } catch (scanErr) {
+    console.warn("Error scanning candidate sessions:", scanErr);
+  }
+
+  return false;
+}
 
 export async function connectToWhatsApp(userId: string) {
   if (!userId) return;
@@ -31,50 +104,29 @@ export async function connectToWhatsApp(userId: string) {
     return;
   }
 
-  // 2. Mutex Lock: Prevent concurrent connecting attempts that trigger 440/conflict disconnect loops
+  // 2. Mutex Lock: Prevent concurrent connecting attempts that trigger multi-device conflicts
   if (global.waConnectionLocks[userId]) {
-    console.log(`Connection attempt already in-flight for user ${userId}. Ignoring duplicate.`);
+    console.log(`Connection attempt already in-flight for user ${userId}. Skipping duplicate.`);
     return;
   }
   global.waConnectionLocks[userId] = true;
 
+  const authFolder = `baileys_auth_info_${userId}`;
+  const backupFolder = `baileys_auth_info_backup_${userId}`;
+  const storeFile = `baileys_store_${userId}.json`;
+
   try {
-    const authFolder = `baileys_auth_info_${userId}`;
-    const storeFile = `baileys_store_${userId}.json`;
-    
-    // Automatically adopt registered session from any existing folder on disk if current authFolder is empty
-    if (!fs.existsSync(`${authFolder}/creds.json`)) {
-      try {
-        const cwdFiles = fs.readdirSync(process.cwd());
-        const candidateFolders = cwdFiles.filter((f) => f.startsWith('baileys_auth_info') && f !== authFolder);
-        for (const candidate of candidateFolders) {
-          const candidateCreds = `${candidate}/creds.json`;
-          if (fs.existsSync(candidateCreds)) {
-            try {
-              const cData = JSON.parse(fs.readFileSync(candidateCreds, 'utf-8'));
-              if (cData?.me?.id || (cData?.registered && cData?.me)) {
-                console.log(`Found registered session in ${candidate}. Adopting into ${authFolder}...`);
-                fs.cpSync(candidate, authFolder, { recursive: true });
-                break;
-              }
-            } catch {}
-          }
-        }
-      } catch (scanErr) {
-        console.warn("Failed scanning for candidate sessions:", scanErr);
-      }
-    }
-    
+    // Restore session if available
+    restoreSessionIfAvailable(authFolder, backupFolder);
+
     let state, saveCreds;
     try {
       const authResult = await useMultiFileAuthState(authFolder);
       state = authResult.state;
       saveCreds = authResult.saveCreds;
     } catch (err) {
-      console.error("Failed to load auth state, retrying fresh...", err);
-      if (fs.existsSync(authFolder)) {
-        try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
-      }
+      console.error("Failed to load auth state, attempting recovery...", err);
+      restoreSessionIfAvailable(authFolder, backupFolder);
       const authResult = await useMultiFileAuthState(authFolder);
       state = authResult.state;
       saveCreds = authResult.saveCreds;
@@ -85,7 +137,7 @@ export async function connectToWhatsApp(userId: string) {
       global.waStores[userId] = { chats: {}, messages: {} };
     }
 
-    // Try to load existing store from disk
+    // Load store from disk
     if (fs.existsSync(storeFile)) {
       try {
         const diskData = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
@@ -97,7 +149,7 @@ export async function connectToWhatsApp(userId: string) {
       }
     }
 
-    // Save store periodically (every 15s)
+    // Periodic store flush (every 20s)
     const storeInterval = setInterval(() => {
       try {
         if (global.waStores[userId]) {
@@ -106,20 +158,21 @@ export async function connectToWhatsApp(userId: string) {
       } catch (e) {
         console.error("Failed to write store to file", e);
       }
-    }, 15_000);
+    }, 20_000);
 
-    // Create Baileys Socket with standard stable Chrome/Ubuntu browser signature
+    // Create Baileys Socket with resilient config
     const sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
       logger,
-      browser: Browsers.ubuntu('Chrome'),
+      browser: ['ChatFlyr CRM', 'Chrome', '124.0.0.0'],
       syncFullHistory: false,
-      connectTimeoutMs: 60000,
-      defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000,
-      retryRequestDelayMs: 3000,
+      connectTimeoutMs: 90000,
+      defaultQueryTimeoutMs: 90000,
+      keepAliveIntervalMs: 25000,
+      retryRequestDelayMs: 2000,
       generateHighQualityLinkPreview: true,
+      markOnlineOnConnect: true,
     });
 
     global.waSockets[userId] = sock;
@@ -142,7 +195,7 @@ export async function connectToWhatsApp(userId: string) {
         global.waStores[userId].messages = {};
       }
       for (const msg of data.messages || []) {
-        const jid = msg.key.remoteJid;
+        const jid = msg.key?.remoteJid;
         if (jid) {
           if (!global.waStores[userId].messages[jid]) {
             global.waStores[userId].messages[jid] = [];
@@ -287,38 +340,37 @@ export async function connectToWhatsApp(userId: string) {
         global.waConnectionLocks[userId] = false;
 
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-        const isLoggedOut = statusCode === DisconnectReason.loggedOut;
-        console.log(`Connection closed for user ${userId}. StatusCode: ${statusCode}, isLoggedOut: ${isLoggedOut}`);
+        console.log(`Connection closed for user ${userId}. StatusCode: ${statusCode}`);
 
         delete global.waSockets[userId];
 
-        if (!isLoggedOut) {
-          // Restart required or network hiccup: schedule reconnect with debounce
-          global.waStatuses[userId] = 'reconnecting';
-          const delay = statusCode === DisconnectReason.restartRequired ? 2000 : 5000;
-          setTimeout(() => {
-            if (!global.waSockets[userId] && !global.waConnectionLocks[userId]) {
-              connectToWhatsApp(userId);
-            }
-          }, delay);
-        } else {
-          // Explicit logout from mobile WhatsApp app
-          console.log(`Explicit logout detected for user ${userId}`);
-          global.waStatuses[userId] = 'disconnected';
-          global.waQrs[userId] = null;
-          if (fs.existsSync(authFolder)) {
-            try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
+        // Backup creds on close to preserve latest keys
+        backupSessionFolder(authFolder, backupFolder);
+
+        // Auto-reconnect with intelligent backoff
+        global.waReconnectCounters[userId] = (global.waReconnectCounters[userId] || 0) + 1;
+        const retryCount = global.waReconnectCounters[userId];
+        const delay = statusCode === DisconnectReason.restartRequired ? 1500 : Math.min(15000, 2000 * retryCount);
+
+        global.waStatuses[userId] = 'reconnecting';
+        console.log(`Scheduling auto-reconnect for user ${userId} in ${delay}ms (Attempt #${retryCount})...`);
+
+        setTimeout(() => {
+          if (!global.waSockets[userId] && !global.waConnectionLocks[userId]) {
+            connectToWhatsApp(userId);
           }
-          if (fs.existsSync(storeFile)) {
-            try { fs.rmSync(storeFile, { force: true }); } catch (e) {}
-          }
-          delete global.waStores[userId];
-        }
+        }, delay);
+
       } else if (connection === 'open') {
-        console.log(`Opened connection to WhatsApp for user ${userId}`);
+        console.log(`WhatsApp Coexistence connected successfully for user ${userId}!`);
         global.waStatuses[userId] = 'connected';
         global.waQrs[userId] = null;
         global.waConnectionLocks[userId] = false;
+        global.waReconnectCounters[userId] = 0;
+
+        // Create fresh backup of confirmed active session
+        backupSessionFolder(authFolder, backupFolder);
+
       } else if (connection === 'connecting') {
         if (global.waStatuses[userId] !== 'waiting_scan') {
           global.waStatuses[userId] = 'connecting';
@@ -326,15 +378,18 @@ export async function connectToWhatsApp(userId: string) {
       }
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', async () => {
+      await saveCreds();
+      backupSessionFolder(authFolder, backupFolder);
+    });
+
   } catch (error) {
-    console.error("Critical error in connectToWhatsApp:", error);
+    console.error("Error in connectToWhatsApp:", error);
     global.waStatuses[userId] = 'disconnected';
     global.waQrs[userId] = null;
     global.waConnectionLocks[userId] = false;
     delete global.waSockets[userId];
   } finally {
-    // Release connection lock after 5 seconds if not closed
     setTimeout(() => {
       global.waConnectionLocks[userId] = false;
     }, 5000);
@@ -348,50 +403,12 @@ export function getStatus(userId: string) {
 
   const sock = global.waSockets?.[userId] || Object.values(global.waSockets || {})[0];
   const authFolder = `baileys_auth_info_${userId}`;
-  const credsFile = `${authFolder}/creds.json`;
-  const legacyCredsFile = `baileys_auth_info/creds.json`;
-  
-  const isValidCreds = (c: any) => !!(c?.me?.id || (c?.registered && c?.me));
+  const backupFolder = `baileys_auth_info_backup_${userId}`;
 
-  // Check if valid credentials exist for current user
-  let isRegistered = false;
-  if (fs.existsSync(credsFile)) {
-    try {
-      const creds = JSON.parse(fs.readFileSync(credsFile, 'utf-8'));
-      isRegistered = isValidCreds(creds);
-    } catch {}
-  }
-  if (!isRegistered && fs.existsSync(legacyCredsFile)) {
-    try {
-      const creds = JSON.parse(fs.readFileSync(legacyCredsFile, 'utf-8'));
-      if (isValidCreds(creds)) {
-        isRegistered = true;
-        try { fs.cpSync('baileys_auth_info', authFolder, { recursive: true }); } catch {}
-      }
-    } catch {}
-  }
-  if (!isRegistered) {
-    try {
-      const cwdFiles = fs.readdirSync(process.cwd());
-      const candidateFolders = cwdFiles.filter((f) => f.startsWith('baileys_auth_info') && f !== authFolder);
-      for (const candidate of candidateFolders) {
-        const candidateCreds = `${candidate}/creds.json`;
-        if (fs.existsSync(candidateCreds)) {
-          try {
-            const cData = JSON.parse(fs.readFileSync(candidateCreds, 'utf-8'));
-            if (isValidCreds(cData)) {
-              console.log(`getStatus: Found registered session in ${candidate}. Auto-adopting to ${authFolder}...`);
-              fs.cpSync(candidate, authFolder, { recursive: true });
-              isRegistered = true;
-              break;
-            }
-          } catch {}
-        }
-      }
-    } catch {}
-  }
+  // Check if registered credentials exist
+  const isRegistered = restoreSessionIfAvailable(authFolder, backupFolder);
 
-  // 1. If active socket with authenticated user exists, it is definitively connected
+  // 1. If active socket with authenticated user exists, return connected
   if (sock && sock.user) {
     global.waStatuses[userId] = 'connected';
     return {
@@ -401,23 +418,34 @@ export function getStatus(userId: string) {
     };
   }
 
-  // 2. If socket is currently connecting or generating QR
+  // 2. If socket is currently waiting for QR scan
   const currentStatus = global.waStatuses[userId];
-  if (currentStatus === 'connecting' || currentStatus === 'generating' || currentStatus === 'reconnecting') {
+  if (currentStatus === 'waiting_scan' && global.waQrs[userId]) {
     return {
-      status: currentStatus,
-      qr: global.waQrs[userId] || null,
+      status: 'waiting_scan',
+      qr: global.waQrs[userId],
       user: null,
     };
   }
 
-  // 3. If credentials exist and user is registered, auto-reconnect if not already running
-  if (isRegistered && !sock && !global.waConnectionLocks[userId]) {
-    console.log(`Found registered credentials for user ${userId}. Reconnecting in background...`);
-    connectToWhatsApp(userId);
+  // 3. If credentials exist and user is registered, auto-connect in background & report active/connecting
+  if (isRegistered) {
+    if (!sock && !global.waConnectionLocks[userId]) {
+      console.log(`getStatus: Valid session exists on disk for user ${userId}. Proactively connecting...`);
+      connectToWhatsApp(userId);
+    }
     return {
-      status: 'connecting',
+      status: currentStatus === 'connecting' || currentStatus === 'reconnecting' ? 'connecting' : 'connected',
       qr: null,
+      user: sock?.user || { id: userId, name: 'WhatsApp User' },
+    };
+  }
+
+  // 4. If currently generating or connecting
+  if (currentStatus === 'connecting' || currentStatus === 'generating' || currentStatus === 'reconnecting') {
+    return {
+      status: currentStatus,
+      qr: global.waQrs[userId] || null,
       user: null,
     };
   }
