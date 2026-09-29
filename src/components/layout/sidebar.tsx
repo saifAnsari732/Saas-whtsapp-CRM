@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { useSubscription } from "@/hooks/use-subscription";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import {
@@ -14,6 +15,7 @@ import {
   Crown,
   GitBranch,
   LayoutDashboard,
+  Lock,
   LogOut,
   MessageSquare,
   Radio,
@@ -122,6 +124,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
   const { profile, profileLoading, account, accountRole, isSuperAdmin, signOut } = useAuth();
+  const { isActive: isSubscriptionActive, loading: subscriptionLoading } = useSubscription();
+  const isAccountLocked = !subscriptionLoading && !isSubscriptionActive;
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
   // Only surface the account-name strip when it actually carries
@@ -211,11 +215,25 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             <li className="mb-4">
               {/* Primary Action Button */}
               <Link
-                href="/broadcasts/new"
-                className="flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-all active:scale-[0.98]"
+                href={isAccountLocked ? "/billing" : "/broadcasts/new"}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold text-white shadow-sm transition-all active:scale-[0.98]",
+                  isAccountLocked
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                )}
               >
-                <Radio className="h-4 w-4 shrink-0" />
-                <span>+ New Campaign</span>
+                {isAccountLocked ? (
+                  <>
+                    <Lock className="h-3.5 w-3.5 shrink-0" />
+                    <span>Upgrade to Unlock CRM</span>
+                  </>
+                ) : (
+                  <>
+                    <Radio className="h-4 w-4 shrink-0" />
+                    <span>+ New Campaign</span>
+                  </>
+                )}
               </Link>
 
               {/* Secondary Status Links - Column layout */}
@@ -226,6 +244,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 >
                   <Smartphone className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                   <span>Cloud API Settings</span>
+                  {isAccountLocked && <Lock className="h-3 w-3 text-red-500 ml-auto shrink-0" />}
                 </Link>
                 <Link
                   href="/dashboard/coexistence"
@@ -233,6 +252,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 >
                   <Smartphone className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                   <span>QR Scan Connectivity</span>
+                  {isAccountLocked && <Lock className="h-3 w-3 text-red-500 ml-auto shrink-0" />}
                 </Link>
               </div>
             </li>
@@ -241,11 +261,13 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
+              const isItemLocked = isAccountLocked && item.href !== "/billing";
+
               const showUnreadDot =
-                item.href === "/inbox" && totalUnread > 0 && !isActive;
+                item.href === "/inbox" && totalUnread > 0 && !isActive && !isItemLocked;
 
               const showNotificationBadge =
-                item.href === "/notifications" && unreadNotifications > 0;
+                item.href === "/notifications" && unreadNotifications > 0 && !isItemLocked;
 
               return (
                 <li key={item.href}>
@@ -255,12 +277,17 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                       "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-150",
                       isActive
                         ? "bg-emerald-600 text-white shadow-xs font-bold"
+                        : isItemLocked
+                        ? "text-muted-foreground/70 hover:bg-muted/80 hover:text-foreground"
                         : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
                     <span className="flex-1">{t(item.labelKey as string)}</span>
-                    {item.beta && (
+                    {isItemLocked && (
+                      <Lock className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                    )}
+                    {!isItemLocked && item.beta && (
                       <span
                         aria-label={t("beta")}
                         className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
@@ -308,7 +335,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                     )}
                   >
                     <item.icon className="h-4 w-4" />
-                    {t(item.labelKey as string)}
+                    <span className="flex-1">{t(item.labelKey as string)}</span>
+                    {isAccountLocked && <Lock className="h-3.5 w-3.5 text-red-400 shrink-0" />}
                   </Link>
                 </li>
               );

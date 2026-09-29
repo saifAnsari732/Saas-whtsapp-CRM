@@ -45,7 +45,11 @@ export function TrialBanner() {
     return () => clearInterval(interval);
   }, [trialEndsAt, status]);
 
-  if (loading || dismissed || isSuperAdmin || (status !== 'trial' && status !== 'expired')) {
+  if (loading || isSuperAdmin || (status !== 'trial' && status !== 'expired')) {
+    return null;
+  }
+
+  if (status === 'trial' && dismissed) {
     return null;
   }
 
@@ -54,7 +58,7 @@ export function TrialBanner() {
     return null;
   }
 
-  // Expired banner
+  // Expired banner (always persistent, cannot be dismissed)
   if (status === 'expired') {
     return (
       <div className="flex items-center justify-between bg-gradient-to-r from-red-600 via-rose-600 to-red-700 px-4 py-2.5 text-white shadow-md z-40 border-b border-red-700">
@@ -68,11 +72,11 @@ export function TrialBanner() {
                 Access Blocked
               </span>
               <p className="text-sm font-bold tracking-tight">
-                Trial Expired: All Actions Are Blocked
+                5-Day Free Trial Expired: All Actions Are Locked
               </p>
             </div>
             <p className="text-xs text-red-100 hidden sm:block mt-0.5">
-              Your 5-day free trial period has ended. Please upgrade your plan to unlock messaging, broadcasts & automations.
+              Your 5-day free trial period has ended. Upgrade your plan to unlock messaging, broadcasts & automations.
             </p>
           </div>
         </div>
@@ -84,14 +88,6 @@ export function TrialBanner() {
             <span>Upgrade Plan Now</span>
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
-          <Button 
-            size="icon" 
-            variant="ghost" 
-            className="h-8 w-8 text-white hover:bg-white/20" 
-            onClick={() => setDismissed(true)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
         </div>
       </div>
     );

@@ -25,7 +25,7 @@ export async function runPendingFollowUps(): Promise<{ sent: number; checked: nu
       if (scheduledDate <= now) {
         // Time to dispatch follow-up!
         try {
-          const socket = global.waSockets ? Object.values(global.waSockets)[0] : null;
+          const socket = global.waSockets ? (global.waSockets[accountId] || null) : null;
           const formattedMessage = formatVariables(item.message_text, {
             name: item.contact_name,
             phone: item.contact_jid.split('@')[0],

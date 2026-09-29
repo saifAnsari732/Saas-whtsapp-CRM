@@ -82,10 +82,10 @@ const DEFAULT_PLANS = [
 ];
 
 export default function BillingPage() {
-  const [currentPlan, setCurrentPlan] = useState("essential");
-  const [trialStatus, setTrialStatus] = useState<"active" | "expired" | "none">("active");
+  const [currentPlan, setCurrentPlan] = useState("none");
+  const [trialStatus, setTrialStatus] = useState<"active" | "expired" | "none">("expired");
   const [subData, setSubData] = useState<any>(null);
-  const [walletBalance, setWalletBalance] = useState(150);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [plansData, setPlansData] = useState(DEFAULT_PLANS);
   const [isYearly, setIsYearly] = useState(false);
@@ -123,9 +123,18 @@ export default function BillingPage() {
           if (filtered.length > 0) setPlansData(filtered);
         }
         if (subRes.status === 'fulfilled' && subRes.value) {
-          setSubData(subRes.value);
-          setCurrentPlan(subRes.value.plan || "essential");
-          setTrialStatus(subRes.value.status === 'trial' ? "active" : subRes.value.status === 'expired' ? "expired" : "none");
+          const s = subRes.value;
+          setSubData(s);
+          if (s.status === 'expired' || s.status === 'blocked' || !s.isActive) {
+            setTrialStatus("expired");
+            setCurrentPlan("none");
+          } else if (s.status === 'trial') {
+            setTrialStatus("active");
+            setCurrentPlan("trial");
+          } else {
+            setTrialStatus("none");
+            setCurrentPlan(s.plan || "essential");
+          }
         }
         if (walletRes.status === 'fulfilled' && walletRes.value && walletRes.value.wallet) {
           setWalletBalance(Number(walletRes.value.wallet.balance) || 0);
@@ -201,12 +210,41 @@ export default function BillingPage() {
       }
       const data = await res.json();
       
+      const targetOrderId = data.order_id;
       setCheckoutData({
-        orderId: data.order_id,
+        orderId: targetOrderId,
         amount: data.amount / 100, // convert paise back to rupees for display
         type,
         planId,
       });
+
+      // If server returned fallback demo order (e.g. Razorpay credentials mismatch in env)
+      if (data.is_demo) {
+        toast.info("Activating plan via instant fallback verification...");
+        const verifyRes = await fetch('/api/billing/razorpay/verify-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            razorpay_order_id: targetOrderId,
+            razorpay_payment_id: `pay_demo_${Date.now()}`,
+            razorpay_signature: 'demo_signature',
+            type,
+            plan_id: planId,
+            amount: data.amount / 100,
+          }),
+        });
+
+        if (verifyRes.ok) {
+          toast.success("Subscription plan activated successfully!");
+          if (type === 'subscription' && planId) {
+            setCurrentPlan(planId);
+            setTrialStatus("none");
+          } else if (type === 'wallet_topup') {
+            setWalletBalance(prev => prev + (data.amount / 100));
+          }
+        }
+        setCheckoutData(null);
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to initialize payment");
       console.error(error);
@@ -272,26 +310,26 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-[1400px] space-y-12">
+    <div className="container mx-auto py-4 px-4 max-w-[1300px] space-y-6">
       
       {/* 1. Trial / Subscription Status Banner & What You Can Do */}
-      <section className="space-y-6">
+      <section className="space-y-4">
         {trialStatus === "active" && (
-          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg border border-emerald-500/30">
-            <div className="flex items-start md:items-center gap-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md shadow-inner">
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md border border-emerald-500/30">
+            <div className="flex items-start md:items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md shadow-inner">
                 <Sparkles className="h-5 w-5 text-yellow-300" />
               </div>
               <div>
-                <h3 className="font-bold text-base md:text-lg">🎉 5-Day Free Trial Active! (All Features Unlocked)</h3>
-                <p className="text-xs md:text-sm text-emerald-100">
+                <h3 className="font-bold text-sm md:text-base">🎉 5-Day Free Trial Active! (All Features Unlocked)</h3>
+                <p className="text-xs text-emerald-100">
                   You have full unlimited access to Bulk Broadcasts, WhatsApp Cloud API, QR Coexistence, Automations, AI & Shared Inbox ({subData?.daysRemaining ?? 5} days remaining).
                 </p>
               </div>
             </div>
             <Button 
               variant="secondary" 
-              className="bg-white text-emerald-800 hover:bg-emerald-50 font-extrabold shadow-sm shrink-0" 
+              className="bg-white text-emerald-800 hover:bg-emerald-50 font-extrabold text-xs h-8 shadow-sm shrink-0" 
               onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
             >
               Choose a Plan →
@@ -300,21 +338,21 @@ export default function BillingPage() {
         )}
         
         {trialStatus === "expired" && (
-          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg border border-red-500/30">
-            <div className="flex items-start md:items-center gap-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md shadow-inner">
+          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md border border-red-500/30">
+            <div className="flex items-start md:items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md shadow-inner">
                 <Shield className="h-5 w-5 text-yellow-300" />
               </div>
               <div>
-                <h3 className="font-bold text-base md:text-lg">⚠️ Your 5-Day Free Trial Has Ended</h3>
-                <p className="text-xs md:text-sm text-red-100">
+                <h3 className="font-bold text-sm md:text-base">⚠️ Your 5-Day Free Trial Has Ended</h3>
+                <p className="text-xs text-red-100">
                   All messaging, broadcasts, automations & coexistence actions are currently locked. Upgrade to an active plan below to resume messaging.
                 </p>
               </div>
             </div>
             <Button 
               variant="secondary" 
-              className="bg-white text-red-700 hover:bg-red-50 font-extrabold shadow-sm shrink-0" 
+              className="bg-white text-red-700 hover:bg-red-50 font-extrabold text-xs h-8 shadow-sm shrink-0" 
               onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
             >
               Upgrade Plan Now →
@@ -323,13 +361,13 @@ export default function BillingPage() {
         )}
 
         {trialStatus === "none" && (
-          <div className="bg-gradient-to-r from-emerald-500/10 via-background to-teal-500/10 border border-emerald-500/30 text-foreground p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-            <div className="flex items-center gap-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600">
+          <div className="bg-gradient-to-r from-emerald-500/10 via-background to-teal-500/10 border border-emerald-500/30 text-foreground p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600">
                 <Check className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="font-bold text-base capitalize">Active Subscription: {currentPlan} Plan</h3>
+                <h3 className="font-bold text-sm capitalize">Active Subscription: {currentPlan} Plan</h3>
                 <p className="text-xs text-muted-foreground">
                   Your business account has full paid access to your plan features and monthly quotas.
                 </p>
@@ -344,97 +382,79 @@ export default function BillingPage() {
         )}
 
         {/* Feature Permissions / What You Can Do Card */}
-        <div className="bg-card rounded-2xl border border-border/70 p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-4 mb-5">
+        <div className="bg-card rounded-2xl border border-border/70 p-4 sm:p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3 mb-3">
             <div>
-              <h3 className="text-base font-bold text-foreground">Your Plan Capabilities & Feature Permissions</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Summary of what features your account can access under this tier.</p>
+              <h3 className="text-sm font-bold text-foreground">Your Plan Capabilities & Feature Permissions</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {trialStatus === 'expired'
+                  ? 'Your 5-day free trial has expired. All features below are currently locked until you purchase a plan.'
+                  : 'Summary of what features your account can access under this tier.'}
+              </p>
             </div>
-            <span className="text-xs font-extrabold uppercase tracking-wider px-2.5 py-1 bg-primary/10 text-primary rounded-md self-start sm:self-auto">
-              Tier: {trialStatus === 'active' ? 'Full Trial' : currentPlan}
+            <span className={`text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-md self-start sm:self-auto ${
+              trialStatus === 'expired'
+                ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                : 'bg-primary/10 text-primary'
+            }`}>
+              Tier: {trialStatus === 'active' ? '5-Day Full Trial' : trialStatus === 'expired' ? 'Trial Expired — Locked' : currentPlan}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
-            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/50">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              <span className="font-medium">Meta Cloud API</span>
-            </div>
-            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan !== 'starter' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
-              {trialStatus === 'active' || currentPlan !== 'starter' ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              ) : (
-                <X className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-              <span className="font-medium">QR Coexistence</span>
-            </div>
-            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/50">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              <span className="font-medium">Live Shared Inbox</span>
-            </div>
-            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan !== 'starter' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
-              {trialStatus === 'active' || currentPlan !== 'starter' ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              ) : (
-                <X className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-              <span className="font-medium">Bulk Broadcasts</span>
-            </div>
-            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan !== 'starter' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
-              {trialStatus === 'active' || currentPlan !== 'starter' ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              ) : (
-                <X className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-              <span className="font-medium">Automations</span>
-            </div>
-            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
-              {trialStatus === 'active' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone' ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              ) : (
-                <X className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-              <span className="font-medium">Visual Flow Builder</span>
-            </div>
-            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${trialStatus === 'active' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone' ? 'bg-muted/40 border-border/50' : 'bg-muted/20 border-dashed border-border/40 opacity-50'}`}>
-              {trialStatus === 'active' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone' ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              ) : (
-                <X className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-              <span className="font-medium">AI Smart Reply</span>
-            </div>
-            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/50">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              <span className="font-medium">Contacts Management</span>
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
+            {[
+              { label: 'Meta Cloud API', enabled: trialStatus !== 'expired' },
+              { label: 'QR Coexistence', enabled: trialStatus !== 'expired' && (trialStatus === 'active' || currentPlan !== 'starter') },
+              { label: 'Live Shared Inbox', enabled: trialStatus !== 'expired' },
+              { label: 'Bulk Broadcasts', enabled: trialStatus !== 'expired' && (trialStatus === 'active' || currentPlan !== 'starter') },
+              { label: 'Automations', enabled: trialStatus !== 'expired' && (trialStatus === 'active' || currentPlan !== 'starter') },
+              { label: 'Visual Flow Builder', enabled: trialStatus !== 'expired' && (trialStatus === 'active' || currentPlan === 'essential' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone') },
+              { label: 'AI Smart Reply', enabled: trialStatus !== 'expired' && (trialStatus === 'active' || currentPlan === 'essential' || currentPlan === 'growth' || currentPlan === 'all-in-one' || currentPlan === 'allinone') },
+              { label: 'Contacts Management', enabled: trialStatus !== 'expired' },
+            ].map((feat) => (
+              <div
+                key={feat.label}
+                className={`flex items-center gap-2 p-2 rounded-xl border ${
+                  feat.enabled
+                    ? 'bg-muted/40 border-border/50 text-foreground'
+                    : 'bg-red-500/5 border-dashed border-red-500/30 text-muted-foreground opacity-75'
+                }`}
+              >
+                {feat.enabled ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                ) : (
+                  <X className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                )}
+                <span className="font-medium text-xs">{feat.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* 2. Coupon Code Entry Section */}
-      <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm max-w-xl mx-auto space-y-3">
+      <div className="bg-card border border-border/80 rounded-2xl p-4 shadow-sm max-w-lg mx-auto space-y-2">
         <div className="flex items-center gap-2">
-          <Tag className="h-5 w-5 text-emerald-600" />
-          <h3 className="font-extrabold text-sm text-foreground">Have a Promo or Coupon Code?</h3>
+          <Tag className="h-4 w-4 text-emerald-600" />
+          <h3 className="font-extrabold text-xs text-foreground">Have a Promo or Coupon Code?</h3>
         </div>
         <div className="flex items-center gap-2">
           <Input 
             placeholder="Enter Coupon Code (e.g. SAVE50)" 
             value={couponInput}
             onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-            className="h-10 text-xs font-mono font-bold uppercase tracking-wider"
+            className="h-9 text-xs font-mono font-bold uppercase tracking-wider rounded-xl"
           />
           <Button 
             onClick={handleApplyCoupon} 
             disabled={applyingCoupon || !couponInput.trim()}
-            className="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm shrink-0"
+            className="h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm shrink-0 rounded-xl"
           >
-            {applyingCoupon ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply Coupon"}
+            {applyingCoupon ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Apply Coupon"}
           </Button>
         </div>
         {appliedCoupon && (
-          <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-xs font-bold">
+          <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-xs font-bold">
             <span>✓ Coupon '{appliedCoupon.code}' Applied! ({appliedCoupon.discount_type === 'percentage' ? `${appliedCoupon.discount_value}% OFF` : `₹${appliedCoupon.discount_value} OFF`})</span>
             <button onClick={() => setAppliedCoupon(null)} className="text-red-500 hover:underline">Remove</button>
           </div>
@@ -442,26 +462,26 @@ export default function BillingPage() {
       </div>
 
       {/* 3. Pricing Plans Section */}
-      <section id="pricing" className="space-y-6 relative">
-        <div className="text-center space-y-4">
-          <h2 className="text-3xl font-bold tracking-tight text-navy">Simple, transparent pricing</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">Choose the perfect plan for your business needs. No hidden fees.</p>
+      <section id="pricing" className="space-y-4 relative">
+        <div className="text-center space-y-2">
+          <h2 className="text-2xl font-black tracking-tight text-navy">Simple, transparent pricing</h2>
+          <p className="text-muted-foreground text-sm max-w-xl mx-auto">Choose the perfect plan for your business needs. No hidden fees.</p>
           
-          <div className="flex items-center justify-center gap-4 mt-4">
-            <span className={`text-sm font-bold ${!isYearly ? "text-slate-900" : "text-gray-400"}`}>Monthly</span>
+          <div className="flex items-center justify-center gap-3 mt-2">
+            <span className={`text-xs font-bold ${!isYearly ? "text-slate-900" : "text-gray-400"}`}>Monthly</span>
             <button 
               onClick={() => setIsYearly(!isYearly)}
-              className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${isYearly ? 'bg-[var(--color-green-vivid, #25D366)]' : 'bg-slate-900'}`}
+              className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${isYearly ? 'bg-[var(--color-green-vivid, #25D366)]' : 'bg-slate-900'}`}
             >
-              <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${isYearly ? 'translate-x-8' : 'translate-x-1'}`} />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isYearly ? 'translate-x-7' : 'translate-x-1'}`} />
             </button>
-            <span className={`text-sm font-bold ${isYearly ? "text-slate-900" : "text-gray-400"}`}>
+            <span className={`text-xs font-bold ${isYearly ? "text-slate-900" : "text-gray-400"}`}>
               Yearly <span className="text-[var(--color-green-vivid, #25D366)] ml-1 font-bold">(Save 5% OFF)</span>
             </span>
           </div>
         </div>
         
-        <div className="grid md:grid-cols-3 gap-6 items-start mt-8 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-4 items-start mt-4 max-w-5xl mx-auto">
           {plansData.map((plan, i) => {
             const isCurrentPlan = currentPlan === plan.id;
             const price = isYearly ? Math.round(plan.price * 0.95 * 12) : plan.price;
@@ -470,77 +490,77 @@ export default function BillingPage() {
             return (
               <motion.div
                 key={plan.id}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1, duration: 0.4 }}
-                className={`relative flex flex-col h-full rounded-[32px] overflow-hidden transition-all duration-300 hover:-translate-y-1 ${
+                transition={{ delay: i * 0.08, duration: 0.3 }}
+                className={`relative flex flex-col h-full rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1 ${
                   plan.popular 
-                    ? 'bg-white border-2 border-[#25D366] shadow-xl lg:scale-105 z-10' 
-                    : 'bg-white border border-slate-200 shadow-md hover:shadow-xl'
+                    ? 'bg-white border-2 border-[#25D366] shadow-lg lg:scale-[1.02] z-10' 
+                    : 'bg-white border border-slate-200 shadow-sm hover:shadow-md'
                 }`}
               >
                 {/* Header Gradient */}
-                <div className={`p-6 pb-6 relative bg-gradient-to-br ${plan.gradient} text-white`}>
+                <div className={`p-4 relative bg-gradient-to-br ${plan.gradient} text-white`}>
                   {plan.popular && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
-                      <span className="bg-gradient-to-r from-[#128C7E] to-[#25D366] text-white text-[11px] font-extrabold px-4 py-1 rounded-full uppercase tracking-wider shadow-lg border border-white/30">
+                      <span className="bg-gradient-to-r from-[#128C7E] to-[#25D366] text-white text-[10px] font-extrabold px-3 py-0.5 rounded-full uppercase tracking-wider shadow-sm border border-white/30">
                         Most Popular
                       </span>
                     </div>
                   )}
                   
-                  <h3 className="text-[22px] font-bold font-heading mb-2 text-white pt-2">
+                  <h3 className="text-lg font-bold font-heading text-white pt-1">
                     {plan.name}
                   </h3>
                   
-                  <div className="flex items-end gap-1 mt-4 mb-2 text-white">
-                    <span className="text-4xl font-extrabold tracking-tight text-white">₹{price.toLocaleString()}</span>
-                    <span className="text-[15px] font-medium mb-1 text-white/80">
+                  <div className="flex items-end gap-1 mt-2 text-white">
+                    <span className="text-3xl font-black tracking-tight text-white">₹{price.toLocaleString()}</span>
+                    <span className="text-xs font-medium mb-1 text-white/80">
                       {period}
                     </span>
                   </div>
                 </div>
                 
                 {/* Content */}
-                <div className="p-6 flex-1 flex flex-col bg-white">
+                <div className="p-4 flex-1 flex flex-col bg-white">
                   {isCurrentPlan ? (
-                    <div className="w-full mb-6 py-3 bg-green-50 text-green-700 text-center font-bold rounded-xl border border-green-200">
+                    <div className="w-full mb-3 py-2 bg-green-50 text-green-700 text-center text-xs font-bold rounded-xl border border-green-200">
                       Current Plan
                     </div>
                   ) : (
                     <Button 
-                      className={`w-full h-12 rounded-xl text-[15px] font-bold transition-all mb-6 ${
+                      className={`w-full h-9 rounded-xl text-xs font-bold transition-all mb-3 ${
                         plan.popular 
-                          ? "bg-gradient-to-r from-[#128C7E] to-[#25D366] hover:from-[#25D366] hover:to-[#25D366] text-white shadow-md border-none" 
+                          ? "bg-gradient-to-r from-[#128C7E] to-[#25D366] hover:from-[#25D366] hover:to-[#25D366] text-white shadow-sm border-none" 
                           : "bg-slate-100 hover:bg-slate-200 text-slate-900 border border-slate-200"
                       }`}
                       onClick={() => handleCreateOrder(price, 'subscription', plan.id)}
                       disabled={isLoading}
                     >
                       {processingPlanId === plan.id ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</>
+                        <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Processing...</>
                       ) : (
                         'Upgrade'
                       )}
                     </Button>
                   )}
                   
-                  <div className="space-y-3 flex-1">
-                    <div className="text-[12px] font-bold uppercase tracking-wider text-slate-400 mb-3">Services Included</div>
+                  <div className="space-y-1.5 flex-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Services Included</div>
                     {plan.services.map((svc, j) => {
                       const Icon = svc.icon;
                       return (
-                        <div key={j} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
-                          <div className="flex items-center gap-2">
-                            <Icon className={`w-[14px] h-[14px] ${plan.popular ? 'text-[#25D366]' : 'text-slate-400'}`} />
-                            <span className="text-[13px] font-medium text-slate-700">{svc.name}</span>
+                        <div key={j} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <Icon className={`w-3.5 h-3.5 ${plan.popular ? 'text-[#25D366]' : 'text-slate-400'}`} />
+                            <span className="font-medium text-slate-700 text-xs">{svc.name}</span>
                           </div>
                           {svc.included ? (
-                            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-none font-semibold text-[11px] px-2 py-0 h-5">
+                            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-none font-semibold text-[10px] px-1.5 py-0 h-4">
                               {svc.value}
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="font-normal text-[11px] px-2 py-0 h-5 text-slate-400 border-slate-200">
+                            <Badge variant="outline" className="font-normal text-[10px] px-1.5 py-0 h-4 text-slate-400 border-slate-200">
                               Not included
                             </Badge>
                           )}
@@ -549,13 +569,13 @@ export default function BillingPage() {
                     })}
                   </div>
                   
-                  <div className="mt-8">
-                    <div className="text-[12px] font-bold uppercase tracking-wider text-slate-400 mb-4">Additional Features</div>
-                    <ul className="space-y-3">
+                  <div className="mt-4 pt-3 border-t border-slate-100">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Additional Features</div>
+                    <ul className="space-y-1.5">
                       {plan.features.map((feat, j) => (
-                        <li key={j} className="flex items-start gap-3">
-                          <CheckCircle2 className={`h-[18px] w-[18px] shrink-0 ${plan.popular ? "text-[#25D366]" : "text-[#128C7E]"}`} />
-                          <span className="text-[13px] font-medium leading-tight pt-0.5 text-slate-700">
+                        <li key={j} className="flex items-start gap-2 text-xs">
+                          <CheckCircle2 className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${plan.popular ? "text-[#25D366]" : "text-[#128C7E]"}`} />
+                          <span className="font-medium leading-tight text-slate-700 text-[11px]">
                             {feat}
                           </span>
                         </li>

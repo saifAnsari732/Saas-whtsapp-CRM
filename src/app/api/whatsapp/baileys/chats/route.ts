@@ -53,9 +53,22 @@ export async function GET(request: Request) {
       });
     }
 
+    // If user has neither an active socket nor registered session credentials, return empty chats immediately
+    const authFolder = `baileys_auth_info_${user.id}`;
+    const hasCreds = fs.existsSync(`${authFolder}/creds.json`);
+    const userSocket = global.waSockets?.[user.id];
+
+    if (!userSocket && !hasCreds) {
+      return NextResponse.json({
+        success: true,
+        data: [],
+        count: 0,
+        connected: false,
+      });
+    }
+
     // Execute chat retrieval with concurrency guard
     const fetchPromise = (async () => {
-      const userSocket = global.waSockets?.[user.id] || Object.values(global.waSockets || {})[0];
 
       // If socket is connected, actively fetch all participating groups from WhatsApp (with strict 2.5s timeout)
       if (userSocket && typeof userSocket.groupFetchAllParticipating === "function") {
@@ -91,7 +104,7 @@ export async function GET(request: Request) {
         }
       }
 
-      const store = global.waStores?.[user.id] || Object.values(global.waStores || {})[0];
+      const store = global.waStores?.[user.id];
       let rawStoreChats: Record<string, any> = store?.chats || {};
 
       // Check disk store file if memory store has no chats yet
@@ -216,11 +229,12 @@ export async function GET(request: Request) {
         }
       }
 
-      // Fallback: If few direct contacts, check Supabase contacts table
-      if (chats.filter((c) => c.type === "direct").length < 50) {
+      // Fallback: If few direct contacts, check Supabase contacts table strictly scoped to this account
+      if (accountId && chats.filter((c) => c.type === "direct").length < 50) {
         const { data: dbContacts } = await supabase
           .from("contacts")
           .select("id, phone, name, updated_at, created_at")
+          .eq("account_id", accountId)
           .order("created_at", { ascending: false })
           .limit(100);
 

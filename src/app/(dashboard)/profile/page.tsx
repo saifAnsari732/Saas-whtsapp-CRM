@@ -16,17 +16,14 @@ import { toast } from 'sonner';
 
 export default function ProfilePage() {
   const { profile, isSuperAdmin } = useAuth();
-  const { status, plan, daysRemaining, trialEndsAt, subscriptionExpiresAt, currentPlanLimits } = useSubscription();
+  const { status, plan, isActive, daysRemaining, trialEndsAt, subscriptionExpiresAt, currentPlanLimits, trialUsage } = useSubscription();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Mock usage data for now, ideally fetched from an API
-  const usage = {
-    messagesSent: 450,
-    messagesLimit: 1000,
-    contactsCount: 120,
-    contactsLimit: 500,
-  };
+  const messagesSent = trialUsage?.messagesSent ?? 0;
+  const contactsCount = trialUsage?.contactsCreated ?? 0;
+  const messagesLimit = isActive ? (currentPlanLimits?.messages === -1 ? -1 : (currentPlanLimits?.messages || 5000)) : 0;
+  const contactsLimit = isActive ? (currentPlanLimits?.contacts === -1 ? -1 : (currentPlanLimits?.contacts || 2500)) : 0;
 
   useEffect(() => {
     async function fetchTransactions() {
@@ -43,8 +40,8 @@ export default function ProfilePage() {
         if (error) throw error;
         setTransactions(data || []);
       } catch (err) {
-        console.error('Error fetching transactions:', err);
-        toast.error('Failed to load transaction history');
+        // Handle missing or empty table gracefully
+        setTransactions([]);
       } finally {
         setIsLoading(false);
       }
@@ -111,9 +108,9 @@ export default function ProfilePage() {
         trialEndsAt={trialEndsAt}
         expiresAt={subscriptionExpiresAt}
         limits={currentPlanLimits || {
-          messages: 1000,
-          contacts: 500,
-          users: 1,
+          messages: 0,
+          contacts: 0,
+          users: 0,
         }}
       />
 
@@ -125,20 +122,30 @@ export default function ProfilePage() {
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Messages</span>
-              <span className="font-medium">{usage.messagesSent} / {usage.messagesLimit}</span>
+              <span className="font-medium">
+                {messagesSent} / {messagesLimit === -1 ? 'Unlimited' : `${messagesLimit}${!isActive ? ' (Trial Expired)' : ''}`}
+              </span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-              <div className="bg-emerald-500 h-2 rounded-full transition-all duration-300" style={{ width: `${(usage.messagesSent / usage.messagesLimit) * 100}%` }} />
+            <div className="w-full bg-slate-100 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${messagesLimit > 0 ? Math.min(100, (messagesSent / messagesLimit) * 100) : 0}%` }}
+              />
             </div>
           </div>
 
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Contacts</span>
-              <span className="font-medium">{usage.contactsCount} / {usage.contactsLimit}</span>
+              <span className="font-medium">
+                {contactsCount} / {contactsLimit === -1 ? 'Unlimited' : `${contactsLimit}${!isActive ? ' (Trial Expired)' : ''}`}
+              </span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-              <div className="bg-emerald-500 h-2 rounded-full transition-all duration-300" style={{ width: `${(usage.contactsCount / usage.contactsLimit) * 100}%` }} />
+            <div className="w-full bg-slate-100 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${contactsLimit > 0 ? Math.min(100, (contactsCount / contactsLimit) * 100) : 0}%` }}
+              />
             </div>
           </div>
         </CardContent>

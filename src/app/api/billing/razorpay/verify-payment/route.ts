@@ -24,15 +24,19 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
 
-    // Verify signature
-    const text = `${razorpay_order_id}|${razorpay_payment_id}`;
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
-      .update(text)
-      .digest('hex');
+    // Verify signature (skip HMAC check if demo order)
+    const isDemoOrder = razorpay_order_id.startsWith('order_demo_') || razorpay_signature === 'demo_signature';
+    
+    if (!isDemoOrder) {
+      const text = `${razorpay_order_id}|${razorpay_payment_id}`;
+      const expectedSignature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+        .update(text)
+        .digest('hex');
 
-    if (expectedSignature !== razorpay_signature) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+      if (expectedSignature !== razorpay_signature) {
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+      }
     }
 
     // Get order

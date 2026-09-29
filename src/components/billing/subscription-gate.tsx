@@ -11,49 +11,41 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 
 export function SubscriptionGate({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const { isSuperAdmin } = useAuth();
-  const { isActive, loading, status, trialUsage, isOwner } = useSubscription();
-
-  // If expired, automatically redirect to billing page
-  useEffect(() => {
-    if (!loading && !isActive && !isSuperAdmin) {
-      router.replace('/billing?expired=true');
-    }
-  }, [loading, isActive, isSuperAdmin, router]);
-
-  // Platform admin has all powers and full access without restrictions
-  if (isSuperAdmin) {
-    return <>{children}</>;
-  }
+  const { isActive, loading, status, plan, trialUsage } = useSubscription();
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Verifying access...</p>
+          <p className="text-sm text-muted-foreground">Verifying subscription & trial access...</p>
         </div>
       </div>
     );
   }
 
-  // Only active subscriptions or active trials proceed
-  if (isActive) {
+  // SuperAdmins bypass subscription gate with full platform access
+  if (isSuperAdmin || isActive) {
     return <>{children}</>;
   }
 
-  const title = status === 'expired' && !status.includes('trial') 
-    ? "Subscription Expired" 
-    : "Your 5-Day Trial Has Expired";
+  const isPaidExpired = plan && plan !== 'trial' && plan !== 'none';
+  const title = isPaidExpired
+    ? "Subscription Expired — Access Locked" 
+    : "Your 5-Day Free Trial Has Expired";
     
-  const description = status === 'expired' && !status.includes('trial')
-    ? "Your subscription has ended. Please renew to continue using all features."
-    : "Your 5-day free trial has come to an end. Purchase a plan to keep growing your business and unlock messaging.";
+  const description = isPaidExpired
+    ? "Your subscription period has ended. Please renew your plan to continue using WhatsApp CRM features."
+    : "Your 5-day free trial has ended and all dashboard actions, messaging, broadcasts & automations are now locked. Upgrade to a paid plan to unlock access.";
 
   return (
     <div className="flex min-h-[80vh] w-full items-center justify-center bg-gradient-to-br from-background via-muted/30 to-muted/80 p-4">
-      <Card className="mx-auto w-full max-w-3xl shadow-2xl border-border/50">
+      <Card className="mx-auto w-full max-w-3xl shadow-2xl border-red-500/30 overflow-hidden">
+        <div className="bg-red-600 text-white px-6 py-2.5 text-xs font-extrabold uppercase tracking-wider flex items-center justify-center gap-2">
+          <Lock className="h-3.5 w-3.5" />
+          <span>Account Access Locked — Trial Period Ended</span>
+        </div>
         <div className="grid md:grid-cols-2 gap-0">
           <div className="p-8 border-b md:border-b-0 md:border-r border-border/50 flex flex-col justify-center">
             <motion.div 
@@ -71,19 +63,19 @@ export function SubscriptionGate({ children }: { children: React.ReactNode }) {
             </motion.div>
             
             <h2 className="text-2xl font-bold text-center tracking-tight mb-2">{title}</h2>
-            <p className="text-center text-muted-foreground mb-8">
+            <p className="text-center text-muted-foreground text-sm mb-8">
               {description}
             </p>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <Link href="/billing" className="block w-full">
-                <Button size="lg" className="w-full h-12 text-base font-semibold shadow-md">
-                  View Plans & Upgrade
+                <Button size="lg" className="w-full h-12 text-base font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md">
+                  View Plans & Upgrade Now
                 </Button>
               </Link>
-              <Link href="/dashboard" className="block w-full">
-                <Button variant="ghost" className="w-full">
-                  Back to Dashboard
+              <Link href="/profile" className="block w-full">
+                <Button variant="outline" className="w-full">
+                  View Account Profile
                 </Button>
               </Link>
             </div>

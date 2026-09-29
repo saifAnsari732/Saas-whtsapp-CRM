@@ -34,8 +34,9 @@ export function RazorpayCheckout({
         key: keyId,
         amount: Math.round(amount * 100), // convert to paise
         currency: currency,
-        name: "WhatsApp CRM",
-        description: "Payment",
+        name: "ChatFlyr",
+        description: "WhatsApp CRM Subscription & Messaging",
+        image: typeof window !== "undefined" ? `${window.location.origin}/chatflyr-logo.png` : "/chatflyr-logo.png",
         order_id: orderId,
         handler: function (response: any) {
           onSuccess(
@@ -49,7 +50,7 @@ export function RazorpayCheckout({
           },
         },
         theme: {
-          color: "#0f172a", // primary color
+          color: "#075E54", // Official WhatsApp green theme
         },
       };
 

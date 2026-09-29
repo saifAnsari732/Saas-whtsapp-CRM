@@ -58,16 +58,25 @@ export async function GET(request: Request) {
     if (error) throw error;
 
     // Map to user-friendly format with clear User vs Admin role
+    const now = new Date();
     const formattedUsers = (users || []).map((u: any) => {
       const acc = Array.isArray(u.accounts) ? u.accounts[0] : u.accounts;
       const isAdmin = checkIsAdmin(u.email, u.role);
+      let status = acc?.subscription_status || 'trial';
+      if (
+        status === 'trial' &&
+        acc?.trial_ends_at &&
+        new Date(acc.trial_ends_at).getTime() <= now.getTime()
+      ) {
+        status = 'expired';
+      }
       return {
         id: u.id,
         user_id: u.user_id,
         full_name: u.full_name,
         email: u.email,
         role: isAdmin ? 'Admin' : 'User',
-        status: acc?.subscription_status || 'trial',
+        status,
         plan: acc?.subscription_plan || 'None',
         trial_ends_at: acc?.trial_ends_at
       };
@@ -122,7 +131,7 @@ export async function PATCH(request: Request) {
       const { data: acc } = await adminDb.from('accounts').select('trial_ends_at').eq('id', account_id).single();
       const currentExpiry = acc?.trial_ends_at ? new Date(acc.trial_ends_at) : new Date();
       const baseDate = currentExpiry.getTime() > Date.now() ? currentExpiry : new Date();
-      baseDate.setDate(baseDate.getDate() + 7);
+      baseDate.setDate(baseDate.getDate() + 5);
       await adminDb.from('accounts').update({ 
         trial_ends_at: baseDate.toISOString(),
         subscription_status: 'trial'
@@ -134,6 +143,21 @@ export async function PATCH(request: Request) {
           subscription_status: 'active'
         }).eq('id', account_id);
       }
+    } else if (action === 'grant_wallet_credit') {
+      const creditAmount = Number(plan_id) || 500;
+      const { data: wallet } = await adminDb.from('wallets').select('id, balance').eq('account_id', account_id).maybeSingle();
+      if (wallet) {
+        await adminDb.from('wallets').update({ balance: (Number(wallet.balance) || 0) + creditAmount }).eq('id', wallet.id);
+      } else {
+        await adminDb.from('wallets').insert({ account_id, balance: creditAmount });
+      }
+      await adminDb.from('wallet_transactions').insert({
+        account_id,
+        amount: creditAmount,
+        type: 'credit',
+        description: `Admin Bonus Credit (₹${creditAmount})`,
+        reference_id: `ADMIN-${Date.now()}`
+      });
     }
 
     return NextResponse.json({ success: true });

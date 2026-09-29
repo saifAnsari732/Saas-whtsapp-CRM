@@ -54,10 +54,10 @@ import { useTranslations } from 'next-intl'
 type RangeDays = 7 | 30 | 90
 
 // Helper to safely read cached JSON from sessionStorage
-function getCached<T>(key: string): T | null {
-  if (typeof window === 'undefined') return null
+function getCached<T>(key: string, userId?: string | null): T | null {
+  if (typeof window === 'undefined' || !userId) return null
   try {
-    const raw = sessionStorage.getItem(key)
+    const raw = sessionStorage.getItem(`${key}_${userId}`)
     return raw ? JSON.parse(raw) : null
   } catch {
     return null
@@ -65,37 +65,38 @@ function getCached<T>(key: string): T | null {
 }
 
 // Helper to safely write JSON to sessionStorage
-function setCache(key: string, val: any) {
-  if (typeof window === 'undefined') return
+function setCache(key: string, val: any, userId?: string | null) {
+  if (typeof window === 'undefined' || !userId) return
   try {
-    sessionStorage.setItem(key, JSON.stringify(val))
+    sessionStorage.setItem(`${key}_${userId}`, JSON.stringify(val))
   } catch {}
 }
 
 export default function DashboardPage() {
   const t = useTranslations('Dashboard.page')
-  const { defaultCurrency } = useAuth()
+  const { user, defaultCurrency } = useAuth()
+  const userId = user?.id
 
   // 1. Instant Cache Hydration: Read previous metrics instantly (0ms latency)
-  const [metrics, setMetrics] = useState<MetricsBundle | null>(() => getCached('wacrm_dash_metrics'))
-  const [metricsLoading, setMetricsLoading] = useState(() => !getCached('wacrm_dash_metrics'))
+  const [metrics, setMetrics] = useState<MetricsBundle | null>(null)
+  const [metricsLoading, setMetricsLoading] = useState(true)
 
   const [range, setRange] = useState<RangeDays>(30)
-  const [series, setSeries] = useState<Record<RangeDays, ConversationsSeriesPoint[] | null>>(() => ({
+  const [series, setSeries] = useState<Record<RangeDays, ConversationsSeriesPoint[] | null>>({
     7: null,
-    30: getCached('wacrm_dash_series_30'),
+    30: null,
     90: null,
-  }))
-  const [seriesLoading, setSeriesLoading] = useState(() => !getCached('wacrm_dash_series_30'))
+  })
+  const [seriesLoading, setSeriesLoading] = useState(true)
 
-  const [pipeline, setPipeline] = useState<PipelineDonutData | null>(() => getCached('wacrm_dash_pipeline'))
-  const [pipelineLoading, setPipelineLoading] = useState(() => !getCached('wacrm_dash_pipeline'))
+  const [pipeline, setPipeline] = useState<PipelineDonutData | null>(null)
+  const [pipelineLoading, setPipelineLoading] = useState(true)
 
-  const [responseTime, setResponseTime] = useState<ResponseTimeSummary | null>(() => getCached('wacrm_dash_resptime'))
-  const [responseTimeLoading, setResponseTimeLoading] = useState(() => !getCached('wacrm_dash_resptime'))
+  const [responseTime, setResponseTime] = useState<ResponseTimeSummary | null>(null)
+  const [responseTimeLoading, setResponseTimeLoading] = useState(true)
 
-  const [activity, setActivity] = useState<ActivityItem[] | null>(() => getCached('wacrm_dash_activity'))
-  const [activityLoading, setActivityLoading] = useState(() => !getCached('wacrm_dash_activity'))
+  const [activity, setActivity] = useState<ActivityItem[] | null>(null)
+  const [activityLoading, setActivityLoading] = useState(true)
 
   const [waConfig, setWaConfig] = useState<{ 
     connected?: boolean; 
@@ -106,22 +107,107 @@ export default function DashboardPage() {
       verified_name?: string;
       quality_rating?: string;
     }
-  } | null>(() => getCached('wacrm_dash_waconfig'))
-  const [msgAnalytics, setMsgAnalytics] = useState<{ delivered: number, seen: number, failed: number, pending: number } | null>(() => getCached('wacrm_dash_msganalytics'))
+  } | null>(null)
+  const [coexStatus, setCoexStatus] = useState<{ connected?: boolean; state?: string; status?: string } | null>(null)
+  const [msgAnalytics, setMsgAnalytics] = useState<{ delivered: number, seen: number, failed: number, pending: number } | null>(null)
 
-  const [templatePerf, setTemplatePerf] = useState<TemplatePerformanceData | null>(() => getCached('wacrm_dash_templateperf'))
-  const [broadcastPerf, setBroadcastPerf] = useState<BroadcastAnalyticsData | null>(() => getCached('wacrm_dash_broadcastperf'))
+  const [templatePerf, setTemplatePerf] = useState<TemplatePerformanceData | null>(null)
+  const [broadcastPerf, setBroadcastPerf] = useState<BroadcastAnalyticsData | null>(null)
 
-  // 2. Parallel Background Revalidation without UI Blocking
+  // Hydrate user-scoped cache when user ID changes
+  useEffect(() => {
+    if (!userId) {
+      setMetrics(null)
+      setSeries({ 7: null, 30: null, 90: null })
+      setPipeline(null)
+      setResponseTime(null)
+      setActivity(null)
+      setWaConfig(null)
+      setCoexStatus(null)
+      setMsgAnalytics(null)
+      setTemplatePerf(null)
+      setBroadcastPerf(null)
+      return
+    }
+
+    const cachedMetrics = getCached<MetricsBundle>('wacrm_dash_metrics', userId)
+    if (cachedMetrics) {
+      setMetrics(cachedMetrics)
+      setMetricsLoading(false)
+    }
+
+    const cachedSeries = getCached<ConversationsSeriesPoint[]>('wacrm_dash_series_30', userId)
+    if (cachedSeries) {
+      setSeries((prev) => ({ ...prev, 30: cachedSeries }))
+      setSeriesLoading(false)
+    }
+
+    const cachedPipeline = getCached<PipelineDonutData>('wacrm_dash_pipeline', userId)
+    if (cachedPipeline) {
+      setPipeline(cachedPipeline)
+      setPipelineLoading(false)
+    }
+
+    const cachedResp = getCached<ResponseTimeSummary>('wacrm_dash_resptime', userId)
+    if (cachedResp) {
+      setResponseTime(cachedResp)
+      setResponseTimeLoading(false)
+    }
+
+    const cachedAct = getCached<ActivityItem[]>('wacrm_dash_activity', userId)
+    if (cachedAct) {
+      setActivity(cachedAct)
+      setActivityLoading(false)
+    }
+
+    const cachedWa = getCached<any>('wacrm_dash_waconfig', userId)
+    if (cachedWa) {
+      setWaConfig(cachedWa)
+    }
+
+    const cachedCoex = getCached<any>('wacrm_dash_coexstatus', userId)
+    if (cachedCoex) {
+      setCoexStatus(cachedCoex)
+    }
+
+    const cachedMsg = getCached<any>('wacrm_dash_msganalytics', userId)
+    if (cachedMsg) {
+      setMsgAnalytics(cachedMsg)
+    }
+
+    const cachedTmpl = getCached<any>('wacrm_dash_templateperf', userId)
+    if (cachedTmpl) {
+      setTemplatePerf(cachedTmpl)
+    }
+
+    const cachedBcast = getCached<any>('wacrm_dash_broadcastperf', userId)
+    if (cachedBcast) {
+      setBroadcastPerf(cachedBcast)
+    }
+  }, [userId])
+
+  // 2. Parallel One-Time Background Verification without UI Blocking
   const loadAll = useCallback(() => {
+    if (!userId) return
     const db = createClient()
 
-    // Config fetch
+    // 1. One-time Cloud API config verification
     fetch('/api/whatsapp/config')
       .then((res) => res.json())
       .then((data) => {
         setWaConfig(data)
-        setCache('wacrm_dash_waconfig', data)
+        setCache('wacrm_dash_waconfig', data, userId)
+      })
+      .catch(() => {})
+
+    // 2. One-time Coexistence Phone QR connection verification
+    fetch('/api/whatsapp/coexistence/status', { method: 'POST' })
+      .then((res) => res.json())
+      .then((data) => {
+        const isCoexConn = data.state === 'open' || data.state === 'connected' || data.status === 'connected' || data.status === 'open'
+        const statusPayload = { connected: isCoexConn, state: data.state, status: data.status }
+        setCoexStatus(statusPayload)
+        setCache('wacrm_dash_coexstatus', statusPayload, userId)
       })
       .catch(() => {})
 
@@ -129,43 +215,43 @@ export default function DashboardPage() {
     Promise.allSettled([
       loadMetrics(db).then((m) => {
         setMetrics(m)
-        setCache('wacrm_dash_metrics', m)
+        setCache('wacrm_dash_metrics', m, userId)
         setMetricsLoading(false)
       }),
       loadMessageAnalytics(db).then((m) => {
         setMsgAnalytics(m)
-        setCache('wacrm_dash_msganalytics', m)
+        setCache('wacrm_dash_msganalytics', m, userId)
       }),
       loadConversationsSeries(db, 30).then((s) => {
         setSeries((prev) => ({ ...prev, 30: s }))
-        setCache('wacrm_dash_series_30', s)
+        setCache('wacrm_dash_series_30', s, userId)
         setSeriesLoading(false)
       }),
       loadPipelineDonut(db).then((p) => {
         setPipeline(p)
-        setCache('wacrm_dash_pipeline', p)
+        setCache('wacrm_dash_pipeline', p, userId)
         setPipelineLoading(false)
       }),
       loadResponseTime(db).then((r) => {
         setResponseTime(r)
-        setCache('wacrm_dash_resptime', r)
+        setCache('wacrm_dash_resptime', r, userId)
         setResponseTimeLoading(false)
       }),
       loadActivity(db, 30).then((a) => {
         setActivity(a)
-        setCache('wacrm_dash_activity', a)
+        setCache('wacrm_dash_activity', a, userId)
         setActivityLoading(false)
       }),
       loadTemplatePerformance(db).then((tData) => {
         setTemplatePerf(tData)
-        setCache('wacrm_dash_templateperf', tData)
+        setCache('wacrm_dash_templateperf', tData, userId)
       }),
       loadBroadcastAnalytics(db).then((bData) => {
         setBroadcastPerf(bData)
-        setCache('wacrm_dash_broadcastperf', bData)
+        setCache('wacrm_dash_broadcastperf', bData, userId)
       }),
     ]).catch((err) => console.error('[dashboard] loadAll background fetch:', err))
-  }, [])
+  }, [userId])
 
   useEffect(() => {
     loadAll()
@@ -187,14 +273,18 @@ export default function DashboardPage() {
 
   const handleDisconnectSuccess = useCallback(() => {
     setWaConfig(null)
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('wacrm_dash_waconfig')
+    setCoexStatus(null)
+    if (typeof window !== 'undefined' && userId) {
+      sessionStorage.removeItem(`wacrm_dash_waconfig_${userId}`)
+      sessionStorage.removeItem(`wacrm_dash_coexstatus_${userId}`)
     }
     loadAll()
-  }, [loadAll])
+  }, [loadAll, userId])
 
-  const isConnected = waConfig?.connected === true || (metrics && metrics.activeConversations.current > 0)
-  const hasNoData = !metrics && !waConfig && metricsLoading
+  const isCloudConnected = Boolean(waConfig?.connected === true && waConfig?.phone_info?.id)
+  const isCoexConnected = Boolean(coexStatus?.connected === true)
+  const isConnected = isCloudConnected || isCoexConnected
+  const hasNoData = !metrics && !waConfig && !coexStatus && metricsLoading
 
   return (
     <div className="space-y-6">

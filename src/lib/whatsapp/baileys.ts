@@ -58,7 +58,7 @@ function restoreSessionIfAvailable(authFolder: string, backupFolder: string) {
     } catch {}
   }
 
-  // 1. Check backup folder
+  // Check backup folder for this specific user
   const backupCreds = `${backupFolder}/creds.json`;
   if (fs.existsSync(backupCreds)) {
     try {
@@ -69,27 +69,6 @@ function restoreSessionIfAvailable(authFolder: string, backupFolder: string) {
         return true;
       }
     } catch {}
-  }
-
-  // 2. Scan disk for any valid registered baileys auth folders
-  try {
-    const cwdFiles = fs.readdirSync(process.cwd());
-    const candidateFolders = cwdFiles.filter((f) => f.startsWith('baileys_auth_info') && f !== authFolder);
-    for (const candidate of candidateFolders) {
-      const candidateCreds = `${candidate}/creds.json`;
-      if (fs.existsSync(candidateCreds)) {
-        try {
-          const cData = JSON.parse(fs.readFileSync(candidateCreds, 'utf-8'));
-          if (isValidCreds(cData)) {
-            console.log(`Found registered session in ${candidate}. Adopting into ${authFolder}...`);
-            fs.cpSync(candidate, authFolder, { recursive: true });
-            return true;
-          }
-        } catch {}
-      }
-    }
-  } catch (scanErr) {
-    console.warn("Error scanning candidate sessions:", scanErr);
   }
 
   return false;
@@ -396,14 +375,51 @@ export async function connectToWhatsApp(userId: string) {
   }
 }
 
+function formatPhoneNumber(rawJidOrNumber: string): { phone: string; formattedPhone: string } {
+  if (!rawJidOrNumber) return { phone: '', formattedPhone: '' };
+  const digits = rawJidOrNumber.split('@')[0].split(':')[0].replace(/\D/g, '');
+  if (!digits) return { phone: '', formattedPhone: '' };
+
+  let formattedPhone = '+' + digits;
+  if (digits.startsWith('91') && digits.length === 12) {
+    formattedPhone = `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+  } else if (digits.startsWith('1') && digits.length === 11) {
+    formattedPhone = `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  } else if (digits.length > 10) {
+    formattedPhone = `+${digits.slice(0, 2)} ${digits.slice(2, 6)} ${digits.slice(6)}`;
+  }
+  return { phone: digits, formattedPhone };
+}
+
 export function getStatus(userId: string) {
   if (!userId) {
     return { status: 'disconnected', qr: null, user: null };
   }
 
-  const sock = global.waSockets?.[userId] || Object.values(global.waSockets || {})[0];
+  const sock = global.waSockets?.[userId];
   const authFolder = `baileys_auth_info_${userId}`;
   const backupFolder = `baileys_auth_info_backup_${userId}`;
+
+  const readCredsUser = () => {
+    for (const folder of [authFolder, backupFolder]) {
+      const p = `${folder}/creds.json`;
+      if (fs.existsSync(p)) {
+        try {
+          const c = JSON.parse(fs.readFileSync(p, 'utf-8'));
+          if (c && c.me?.id) {
+            const { phone, formattedPhone } = formatPhoneNumber(c.me.id);
+            return {
+              id: c.me.id,
+              name: c.me.name || c.me.verifiedName || 'WhatsApp Account',
+              phone,
+              formattedPhone,
+            };
+          }
+        } catch {}
+      }
+    }
+    return null;
+  };
 
   // Check if registered credentials exist
   const isRegistered = restoreSessionIfAvailable(authFolder, backupFolder);
@@ -411,10 +427,16 @@ export function getStatus(userId: string) {
   // 1. If active socket with authenticated user exists, return connected
   if (sock && sock.user) {
     global.waStatuses[userId] = 'connected';
+    const { phone, formattedPhone } = formatPhoneNumber(sock.user.id || '');
     return {
       status: 'connected',
       qr: null,
-      user: sock.user,
+      user: {
+        id: sock.user.id,
+        name: sock.user.name || readCredsUser()?.name || 'WhatsApp Account',
+        phone,
+        formattedPhone,
+      },
     };
   }
 
@@ -430,6 +452,7 @@ export function getStatus(userId: string) {
 
   // 3. If credentials exist and user is registered, auto-connect in background & report active/connecting
   if (isRegistered) {
+    const credsUser = readCredsUser();
     if (!sock && !global.waConnectionLocks[userId]) {
       console.log(`getStatus: Valid session exists on disk for user ${userId}. Proactively connecting...`);
       connectToWhatsApp(userId);
@@ -437,7 +460,12 @@ export function getStatus(userId: string) {
     return {
       status: currentStatus === 'connecting' || currentStatus === 'reconnecting' ? 'connecting' : 'connected',
       qr: null,
-      user: sock?.user || { id: userId, name: 'WhatsApp User' },
+      user: credsUser || (sock?.user ? {
+        id: sock.user.id,
+        name: sock.user.name || 'WhatsApp Account',
+        phone: formatPhoneNumber(sock.user.id).phone,
+        formattedPhone: formatPhoneNumber(sock.user.id).formattedPhone,
+      } : null),
     };
   }
 

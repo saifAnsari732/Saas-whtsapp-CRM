@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getPlanConfig } from '@/lib/billing/plan-features';
+
+const PAID_PLANS = ['starter', 'essential', 'growth', 'allinone', 'all-in-one', 'enterprise'];
 
 export async function GET() {
   const supabase = await createClient();
+  const adminDb = createAdminClient();
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
@@ -28,56 +32,47 @@ export async function GET() {
     ...(process.env.NEXT_PUBLIC_ADMIN_EMAILS ? process.env.NEXT_PUBLIC_ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()) : [])
   ];
 
-  const isPlatformAdmin = profile?.role === 'admin' || profile?.role === 'superadmin' || (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
+  const isSuperAdmin = Boolean(
+    profile?.role === 'admin' ||
+    profile?.role === 'superadmin' ||
+    (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()))
+  );
 
-  // Platform Admins have full, unrestricted power across all features without plan or trial limits
-  if (isPlatformAdmin) {
+  const isOwner = profile.account_role === 'owner';
+
+  // Platform Admins bypass plan lock & get full Enterprise capabilities
+  if (isSuperAdmin) {
+    const adminPlanConfig = getPlanConfig('enterprise', false);
     return NextResponse.json({
       status: 'active',
       plan: 'enterprise',
+      planConfig: adminPlanConfig,
       trialEndsAt: null,
       subscriptionExpiresAt: null,
-      daysRemaining: 99999,
+      daysRemaining: 365,
       isActive: true,
-      isOwner: true,
+      isOwner,
       isSuperAdmin: true,
+      isTrial: false,
       trialUsage: { messagesSent: 0, contactsCreated: 0, broadcastsSent: 0, templatesUsed: 0 },
       currentPlanLimits: { messages: -1, contacts: -1, users: -1 },
+      planFeatures: adminPlanConfig.features,
       blockedFeatures: []
     });
   }
 
-  const isOwner = profile.account_role === 'owner';
-
-  // Get account subscription info
-  const { data: account, error: accountError } = await supabase
+  // Get account subscription info from database
+  const { data: account, error: accountError } = await adminDb
     .from('accounts')
     .select('id, created_at, subscription_status, subscription_plan, trial_ends_at, subscription_expires_at')
     .eq('id', profile.account_id)
     .single();
 
-  // If the columns don't exist yet (migration not applied to remote db),
-  // fallback to a default active trial state to prevent crashing the app.
-  if (accountError && accountError.code === '42703') {
-    return NextResponse.json({
-      status: 'trial',
-      plan: null,
-      trialEndsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-      subscriptionExpiresAt: null,
-      daysRemaining: 5,
-      isActive: true,
-      isOwner,
-      trialUsage: { messagesSent: 0, contactsCreated: 0, broadcastsSent: 0, templatesUsed: 0 },
-      currentPlanLimits: null,
-      blockedFeatures: []
-    });
-  }
-
   if (accountError || !account) {
     return NextResponse.json({ error: 'Account not found' }, { status: 404 });
   }
 
-  // Fetch live usage metrics for trial report
+  // Fetch live usage metrics for trial / account report
   const [
     { count: contactsCount },
     { count: messagesCount },
@@ -98,85 +93,75 @@ export async function GET() {
   };
 
   const now = new Date();
-  
   let isActive = false;
   let daysRemaining = 0;
-  let trialEndsAtDate: Date | null = null;
-  
-  // Logic to determine active status and days remaining
-  if (account.subscription_status === 'active') {
+  let trialEndsAtDate: Date | null = account.trial_ends_at ? new Date(account.trial_ends_at) : null;
+  const hasPaidPlan = Boolean(account.subscription_plan && PAID_PLANS.includes(account.subscription_plan.toLowerCase()));
+
+  if (account.subscription_status === 'blocked') {
+    isActive = false;
+    daysRemaining = 0;
+  } else if (account.subscription_status === 'active' && hasPaidPlan) {
     if (account.subscription_expires_at) {
       const expiresAt = new Date(account.subscription_expires_at);
       if (expiresAt > now) {
         isActive = true;
         daysRemaining = Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+      } else {
+        isActive = false;
+        daysRemaining = 0;
+        account.subscription_status = 'expired';
+        await adminDb.from('accounts').update({ subscription_status: 'expired' }).eq('id', account.id);
       }
     } else {
-      // Active subscription with no expiration
       isActive = true;
-      daysRemaining = 365;
+      daysRemaining = 30;
     }
   } else {
-    // Determine trial end date
-    if (account.trial_ends_at) {
-      trialEndsAtDate = new Date(account.trial_ends_at);
-    } else {
-      // Missing trial_ends_at: default to created_at + 5 days or now + 5 days
+    // Evaluate 5-day free trial
+    if (!trialEndsAtDate) {
       const createdAt = account.created_at ? new Date(account.created_at) : now;
       trialEndsAtDate = new Date(createdAt.getTime() + 5 * 24 * 60 * 60 * 1000);
-      
-      await supabase
+      account.trial_ends_at = trialEndsAtDate.toISOString();
+      const newStatus = trialEndsAtDate > now ? 'trial' : 'expired';
+      account.subscription_status = newStatus;
+      await adminDb
         .from('accounts')
-        .update({ 
+        .update({
           trial_ends_at: trialEndsAtDate.toISOString(),
-          subscription_status: trialEndsAtDate > now ? 'trial' : 'expired'
+          subscription_status: newStatus
         })
         .eq('id', account.id);
-        
-      account.trial_ends_at = trialEndsAtDate.toISOString();
-      account.subscription_status = trialEndsAtDate > now ? 'trial' : 'expired';
     }
 
-    // Safety check: If account was created within the last 5 days, grant full 5 days from created_at
-    if (account.created_at) {
-      const createdAt = new Date(account.created_at);
-      const fiveDaysAfterCreation = new Date(createdAt.getTime() + 5 * 24 * 60 * 60 * 1000);
-      if (fiveDaysAfterCreation > now && trialEndsAtDate <= now) {
-        trialEndsAtDate = fiveDaysAfterCreation;
-        await supabase
-          .from('accounts')
-          .update({ 
-            trial_ends_at: trialEndsAtDate.toISOString(),
-            subscription_status: 'trial'
-          })
-          .eq('id', account.id);
-        account.trial_ends_at = trialEndsAtDate.toISOString();
-        account.subscription_status = 'trial';
-      }
-    }
-
-    if (trialEndsAtDate && trialEndsAtDate > now) {
+    if (account.subscription_status === 'expired') {
+      // Explicitly expired
+      isActive = false;
+      daysRemaining = 0;
+    } else if (trialEndsAtDate && trialEndsAtDate > now) {
       isActive = true;
       account.subscription_status = 'trial';
       daysRemaining = Math.max(0, Math.ceil((trialEndsAtDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
     } else {
       isActive = false;
-      account.subscription_status = 'expired';
       daysRemaining = 0;
+      if (account.subscription_status !== 'expired') {
+        account.subscription_status = 'expired';
+        await adminDb
+          .from('accounts')
+          .update({ subscription_status: 'expired' })
+          .eq('id', account.id);
+      }
     }
   }
 
-  if (!isActive) {
-    // If trial/subscription expired, block actions
-  }
+  const effectiveStatus = isActive
+    ? (account.subscription_status === 'active' && hasPaidPlan ? 'active' : 'trial')
+    : 'expired';
 
-  const isTrial = account.subscription_status === 'trial';
-  const planConfig = getPlanConfig(account.subscription_plan, isTrial);
+  const isTrial = effectiveStatus === 'trial';
+  const planConfig = getPlanConfig(hasPaidPlan ? account.subscription_plan : null, isTrial);
 
-  // If trial or active, what is blocked?
-  // Trial: ALL FEATURES ARE ENABLED!
-  // Active Plan: Only features not included in that specific plan are blocked
-  // Expired: All operational routes are blocked
   let blockedFeatures: string[] = [];
   if (!isActive) {
     blockedFeatures = [
@@ -191,10 +176,10 @@ export async function GET() {
       '/keyword-flows',
       '/contacts',
       '/pipelines',
-      '/agents'
+      '/agents',
+      '/notifications'
     ];
-  } else if (!isTrial && account.subscription_plan) {
-    // Check specific plan feature exclusions
+  } else if (!isTrial && hasPaidPlan) {
     if (!planConfig.features.qrCoexistence) blockedFeatures.push('/dashboard/coexistence');
     if (!planConfig.features.broadcasts) blockedFeatures.push('/broadcasts', '/broadcasts/new');
     if (!planConfig.features.automations) blockedFeatures.push('/automations');
@@ -202,25 +187,48 @@ export async function GET() {
     if (!planConfig.features.pipelines) blockedFeatures.push('/pipelines');
   }
 
-  const currentPlanLimits = {
-    messages: planConfig.maxMessages,
-    contacts: planConfig.maxContacts,
-    users: planConfig.maxAgents
+  const currentPlanLimits = isActive
+    ? {
+        messages: planConfig.maxMessages,
+        contacts: planConfig.maxContacts,
+        users: planConfig.maxAgents
+      }
+    : {
+        messages: 0,
+        contacts: 0,
+        users: 0
+      };
+
+  const lockedFeatures = {
+    metaApi: false,
+    qrCoexistence: false,
+    sharedInbox: false,
+    broadcasts: false,
+    automations: false,
+    flows: false,
+    aiReply: false,
+    pipelines: false,
+    templates: false,
+    webhooks: false,
+    exportContacts: false,
+    prioritySupport: false
   };
 
   return NextResponse.json({
-    status: account.subscription_status,
-    plan: account.subscription_plan || (isTrial ? 'trial' : 'none'),
-    planConfig,
+    status: effectiveStatus,
+    plan: isActive ? (hasPaidPlan ? account.subscription_plan : 'trial') : 'none',
+    planConfig: isActive ? planConfig : null,
     trialEndsAt: account.trial_ends_at,
     subscriptionExpiresAt: account.subscription_expires_at,
     daysRemaining,
     isActive,
     isOwner,
+    isSuperAdmin,
     isTrial,
     trialUsage,
     currentPlanLimits,
-    planFeatures: planConfig.features,
+    planFeatures: isActive ? planConfig.features : lockedFeatures,
     blockedFeatures
   });
 }
+

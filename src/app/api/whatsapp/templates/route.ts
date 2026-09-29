@@ -116,48 +116,9 @@ export async function GET(request: Request) {
       query = query.eq('status', status);
     }
 
-    let { data: templates } = await query;
+    const { data: templates } = await query;
 
-    // Auto-seed Demo Inbuilt Interactive Templates if database is empty for this user
-    if (!templates || templates.length === 0) {
-      try {
-        const toInsert = DEMO_TEMPLATES.map((tmpl) => ({
-          ...tmpl,
-          account_id: accountId,
-          user_id: user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }));
-
-        const { data: inserted, error: insertError } = await supabase
-          .from('message_templates')
-          .insert(toInsert)
-          .select('*');
-
-        if (!insertError && inserted && inserted.length > 0) {
-          templates = inserted;
-        } else {
-          // If insert fails due to DB schema constraint, fallback to returning in-memory demo templates
-          templates = DEMO_TEMPLATES.map((tmpl, idx) => ({
-            id: `inbuilt-demo-${idx + 1}`,
-            ...tmpl,
-            account_id: accountId,
-            user_id: user.id,
-            created_at: new Date().toISOString(),
-          }));
-        }
-      } catch {
-        templates = DEMO_TEMPLATES.map((tmpl, idx) => ({
-          id: `inbuilt-demo-${idx + 1}`,
-          ...tmpl,
-          account_id: accountId,
-          user_id: user.id,
-          created_at: new Date().toISOString(),
-        }));
-      }
-    }
-
-    return NextResponse.json({ success: true, templates });
+    return NextResponse.json({ success: true, templates: templates || [] });
   } catch (error: any) {
     console.error('Failed to fetch templates:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

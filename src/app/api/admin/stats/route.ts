@@ -38,6 +38,13 @@ export async function GET(request: Request) {
       .from('profiles')
       .select('*', { count: 'exact', head: true });
 
+    // Auto-mark any trial accounts whose trial_ends_at has passed as expired
+    await adminDb
+      .from('accounts')
+      .update({ subscription_status: 'expired' })
+      .eq('subscription_status', 'trial')
+      .lt('trial_ends_at', new Date().toISOString());
+
     // Account subscription counts
     const { count: activeSubscriptions } = await adminDb
       .from('accounts')

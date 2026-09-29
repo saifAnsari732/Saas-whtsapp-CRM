@@ -56,6 +56,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 import { ChatbotStudio } from "@/components/chatbot/chatbot-studio";
 import { CoexistenceGuide } from "@/components/dashboard/coexistence-guide";
 
@@ -66,6 +67,9 @@ interface Template {
   id: string;
   name: string;
   body_text: string;
+  category?: string | null;
+  footer_text?: string | null;
+  status?: string | null;
   header_media_url?: string | null;
   header_format?: string | null;
   header_content?: string | null;
@@ -135,43 +139,64 @@ function formatJidDisplay(jid: string, name?: string | null): {
 }
 
 export default function CoexistenceSetupPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("chats");
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("wacrm_coex_status") || "checking";
-    }
-    return "checking";
-  });
+  const [status, setStatus] = useState<string>("checking");
   
-  // Chats & Groups State with Persistent LocalStorage Cache (One-Time Sync Feature)
-  const [chats, setChats] = useState<BaileysChat[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const persistent = localStorage.getItem("wacrm_persistent_chats");
-        if (persistent) {
-          const parsed = JSON.parse(persistent);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-        const cached = sessionStorage.getItem("wacrm_cached_chats");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
-  const [lastSyncTime, setLastSyncTime] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("wacrm_chats_last_synced_str") || "";
-    }
-    return "";
-  });
+  // Chats & Groups State with User-Scoped LocalStorage Cache
+  const [chats, setChats] = useState<BaileysChat[]>([]);
+  const [connectedUser, setConnectedUser] = useState<{ id?: string; name?: string; phone?: string; formattedPhone?: string } | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<string>("");
   const [fetchingChats, setFetchingChats] = useState(false);
   const [searchChat, setSearchChat] = useState("");
   const [chatFilter, setChatFilter] = useState<"all" | "direct" | "groups">("all");
+
+  // Reactively synchronize state whenever authenticated user changes or logs in/out
+  useEffect(() => {
+    if (!user?.id) {
+      setStatus("checking");
+      setChats([]);
+      setConnectedUser(null);
+      setLastSyncTime("");
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      try {
+        const savedStatus = localStorage.getItem(`wacrm_coex_status_${user.id}`);
+        if (savedStatus) setStatus(savedStatus);
+        else setStatus("checking");
+
+        const savedUser = localStorage.getItem(`wacrm_coex_user_${user.id}`);
+        if (savedUser) {
+          try {
+            setConnectedUser(JSON.parse(savedUser));
+          } catch {}
+        } else {
+          setConnectedUser(null);
+        }
+
+        const persistent = localStorage.getItem(`wacrm_persistent_chats_${user.id}`);
+        if (persistent) {
+          const parsed = JSON.parse(persistent);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setChats(parsed);
+          } else {
+            setChats([]);
+          }
+        } else {
+          setChats([]);
+        }
+
+        const lastTime = localStorage.getItem(`wacrm_chats_last_synced_str_${user.id}`) || "";
+        setLastSyncTime(lastTime);
+      } catch {
+        setChats([]);
+      }
+    }
+  }, [user?.id]);
 
   // Auto Reply State
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
@@ -238,8 +263,21 @@ export default function CoexistenceSetupPage() {
   const lastSyncTimestampRef = useRef<number>(0);
 
   const isConnected = status === "connected" || status === "open" || status === "PAIRED";
-  const isChecking = status === "checking" || status === "connecting" || status === "reconnecting";
-  const isEffectivelyConnected = isConnected || (chats.length > 0 && status !== "disconnected");
+  const isChecking = status === "connecting" || status === "reconnecting";
+  const isEffectivelyConnected = isConnected;
+
+  // One-time cleanup of legacy global un-scoped keys from previous sessions
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("wacrm_persistent_chats");
+        localStorage.removeItem("wacrm_coex_status");
+        localStorage.removeItem("wacrm_cached_chats");
+        localStorage.removeItem("wacrm_chats_last_synced_str");
+        sessionStorage.removeItem("wacrm_cached_chats");
+      } catch {}
+    }
+  }, []);
 
   const detectedNumbersList = useMemo(() => {
     return pastedNumbers
@@ -275,49 +313,69 @@ export default function CoexistenceSetupPage() {
     }).sort((a, b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0));
   }, [chats, chatFilter, searchChat]);
 
-  // Poll connection status with visibility detection & stable state transitions
+  // Single One-Time Connection Verification on Mount
   useEffect(() => {
-    const fetchStatus = async () => {
-      if (typeof document !== "undefined" && document.hidden) return;
+    if (!user?.id) return;
+    const currentUserId = user.id;
+
+    let isMounted = true;
+    let pollTimeout: NodeJS.Timeout | null = null;
+
+    const verifyStatusOnce = async () => {
       try {
         const res = await fetch("/api/whatsapp/coexistence/status", { method: "POST" });
-        if (res.ok) {
-          const data = await res.json();
-          const currentStatus = data.state || data.status || "disconnected";
-          
-          if (currentStatus === "connected" || currentStatus === "open" || currentStatus === "PAIRED") {
-            disconnectCounterRef.current = 0;
-            setStatus((prev) => (prev === "open" ? prev : "open"));
+        if (!res.ok || !isMounted) return;
+
+        const data = await res.json();
+        const currentStatus = data.state || data.status || "disconnected";
+        
+        if (currentStatus === "connected" || currentStatus === "open" || currentStatus === "PAIRED") {
+          disconnectCounterRef.current = 0;
+          setStatus("open");
+          if (data.user) {
+            setConnectedUser(data.user);
             if (typeof window !== "undefined") {
-              localStorage.setItem("wacrm_coex_status", "connected");
-            }
-            setQrCodeBase64(null);
-          } else if (currentStatus === "connecting" || currentStatus === "reconnecting") {
-            setStatus((prev) => (prev === "connecting" ? prev : "connecting"));
-          } else if (currentStatus === "disconnected") {
-            disconnectCounterRef.current += 1;
-            const wasConnected = typeof window !== "undefined" && localStorage.getItem("wacrm_coex_status") === "connected";
-            if (!wasConnected || disconnectCounterRef.current >= 3) {
-              setStatus((prev) => (prev === "disconnected" ? prev : "disconnected"));
-              if (typeof window !== "undefined") {
-                localStorage.removeItem("wacrm_coex_status");
-              }
+              localStorage.setItem(`wacrm_coex_user_${currentUserId}`, JSON.stringify(data.user));
             }
           }
-          
-          if (data.qr) {
-            setQrCodeBase64(data.qr);
+          if (typeof window !== "undefined") {
+            localStorage.setItem(`wacrm_coex_status_${currentUserId}`, "connected");
+          }
+          setQrCodeBase64(null);
+        } else if (currentStatus === "scan_qr" && data.qr) {
+          setStatus("scan_qr");
+          setQrCodeBase64(data.qr);
+          setConnectedUser(null);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem(`wacrm_coex_user_${currentUserId}`);
+          }
+          // Only poll temporarily while waiting for the user to scan the QR code
+          pollTimeout = setTimeout(verifyStatusOnce, 3000);
+        } else {
+          setStatus("disconnected");
+          setQrCodeBase64(null);
+          setConnectedUser(null);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem(`wacrm_coex_status_${currentUserId}`);
+            localStorage.removeItem(`wacrm_coex_user_${currentUserId}`);
           }
         }
       } catch (error) { 
-        console.error("Status fetch error:", error); 
+        console.error("Status verification note:", error); 
+        if (isMounted) {
+          setStatus("disconnected");
+          setConnectedUser(null);
+        }
       }
     };
 
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    verifyStatusOnce();
+
+    return () => {
+      isMounted = false;
+      if (pollTimeout) clearTimeout(pollTimeout);
+    };
+  }, [user?.id]);
 
   // Advanced One-Time WhatsApp Chat Sync & Persistent Cache Algorithm
   const fetchChatsAndGroups = useCallback(async (notify = false, force = false) => {
@@ -342,11 +400,11 @@ export default function CoexistenceSetupPage() {
           const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           setLastSyncTime(timeStr);
 
-          if (typeof window !== "undefined") {
+          if (user?.id && typeof window !== "undefined") {
             try {
-              localStorage.setItem("wacrm_persistent_chats", JSON.stringify(data.data));
-              localStorage.setItem("wacrm_chats_last_synced_str", timeStr);
-              sessionStorage.setItem("wacrm_cached_chats", JSON.stringify(data.data));
+              localStorage.setItem(`wacrm_persistent_chats_${user.id}`, JSON.stringify(data.data));
+              localStorage.setItem(`wacrm_chats_last_synced_str_${user.id}`, timeStr);
+              sessionStorage.setItem(`wacrm_cached_chats_${user.id}`, JSON.stringify(data.data));
             } catch {}
           }
           if (notify) toast.success(`Synced ${data.data.length} chats from WhatsApp! Saved to persistent cache.`);
@@ -358,7 +416,7 @@ export default function CoexistenceSetupPage() {
       isSyncingRef.current = false;
       setFetchingChats(false);
     }
-  }, [chats.length]);
+  }, [chats.length, user?.id]);
 
   // ONE-TIME SYNC ONLY: If chats are already in cache, never trigger network sync automatically!
   useEffect(() => { 
@@ -694,8 +752,16 @@ export default function CoexistenceSetupPage() {
       if (data.success) {
         setStatus("disconnected");
         setQrCodeBase64(null);
+        setConnectedUser(null);
         setChats([]);
         setSchedules([]);
+        if (user?.id && typeof window !== "undefined") {
+          localStorage.removeItem(`wacrm_coex_status_${user.id}`);
+          localStorage.removeItem(`wacrm_coex_user_${user.id}`);
+          localStorage.removeItem(`wacrm_persistent_chats_${user.id}`);
+          localStorage.removeItem(`wacrm_chats_last_synced_str_${user.id}`);
+          sessionStorage.removeItem(`wacrm_cached_chats_${user.id}`);
+        }
         toast.success("Disconnected successfully");
       } else {
         toast.error("Failed to disconnect");
@@ -930,11 +996,11 @@ export default function CoexistenceSetupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background -mt-3 sm:-mt-5 -mx-1 sm:-mx-2 pb-8">
+      <div className="max-w-[1680px] w-full mx-auto space-y-4">
         
         {/* Top Header Card - SaaS Grade */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-3xl shadow-xs">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl shadow-xs">
           <div className="flex items-center gap-4">
             <Link href="/dashboard">
               <Button variant="outline" size="sm" className="rounded-xl border-slate-200 dark:border-zinc-800 hover:bg-muted font-bold text-xs h-9">
@@ -943,20 +1009,31 @@ export default function CoexistenceSetupPage() {
               </Button>
             </Link>
             <div className="flex items-center gap-3">
-              <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs">
-                <Smartphone className="h-6 w-6" />
+              <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs">
+                <Smartphone className="h-5 w-5" />
                 <span className="absolute -top-1 -right-1 flex h-3 w-3">
                   <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", isConnected ? "bg-emerald-400" : isChecking ? "bg-amber-400" : "bg-slate-400")} />
                   <span className={cn("relative inline-flex rounded-full h-3 w-3", isConnected ? "bg-emerald-500" : isChecking ? "bg-amber-500" : "bg-slate-500")} />
                 </span>
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <span>WhatsApp Coexistence</span>
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px] uppercase font-bold tracking-wider">
-                    Dual-Device Sync
-                  </Badge>
-                </h1>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>WhatsApp Coexistence</span>
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px] uppercase font-bold tracking-wider">
+                      Dual-Device Sync
+                    </Badge>
+                  </h1>
+                  {isEffectivelyConnected && connectedUser?.formattedPhone && (
+                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 px-2.5 py-0.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                      <Phone className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                      <span>Linked: {connectedUser.formattedPhone}</span>
+                      {connectedUser.name && connectedUser.name !== "WhatsApp Account" && connectedUser.name !== "WhatsApp User" && (
+                        <span className="text-muted-foreground font-medium">({connectedUser.name})</span>
+                      )}
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Run WhatsApp directly on your physical mobile phone while ChatFlyr CRM automates replies & group broadcasts.
                 </p>
@@ -1036,8 +1113,9 @@ export default function CoexistenceSetupPage() {
             <CardHeader className="p-6 sm:p-8">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="space-y-3 max-w-2xl">
-                  <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 font-bold px-3 py-1 text-xs">
-                    ⚡ Instant WhatsApp Coexistence
+                  <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 font-bold px-3 py-1 text-xs flex items-center gap-1.5 w-fit">
+                    <Zap className="h-3 w-3 text-emerald-600" />
+                    <span>Instant WhatsApp Coexistence</span>
                   </Badge>
                   <CardTitle className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                     Connect Your Phone QR Code
@@ -1169,7 +1247,10 @@ export default function CoexistenceSetupPage() {
                   <div>
                     <p className="text-xs text-muted-foreground font-semibold">Connection Status</p>
                     <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">Active</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Phone linked & ready</p>
+                    <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300 mt-0.5 flex items-center gap-1">
+                      <Smartphone className="h-3 w-3 text-emerald-500 shrink-0" />
+                      <span>{connectedUser?.formattedPhone ? connectedUser.formattedPhone : "Phone linked & ready"}</span>
+                    </p>
                   </div>
                   <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-2xl border border-emerald-500/20">
                     <CheckCircle2 className="h-6 w-6" />
@@ -1581,7 +1662,7 @@ export default function CoexistenceSetupPage() {
                                     onClick={() => setTemplatePickerOpen(true)}
                                     className="h-8 px-2.5 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 gap-1.5 cursor-pointer shadow-2xs"
                                   >
-                                    <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                                    <FileText className="h-3.5 w-3.5 text-emerald-600" />
                                     <span className="hidden sm:inline">Templates</span>
                                   </Button>
                                   <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-200/60 dark:hover:bg-zinc-700/60">
@@ -1598,31 +1679,34 @@ export default function CoexistenceSetupPage() {
                             );
                           })()}
 
-                          {/* Quick Template Suggestion Strip Floating Above Stream */}
-                          <div className="shrink-0 bg-white/95 dark:bg-[#111B21]/95 border-b border-slate-200/60 dark:border-zinc-800/60 px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar z-10">
-                            <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 flex items-center gap-1 shrink-0 px-1">
-                              <Sparkles className="h-3 w-3" />
-                              <span>Quick:</span>
-                            </span>
-                            {templates.slice(0, 5).map((tmpl) => (
+                          {/* Quick Template Suggestion Strip (Only shown when user has saved templates) */}
+                          {templates && templates.length > 0 && (
+                            <div className="shrink-0 bg-white/95 dark:bg-[#111B21]/95 border-b border-slate-200/60 dark:border-zinc-800/60 px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar z-10">
+                              <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400 flex items-center gap-1 shrink-0 px-1">
+                                <FileText className="h-3 w-3 text-emerald-600" />
+                                <span>Templates:</span>
+                              </span>
+                              {templates.slice(0, 5).map((tmpl) => (
+                                <button
+                                  key={tmpl.id}
+                                  type="button"
+                                  onClick={() => handleApplyTemplateToLive(tmpl)}
+                                  className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-slate-300 border border-slate-200/80 dark:border-zinc-700 transition-all flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <FileText className="h-3 w-3 text-emerald-600" />
+                                  <span>{tmpl.name.replace(/_/g, " ")}</span>
+                                </button>
+                              ))}
                               <button
-                                key={tmpl.id}
                                 type="button"
-                                onClick={() => handleApplyTemplateToLive(tmpl)}
-                                className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-slate-300 border border-slate-200/80 dark:border-zinc-700 transition-all flex items-center gap-1 cursor-pointer"
+                                onClick={() => setTemplatePickerOpen(true)}
+                                className="shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
                               >
-                                <span>⚡ {tmpl.name.replace(/_/g, " ")}</span>
+                                <Layers className="h-3 w-3 text-emerald-600" />
+                                <span>All Templates ({templates.length})</span>
                               </button>
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => setTemplatePickerOpen(true)}
-                              className="shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 transition-all flex items-center gap-1 cursor-pointer"
-                            >
-                              <Sparkles className="h-3 w-3 text-emerald-600" />
-                              <span>All Templates ({templates.length})</span>
-                            </button>
-                          </div>
+                            </div>
+                          )}
 
                           {/* Chat Message Stream - Dedicated Scrollable Container */}
                           <div 
@@ -2162,7 +2246,7 @@ export default function CoexistenceSetupPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => fetchTemplates(true)}
+                        onClick={() => fetchTemplates()}
                         className="rounded-xl text-xs font-bold gap-1.5 h-9"
                       >
                         <RefreshCw className="h-3.5 w-3.5" />
@@ -2223,7 +2307,7 @@ export default function CoexistenceSetupPage() {
                     {filteredTemplatesList.length === 0 ? (
                       <div className="text-center py-16 border-2 border-dashed border-border/80 rounded-2xl p-8 space-y-3">
                         <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto">
-                          <Sparkles className="h-6 w-6" />
+                          <FileText className="h-6 w-6" />
                         </div>
                         <h4 className="font-bold text-sm text-foreground">No templates found</h4>
                         <p className="text-xs text-muted-foreground max-w-md mx-auto">
@@ -2259,7 +2343,7 @@ export default function CoexistenceSetupPage() {
                                       tmpl.category === "Marketing" && "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
                                       tmpl.category === "Utility" && "bg-blue-500/10 text-blue-600 border-blue-500/30",
                                       tmpl.category === "Support" && "bg-violet-500/10 text-violet-600 border-violet-500/30",
-                                      !["Marketing", "Utility", "Support"].includes(tmpl.category) && "bg-muted text-muted-foreground border-border"
+                                      !["Marketing", "Utility", "Support"].includes(tmpl.category || "") && "bg-muted text-muted-foreground border-border"
                                     )}
                                   >
                                     {tmpl.category || "General"}

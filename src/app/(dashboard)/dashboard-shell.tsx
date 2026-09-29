@@ -40,7 +40,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
-  const ALWAYS_ACCESSIBLE = ['/billing', '/settings', '/profile', '/admin'];
+  const ALWAYS_ACCESSIBLE = ['/billing', '/profile', '/admin'];
   const isAlwaysAccessible = ALWAYS_ACCESSIBLE.some(p => pathname === p || pathname.startsWith(p + '/'));
   const showTrialBanner = (status === 'trial' || status === 'expired') && !pathname.startsWith('/billing');
 

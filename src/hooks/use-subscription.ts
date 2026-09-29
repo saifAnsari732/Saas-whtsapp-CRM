@@ -34,7 +34,7 @@ export function useSubscription(): SubscriptionState {
     trialEndsAt: null,
     subscriptionExpiresAt: null,
     daysRemaining: 0,
-    isActive: true, // Default to true to prevent flickering before load
+    isActive: false,
     isOwner: false,
     loading: true,
     trialUsage: null,
