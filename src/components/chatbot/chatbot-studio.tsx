@@ -378,31 +378,56 @@ export function ChatbotStudio() {
 
       {/* Tabs Hub */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
-        <TabsList className="w-full grid grid-cols-2 sm:grid-cols-4 gap-2 !h-auto group-data-horizontal/tabs:!h-auto overflow-visible p-1.5 bg-muted/70 dark:bg-muted/30 border border-border/80 rounded-2xl shadow-inner">
-          <TabsTrigger value="bot_engine" className="min-h-[48px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs flex items-center justify-center gap-2">
-            <Bot className="h-4 w-4 shrink-0 text-emerald-500" />
+        <TabsList className="w-full grid grid-cols-2 sm:grid-cols-4 gap-2.5 !h-auto group-data-horizontal/tabs:!h-auto overflow-visible p-2 bg-slate-100/90 dark:bg-zinc-850 border border-slate-200/90 dark:border-zinc-700/80 rounded-2xl shadow-inner">
+          {/* SUB-TAB 1: AI BOT ENGINE */}
+          <TabsTrigger 
+            value="bot_engine" 
+            className="min-h-[50px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm border transition-all duration-200 shadow-xs bg-white dark:bg-zinc-900 border-emerald-500/25 text-slate-800 dark:text-slate-200 hover:border-emerald-500/60 hover:bg-emerald-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-600/30 data-[state=active]:border-emerald-400 flex items-center justify-center gap-2"
+          >
+            <div className="p-1 rounded-lg bg-emerald-500/15 data-[state=active]:bg-white/20 shrink-0">
+              <Bot className="h-4 w-4 shrink-0" />
+            </div>
             <span>AI Bot Engine</span>
           </TabsTrigger>
 
-          <TabsTrigger value="keywords" className="min-h-[48px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs flex items-center justify-center gap-2">
-            <Zap className="h-4 w-4 shrink-0 text-amber-500" />
+          {/* SUB-TAB 2: KEYWORDS & RULES */}
+          <TabsTrigger 
+            value="keywords" 
+            className="min-h-[50px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm border transition-all duration-200 shadow-xs bg-white dark:bg-zinc-900 border-amber-500/25 text-slate-800 dark:text-slate-200 hover:border-amber-500/60 hover:bg-amber-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-amber-500/30 data-[state=active]:border-amber-400 flex items-center justify-center gap-2"
+          >
+            <div className="p-1 rounded-lg bg-amber-500/15 data-[state=active]:bg-white/20 shrink-0">
+              <Zap className="h-4 w-4 shrink-0" />
+            </div>
             <span>Keywords & Rules</span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-600 border-amber-500/20 ml-1">
+            <span className="text-[11px] font-black px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 ml-1">
               {keywordRules.length}
-            </Badge>
+            </span>
           </TabsTrigger>
 
-          <TabsTrigger value="followups" className="min-h-[48px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs flex items-center justify-center gap-2">
-            <Clock className="h-4 w-4 shrink-0 text-blue-500" />
+          {/* SUB-TAB 3: AUTOMATED FOLLOW-UPS */}
+          <TabsTrigger 
+            value="followups" 
+            className="min-h-[50px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm border transition-all duration-200 shadow-xs bg-white dark:bg-zinc-900 border-blue-500/25 text-slate-800 dark:text-slate-200 hover:border-blue-500/60 hover:bg-blue-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/30 data-[state=active]:border-blue-400 flex items-center justify-center gap-2"
+          >
+            <div className="p-1 rounded-lg bg-blue-500/15 data-[state=active]:bg-white/20 shrink-0">
+              <Clock className="h-4 w-4 shrink-0" />
+            </div>
             <span>Automated Follow-ups</span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-500/10 text-blue-600 border-blue-500/20 ml-1">
+            <span className="text-[11px] font-black px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 ml-1">
               {followUpSteps.length}
-            </Badge>
+            </span>
           </TabsTrigger>
 
-          <TabsTrigger value="simulator" className="min-h-[48px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs flex items-center justify-center gap-2">
-            <Smartphone className="h-4 w-4 shrink-0 text-violet-500" />
+          {/* SUB-TAB 4: LIVE WHATSAPP SIMULATOR */}
+          <TabsTrigger 
+            value="simulator" 
+            className="min-h-[50px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm border transition-all duration-200 shadow-xs bg-white dark:bg-zinc-900 border-purple-500/25 text-slate-800 dark:text-slate-200 hover:border-purple-500/60 hover:bg-purple-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-pink-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-purple-500/30 data-[state=active]:border-purple-400 flex items-center justify-center gap-2"
+          >
+            <div className="p-1 rounded-lg bg-purple-500/15 data-[state=active]:bg-white/20 shrink-0">
+              <Smartphone className="h-4 w-4 shrink-0" />
+            </div>
             <span>Live WhatsApp Simulator</span>
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse ml-1" />
           </TabsTrigger>
         </TabsList>
 

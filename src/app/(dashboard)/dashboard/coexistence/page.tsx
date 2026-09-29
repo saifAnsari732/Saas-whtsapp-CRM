@@ -523,16 +523,28 @@ export default function CoexistenceSetupPage() {
           
           <div className="flex items-center gap-3">
             {isConnected && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => fetchChatsAndGroups(true)} 
-                disabled={fetchingChats}
-                className="rounded-xl text-xs font-bold gap-1.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 h-9"
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", fetchingChats && "animate-spin")} />
-                <span>Fetch Groups & Chats</span>
-              </Button>
+              <>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => fetchChatsAndGroups(true)} 
+                  disabled={fetchingChats}
+                  className="rounded-xl text-xs font-bold gap-1.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 h-9"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", fetchingChats && "animate-spin")} />
+                  <span>Sync WhatsApp</span>
+                </Button>
+
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleDisconnect}
+                  className="rounded-xl text-xs font-bold gap-1.5 border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:hover:bg-rose-950/20 h-9"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Disconnect</span>
+                </Button>
+              </>
             )}
 
             <Badge className={cn("px-4 py-2 border text-xs font-bold rounded-xl flex items-center gap-2 shadow-2xs", 
@@ -591,7 +603,30 @@ export default function CoexistenceSetupPage() {
             </CardHeader>
             
             <CardContent className="p-6 sm:p-8 pt-0 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-y border-slate-100 dark:border-zinc-800">
+              {/* PRIMARY ACTION BUTTON AT TOP */}
+              <div className="pt-2">
+                <Button 
+                  onClick={handleCreateInstance} 
+                  disabled={loading} 
+                  size="lg" 
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-4 text-sm sm:text-base rounded-2xl shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.99] gap-2.5 cursor-pointer h-14"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Generating WhatsApp QR Code...
+                    </>
+                  ) : (
+                    <>
+                      <QrCode className="h-5 w-5" />
+                      Generate QR Code & Connect WhatsApp Now
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* AWARENESS & BENEFITS CARDS SHIFTED BELOW BUTTON */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-t border-slate-100 dark:border-zinc-800">
                 <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-zinc-950/60 border border-slate-200/70 dark:border-zinc-800 shadow-2xs hover:border-emerald-500/30 transition-colors">
                   <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 shrink-0">
                     <CheckCircle2 className="h-5 w-5" />
@@ -628,25 +663,6 @@ export default function CoexistenceSetupPage() {
                   </div>
                 </div>
               </div>
-
-              <Button 
-                onClick={handleCreateInstance} 
-                disabled={loading} 
-                size="lg" 
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 text-sm sm:text-base rounded-2xl shadow-sm transition-all active:scale-[0.99] gap-2.5 cursor-pointer"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Generating WhatsApp QR Code...
-                  </>
-                ) : (
-                  <>
-                    <QrCode className="h-5 w-5" />
-                    Generate QR Code & Connect WhatsApp
-                  </>
-                )}
-              </Button>
             </CardContent>
           </Card>
         )}
@@ -689,105 +705,80 @@ export default function CoexistenceSetupPage() {
           </Card>
         )}
 
-        {/* ALWAYS RENDER THE RICH COEXISTENCE GUIDE BELOW CONNECTION VIEWS */}
-        <CoexistenceGuide />
+        {/* ONLY RENDER INLINE GUIDE ON DISCONNECTED STATES */}
+        {!isConnected && <CoexistenceGuide />}
 
         {/* VIEW 3: CONNECTED DASHBOARD */}
         {isConnected && (
           <div className="space-y-6">
+            {/* Top 4 KPI Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="rounded-2xl border-border/80 shadow-xs">
+              <Card className="rounded-2xl border-slate-200/80 dark:border-zinc-800 shadow-xs bg-white dark:bg-zinc-900">
                 <CardContent className="p-5 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground font-semibold">Connection Status</p>
                     <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">Active</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Phone linked & ready</p>
                   </div>
-                  <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-2xl">
+                  <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-2xl border border-emerald-500/20">
                     <CheckCircle2 className="h-6 w-6" />
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="rounded-2xl border-border/80 shadow-xs">
+              <Card className="rounded-2xl border-slate-200/80 dark:border-zinc-800 shadow-xs bg-white dark:bg-zinc-900">
                 <CardContent className="p-5 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground font-semibold">Synced Chats</p>
-                    <p className="text-2xl font-extrabold text-foreground mt-1">{chats.length}</p>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{chats.length}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Direct & group chats</p>
                   </div>
-                  <div className="p-3 bg-blue-500/10 text-blue-600 rounded-2xl">
+                  <div className="p-3 bg-blue-500/10 text-blue-600 rounded-2xl border border-blue-500/20">
                     <MessageSquare className="h-6 w-6" />
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="rounded-2xl border-border/80 shadow-xs">
+              <Card className="rounded-2xl border-slate-200/80 dark:border-zinc-800 shadow-xs bg-white dark:bg-zinc-900">
                 <CardContent className="p-5 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground font-semibold">WhatsApp Groups</p>
-                    <p className="text-2xl font-extrabold text-foreground mt-1">{groups.length}</p>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{groups.length}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Communities & groups</p>
                   </div>
-                  <div className="p-3 bg-violet-500/10 text-violet-600 rounded-2xl">
+                  <div className="p-3 bg-violet-500/10 text-violet-600 rounded-2xl border border-violet-500/20">
                     <Users className="h-6 w-6" />
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="rounded-2xl border-border/80 shadow-xs">
+              <Card className="rounded-2xl border-slate-200/80 dark:border-zinc-800 shadow-xs bg-white dark:bg-zinc-900">
                 <CardContent className="p-5 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground font-semibold">Active Schedules</p>
-                    <p className="text-2xl font-extrabold text-foreground mt-1">{schedules.filter((s) => s.is_active).length}</p>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{schedules.filter((s) => s.is_active).length}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Upcoming automations</p>
                   </div>
-                  <div className="p-3 bg-amber-500/10 text-amber-600 rounded-2xl">
+                  <div className="p-3 bg-amber-500/10 text-amber-600 rounded-2xl border border-amber-500/20">
                     <Clock className="h-6 w-6" />
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            <Card className="rounded-2xl border-border/80 shadow-xs bg-gradient-to-r from-card via-card to-purple-500/5">
-              <CardContent className="p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-2xl border border-purple-500/20 shadow-xs">
-                      <Bot className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-sm text-foreground">AI Auto-Reply & Follow-up Engine</p>
-                        <Badge variant="outline" className={cn("px-2.5 py-0.5 font-bold text-[10px] rounded-lg", autoReplyEnabled ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-purple-500/10 text-purple-600 border-purple-500/30")}>
-                          {autoReplyEnabled ? "ACTIVE (ON)" : "AI STUDIO READY"}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">Automated AI replies, keyword match triggers, and multi-step lead follow-up drip sequences for incoming WhatsApp Coexistence messages.</p>
-                    </div>
-                  </div>
-
-                  <Button 
-                    size="sm" 
-                    onClick={() => setActiveTab("chatbot")}
-                    className="rounded-xl text-xs font-bold gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md shadow-purple-600/20 shrink-0"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Open AI Chatbot & Follow-ups Studio
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
+            {/* Main Tabs Navigation Hub */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              {/* ENHANCED TAB NAVIGATION BUTTONS: FULLY VISIBLE & NO SCROLLBAR */}
-              <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 !h-auto group-data-horizontal/tabs:!h-auto overflow-visible p-2 bg-muted/70 dark:bg-muted/30 border border-border/80 rounded-2xl shadow-inner">
+              <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 !h-auto group-data-horizontal/tabs:!h-auto overflow-visible p-2 bg-slate-100/90 dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/80 rounded-2xl shadow-inner">
                 {/* TAB 1: CHATS */}
                 <TabsTrigger 
                   value="chats" 
-                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-600/30 data-[state=active]:border-emerald-400 flex items-center justify-center gap-2"
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs transition-all duration-200 border border-emerald-500/25 shadow-xs bg-white dark:bg-zinc-900 text-slate-800 dark:text-slate-200 hover:border-emerald-500/60 hover:bg-emerald-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-600/35 data-[state=active]:border-emerald-400 flex items-center justify-center gap-2"
                 >
-                  <div className="p-1.5 rounded-lg bg-emerald-500/15 data-[state=active]:bg-white/20 shrink-0">
+                  <div className="p-1 rounded-lg bg-emerald-500/15 data-[state=active]:bg-white/20 shrink-0 text-emerald-600 dark:text-emerald-400 data-[state=active]:text-white">
                     <MessageSquare className="h-4 w-4 shrink-0" />
                   </div>
-                  <span className="truncate">Chats</span>
-                  <span className="text-[11px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 border border-emerald-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
+                  <span>Live Chats</span>
+                  <span className="text-[11px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
                     {chats.length}
                   </span>
                 </TabsTrigger>
@@ -795,27 +786,27 @@ export default function CoexistenceSetupPage() {
                 {/* TAB 2: AI AUTO-REPLY & FOLLOW-UPS */}
                 <TabsTrigger 
                   value="chatbot" 
-                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-purple-600/30 data-[state=active]:border-purple-400 flex items-center justify-center gap-2"
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs transition-all duration-200 border border-purple-500/25 shadow-xs bg-white dark:bg-zinc-900 text-slate-800 dark:text-slate-200 hover:border-purple-500/60 hover:bg-purple-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-purple-600/35 data-[state=active]:border-purple-400 flex items-center justify-center gap-2"
                 >
-                  <div className="p-1.5 rounded-lg bg-purple-500/15 data-[state=active]:bg-white/20 shrink-0">
+                  <div className="p-1 rounded-lg bg-purple-500/15 data-[state=active]:bg-white/20 shrink-0 text-purple-600 dark:text-purple-400 data-[state=active]:text-white">
                     <Bot className="h-4 w-4 shrink-0" />
                   </div>
-                  <span className="truncate">AI Bot & Follow-ups</span>
-                  <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-800 dark:text-purple-200 border border-purple-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
-                    Studio
+                  <span>AI Studio</span>
+                  <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
+                    {autoReplyEnabled ? "Live" : "Bot"}
                   </span>
                 </TabsTrigger>
 
                 {/* TAB 3: BULK DISPATCH */}
                 <TabsTrigger 
                   value="messaging" 
-                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:border-blue-400 flex items-center justify-center gap-2"
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs transition-all duration-200 border border-blue-500/25 shadow-xs bg-white dark:bg-zinc-900 text-slate-800 dark:text-slate-200 hover:border-blue-500/60 hover:bg-blue-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-cyan-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/35 data-[state=active]:border-blue-400 flex items-center justify-center gap-2"
                 >
-                  <div className="p-1.5 rounded-lg bg-blue-500/15 data-[state=active]:bg-white/20 shrink-0">
+                  <div className="p-1 rounded-lg bg-blue-500/15 data-[state=active]:bg-white/20 shrink-0 text-blue-600 dark:text-blue-400 data-[state=active]:text-white">
                     <Send className="h-4 w-4 shrink-0" />
                   </div>
-                  <span className="truncate">Bulk Dispatch</span>
-                  <span className="text-[10px] uppercase tracking-wider font-black px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-800 dark:text-blue-200 border border-blue-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
+                  <span>Broadcast</span>
+                  <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
                     Fast
                   </span>
                 </TabsTrigger>
@@ -823,13 +814,13 @@ export default function CoexistenceSetupPage() {
                 {/* TAB 4: GROUPS */}
                 <TabsTrigger 
                   value="groups" 
-                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-violet-600/30 data-[state=active]:border-violet-400 flex items-center justify-center gap-2"
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs transition-all duration-200 border border-violet-500/25 shadow-xs bg-white dark:bg-zinc-900 text-slate-800 dark:text-slate-200 hover:border-violet-500/60 hover:bg-violet-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-fuchsia-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-violet-600/35 data-[state=active]:border-violet-400 flex items-center justify-center gap-2"
                 >
-                  <div className="p-1.5 rounded-lg bg-violet-500/15 data-[state=active]:bg-white/20 shrink-0">
+                  <div className="p-1 rounded-lg bg-violet-500/15 data-[state=active]:bg-white/20 shrink-0 text-violet-600 dark:text-violet-400 data-[state=active]:text-white">
                     <Users className="h-4 w-4 shrink-0" />
                   </div>
-                  <span className="truncate">Groups</span>
-                  <span className="text-[11px] font-black px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-800 dark:text-violet-200 border border-violet-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
+                  <span>Groups</span>
+                  <span className="text-[11px] font-black px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
                     {groups.length}
                   </span>
                 </TabsTrigger>
@@ -837,13 +828,13 @@ export default function CoexistenceSetupPage() {
                 {/* TAB 5: SCHEDULES */}
                 <TabsTrigger 
                   value="schedules" 
-                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-600 data-[state=active]:to-orange-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-amber-600/30 data-[state=active]:border-amber-400 flex items-center justify-center gap-2"
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs transition-all duration-200 border border-amber-500/25 shadow-xs bg-white dark:bg-zinc-900 text-slate-800 dark:text-slate-200 hover:border-amber-500/60 hover:bg-amber-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-amber-500/35 data-[state=active]:border-amber-400 flex items-center justify-center gap-2"
                 >
-                  <div className="p-1.5 rounded-lg bg-amber-500/15 data-[state=active]:bg-white/20 shrink-0">
+                  <div className="p-1 rounded-lg bg-amber-500/15 data-[state=active]:bg-white/20 shrink-0 text-amber-600 dark:text-amber-400 data-[state=active]:text-white">
                     <Calendar className="h-4 w-4 shrink-0" />
                   </div>
-                  <span className="truncate">Schedules</span>
-                  <span className="text-[11px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
+                  <span>Schedules</span>
+                  <span className="text-[11px] font-black px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
                     {schedules.length}
                   </span>
                 </TabsTrigger>
@@ -851,14 +842,28 @@ export default function CoexistenceSetupPage() {
                 {/* TAB 6: SETTINGS */}
                 <TabsTrigger 
                   value="settings" 
-                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all duration-200 border border-border/60 shadow-xs data-[state=inactive]:bg-card data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-accent/60 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-700 data-[state=active]:to-slate-900 dark:data-[state=active]:from-slate-700 dark:data-[state=active]:to-slate-800 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-slate-700/30 data-[state=active]:border-slate-500 flex items-center justify-center gap-2"
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs transition-all duration-200 border border-slate-400/25 shadow-xs bg-white dark:bg-zinc-900 text-slate-800 dark:text-slate-200 hover:border-slate-500/60 hover:bg-slate-100/60 data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-700 data-[state=active]:to-zinc-900 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-slate-700/35 data-[state=active]:border-slate-500 flex items-center justify-center gap-2"
                 >
-                  <div className="p-1.5 rounded-lg bg-slate-500/15 data-[state=active]:bg-white/20 shrink-0">
+                  <div className="p-1 rounded-lg bg-slate-500/15 data-[state=active]:bg-white/20 shrink-0 text-slate-600 dark:text-slate-400 data-[state=active]:text-white">
                     <Settings className="h-4 w-4 shrink-0" />
                   </div>
-                  <span className="truncate">Settings</span>
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-800 dark:text-slate-200 border border-slate-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
+                  <span>Settings</span>
+                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
                     Config
+                  </span>
+                </TabsTrigger>
+
+                {/* TAB 7: GUIDE & BAN SAFETY */}
+                <TabsTrigger 
+                  value="guide" 
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs transition-all duration-200 border border-teal-500/25 shadow-xs bg-white dark:bg-zinc-900 text-slate-800 dark:text-slate-200 hover:border-teal-500/60 hover:bg-teal-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-700 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-600/35 data-[state=active]:border-teal-400 flex items-center justify-center gap-2"
+                >
+                  <div className="p-1 rounded-lg bg-teal-500/15 data-[state=active]:bg-white/20 shrink-0 text-teal-600 dark:text-teal-400 data-[state=active]:text-white">
+                    <ShieldCheck className="h-4 w-4 shrink-0" />
+                  </div>
+                  <span>Ban Rules</span>
+                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
+                    Guide
                   </span>
                 </TabsTrigger>
               </TabsList>
@@ -1366,6 +1371,11 @@ export default function CoexistenceSetupPage() {
                     </div>
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              {/* TAB 7: GUIDE & BAN SAFETY */}
+              <TabsContent value="guide" className="space-y-6 mt-6">
+                <CoexistenceGuide />
               </TabsContent>
             </Tabs>
           </div>
