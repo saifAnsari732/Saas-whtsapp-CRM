@@ -214,15 +214,9 @@ export default function BillingPage() {
       const data = await res.json();
       
       const targetOrderId = data.order_id;
-      setCheckoutData({
-        orderId: targetOrderId,
-        amount: data.amount / 100, // convert paise back to rupees for display
-        type,
-        planId,
-      });
-
+      
       // If server returned fallback demo order (e.g. Razorpay credentials mismatch in env)
-      if (data.is_demo) {
+      if (data.is_demo || targetOrderId?.startsWith('order_demo_')) {
         toast.info("Activating plan via instant fallback verification...");
         const verifyRes = await fetch('/api/billing/razorpay/verify-payment', {
           method: 'POST',
@@ -246,8 +240,15 @@ export default function BillingPage() {
             setWalletBalance(prev => prev + (data.amount / 100));
           }
         }
-        setCheckoutData(null);
+        return;
       }
+
+      setCheckoutData({
+        orderId: targetOrderId,
+        amount: data.amount / 100, // convert paise back to rupees for display
+        type,
+        planId,
+      });
     } catch (error: any) {
       toast.error(error.message || "Failed to initialize payment");
       console.error(error);
