@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getPlanConfig } from '@/lib/billing/plan-features'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -197,25 +198,24 @@ export async function middleware(request: NextRequest) {
             }
           }
 
-          // 2. Feature-Level Plan Route Gating Enforcement
+          // 2. Dynamic Feature-Level Plan Route Gating Enforcement
           const isTrialActive = account.subscription_status === 'trial' || (!account.subscription_status && isActive);
-          const rawPlan = account.subscription_plan || 'essential';
-          const normalizedPlan = rawPlan.toLowerCase().replace(/[-_]/g, '');
+          const planConfig = getPlanConfig(account.subscription_plan, isTrialActive);
 
-          // Check Agent Team Management Route Gating (/agents)
-          if (pathname.startsWith('/agents')) {
-            const allowsAgents = isTrialActive || normalizedPlan === 'growth' || normalizedPlan === 'allinone' || normalizedPlan === 'enterprise';
-            if (!allowsAgents) {
+          // Check if the current requested page route is allowed under user's plan configuration
+          if (isGatedPage && !pathname.startsWith('/billing') && !pathname.startsWith('/settings') && !pathname.startsWith('/profile')) {
+            const isAllowed = planConfig.allowedRoutes.some(allowed => pathname.startsWith(allowed));
+            if (!isAllowed) {
               const url = request.nextUrl.clone();
               url.pathname = '/billing';
-              url.search = '?upgrade=true&feature=agents&required=growth';
+              url.search = `?upgrade=true&feature=${encodeURIComponent(pathname.split('/')[1] || '')}&required=growth`;
               return withRefreshedCookies(NextResponse.redirect(url));
             }
           }
 
           // Check API Feature Gating (/api/agents)
           if (pathname.startsWith('/api/agents')) {
-            const allowsAgents = isTrialActive || normalizedPlan === 'growth' || normalizedPlan === 'allinone' || normalizedPlan === 'enterprise';
+            const allowsAgents = isTrialActive || planConfig.maxAgents > 5 || planConfig.maxAgents === -1;
             if (!allowsAgents) {
               return withRefreshedCookies(
                 NextResponse.json({
