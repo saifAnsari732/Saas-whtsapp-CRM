@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
 
 type AudienceType = 'all' | 'tags' | 'custom_field' | 'csv';
 type CustomFieldOperator = 'is' | 'is_not' | 'contains';
@@ -408,7 +409,7 @@ export function Step2SelectAudience({
                 .filter(l => l.trim() !== '')
                 .map(line => {
                   const [phone, ...nameParts] = line.split(',');
-                  return { phone: phone.trim(), name: nameParts.join(',').trim() || undefined };
+                  return { phone: sanitizePhoneForMeta(phone.trim()), name: nameParts.join(',').trim() || undefined };
                 });
               onUpdate({ ...audience, csvContacts: contacts });
             }}

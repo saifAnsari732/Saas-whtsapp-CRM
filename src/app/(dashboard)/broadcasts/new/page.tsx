@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { MessageTemplate } from '@/types';
 import { useBroadcastSending } from '@/hooks/use-broadcast-sending';
 import { uploadAccountMedia } from '@/lib/storage/upload-media';
+import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -56,7 +57,7 @@ export default function NewBroadcastPage() {
   const detectedNumbersList = useMemo(() => {
     return pastedNumbers
       .split(/[\n,]+/)
-      .map((n) => n.trim().replace(/\D/g, ""))
+      .map((n) => sanitizePhoneForMeta(n.trim()))
       .filter((n) => n.length >= 8);
   }, [pastedNumbers]);
   const detectedNumbersCount = detectedNumbersList.length;
@@ -241,7 +242,7 @@ export default function NewBroadcastPage() {
       }
       
       if (groupNumbers.trim()) {
-        const numbers = groupNumbers.split(/[\n,]+/).map(n => n.trim().replace(/\D/g, '')).filter(Boolean);
+        const numbers = groupNumbers.split(/[\n,]+/).map(n => sanitizePhoneForMeta(n.trim())).filter(Boolean);
         
         if (numbers.length > 0) {
           const { data: existingContacts } = await supabase.from('contacts').select('id, phone').eq('account_id', profile.account_id).in('phone', numbers);
@@ -346,7 +347,10 @@ export default function NewBroadcastPage() {
           audience = { type: 'tags', tagIds: [groupId] };
         }
       } else if (recipientMode === 'numbers') {
-        const numbers = pastedNumbers.split(/[\n,]+/).map(n => n.trim()).filter(Boolean);
+        const numbers = pastedNumbers
+          .split(/[\n,]+/)
+          .map(n => sanitizePhoneForMeta(n.trim()))
+          .filter(Boolean);
         audience = { 
           type: 'csv', 
           csvContacts: numbers.map(phone => ({ phone })) 
@@ -594,7 +598,7 @@ export default function NewBroadcastPage() {
                     onChange={(e) => setPastedNumbers(e.target.value)}
                   />
                   <p className="text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-xl border border-border/60">
-                    💡 Enter full numbers with country code prefix (e.g. 91 for India, 1 for USA). No + sign needed.
+                    💡 <strong>Smart Format:</strong> 10-digit Indian numbers (e.g. 9511450914) are automatically formatted with country code <code>91</code>. You can paste with or without 91.
                   </p>
                 </TabsContent>
               </Tabs>
@@ -693,6 +697,17 @@ export default function NewBroadcastPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground">Select from Meta-approved WhatsApp Business templates for bulk broadcast dispatch.</p>
+                {selectedTemplate?.category?.toUpperCase() === 'MARKETING' && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                    <div className="space-y-1">
+                      <p className="font-bold">Meta Cloud API: Marketing Template Notice</p>
+                      <p className="text-[11px] leading-relaxed text-amber-800/80 dark:text-amber-200/80">
+                        This is a <strong>Marketing</strong> template. Meta charges per conversation for marketing messages. Ensure your WhatsApp Business Account has a valid <strong>Payment Method (Card)</strong> added in Meta WhatsApp Manager (Business Settings &gt; WhatsApp Accounts &gt; Billing). If not configured, Meta will accept the send but fail delivery with <em>&quot;Business eligibility payment issue&quot;</em>.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Variable Mapping UI */}

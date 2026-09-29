@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2, Send, Users, CheckCircle2, Clock } from 'lucide-react';
+import { Radio, Plus, Loader2, Send, Users, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -233,6 +233,31 @@ export default function BroadcastsPage() {
           <div>
             <h4 className="text-xs font-bold text-foreground">Step 3: Select Template & Send</h4>
             <p className="text-[11px] text-muted-foreground mt-0.5">Pick your WhatsApp template, verify the live phone preview, and launch instantly or schedule.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Meta Delivery & Payment Troubleshooting Guide */}
+      <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 shadow-xs">
+        <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div className="text-xs space-y-1">
+          <p className="font-bold text-amber-950 dark:text-amber-100 flex items-center gap-2">
+            <span>Message Status &quot;Sent&quot; but not received on device? Check Meta Payment Setup</span>
+          </p>
+          <p className="text-[11px] leading-relaxed text-amber-900/80 dark:text-amber-200/80">
+            For <strong>Marketing Templates</strong> (e.g. <code>kisan_choice</code>), Meta WhatsApp Cloud API requires a valid <strong>Payment Method (Credit/Debit Card)</strong> and Business Tax info (GSTIN/PAN) attached to your WhatsApp Business Account. Without a payment method, Meta accepts the message request with a message ID, but pauses/withholds delivery to destination devices (Meta error 131042: <em>&quot;Business eligibility payment issue&quot;</em>).
+          </p>
+          <div className="flex items-center gap-3 pt-1 text-[11px]">
+            <a 
+              href="https://business.facebook.com/wa/manage/home/" 
+              target="_blank" 
+              rel="noreferrer" 
+              className="font-bold underline text-amber-800 dark:text-amber-300 hover:text-amber-950 inline-flex items-center gap-1"
+            >
+              Open Meta WhatsApp Manager &rarr;
+            </a>
+            <span className="text-amber-600/60 dark:text-amber-400/60">&bull;</span>
+            <span className="text-muted-foreground">Also ensure phone numbers include the <strong>91</strong> country code prefix (e.g. 919511450914).</span>
           </div>
         </div>
       </div>

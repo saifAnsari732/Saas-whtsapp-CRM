@@ -5,16 +5,31 @@
  */
 export function sanitizePhoneForMeta(phone: string): string {
   if (!phone) return ''
-  return phone.replace(/\D/g, '')
+  let digits = phone.replace(/\D/g, '')
+  // If 11 digits starting with 0 followed by 6-9 (Indian domestic format: 09876543210):
+  if (/^0[6-9]\d{9}$/.test(digits)) {
+    digits = '91' + digits.slice(1)
+  }
+  // If 10 digits starting with 6-9 (Indian mobile without country code: 9876543210):
+  else if (/^[6-9]\d{9}$/.test(digits)) {
+    digits = '91' + digits
+  }
+  return digits
 }
 
 /**
  * Normalize phone number by removing all non-digit characters.
- * Used for comparing phone numbers in different formats.
+ * Also standardizes 10-digit Indian mobile numbers with 91.
  */
 export function normalizePhone(phone: string): string {
   if (!phone) return ''
-  return phone.replace(/\D/g, '')
+  let digits = phone.replace(/\D/g, '')
+  if (/^0[6-9]\d{9}$/.test(digits)) {
+    digits = '91' + digits.slice(1)
+  } else if (/^[6-9]\d{9}$/.test(digits)) {
+    digits = '91' + digits
+  }
+  return digits
 }
 
 /**

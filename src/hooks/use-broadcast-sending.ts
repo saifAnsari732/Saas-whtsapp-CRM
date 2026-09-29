@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { Contact, MessageTemplate } from '@/types';
+import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
 
 export type CustomFieldOperator = 'is' | 'is_not' | 'contains';
 
@@ -240,7 +241,8 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
     // De-duplicate by phone within the CSV (users can paste duplicates).
     const uniqueByPhone = new Map<string, { phone: string; name?: string }>();
     for (const row of csvRows) {
-      if (row.phone) uniqueByPhone.set(row.phone, row);
+      const cleanPhone = sanitizePhoneForMeta(row.phone);
+      if (cleanPhone) uniqueByPhone.set(cleanPhone, { ...row, phone: cleanPhone });
     }
     const phones = [...uniqueByPhone.keys()];
 
