@@ -85,39 +85,52 @@ export function ChatbotStudio() {
   const [simInput, setSimInput] = useState('');
   const [isSimTyping, setIsSimTyping] = useState(false);
 
-  // Fetch initial config from backend
+  // Fetch initial config from backend with timeout guard
   useEffect(() => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+
     const fetchConfig = async () => {
       try {
-        const res = await fetch('/api/chatbot/config');
-        const data = await res.json();
-        if (data.success && data.config) {
-          const c: ChatbotSettings = data.config;
-          setIsActive(c.is_active ?? true);
-          setBotMode(c.bot_mode || 'hybrid');
-          setPersona(c.persona || 'sales');
-          setSystemPrompt(c.system_prompt || PERSONA_PROMPTS.sales.prompt);
-          setTypingDelay(c.typing_delay_seconds || 2);
-          setMaxReplies(c.max_replies_per_conv || 6);
-          setWelcomeEnabled(c.welcome_enabled ?? true);
-          setWelcomeMessage(c.welcome_message || '');
-          setFallbackMessage(c.fallback_message || '');
-          setAwayEnabled(c.away_enabled || false);
-          setAwayMessage(c.away_message || '');
-          if (c.keyword_rules && c.keyword_rules.length > 0) setKeywordRules(c.keyword_rules);
-          if (c.follow_up_sequence) {
-            setFollowUpActive(c.follow_up_sequence.is_active ?? true);
-            if (c.follow_up_sequence.steps) setFollowUpSteps(c.follow_up_sequence.steps);
+        const res = await fetch('/api/chatbot/config', { signal: controller.signal });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.config) {
+            const c: ChatbotSettings = data.config;
+            setIsActive(c.is_active ?? true);
+            setBotMode(c.bot_mode || 'hybrid');
+            setPersona(c.persona || 'sales');
+            setSystemPrompt(c.system_prompt || PERSONA_PROMPTS.sales.prompt);
+            setTypingDelay(c.typing_delay_seconds || 2);
+            setMaxReplies(c.max_replies_per_conv || 6);
+            setWelcomeEnabled(c.welcome_enabled ?? true);
+            setWelcomeMessage(c.welcome_message || '');
+            setFallbackMessage(c.fallback_message || '');
+            setAwayEnabled(c.away_enabled || false);
+            setAwayMessage(c.away_message || '');
+            if (c.keyword_rules && c.keyword_rules.length > 0) setKeywordRules(c.keyword_rules);
+            if (c.follow_up_sequence) {
+              setFollowUpActive(c.follow_up_sequence.is_active ?? true);
+              if (c.follow_up_sequence.steps) setFollowUpSteps(c.follow_up_sequence.steps);
+            }
+            if (data.queue) setFollowUpQueue(data.queue);
           }
-          if (data.queue) setFollowUpQueue(data.queue);
         }
-      } catch (err) {
-        console.error('Failed to load chatbot config:', err);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('Failed to load chatbot config:', err);
+        }
       } finally {
+        clearTimeout(timeoutId);
         setLoading(false);
       }
     };
     fetchConfig();
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, []);
 
   // Save all settings

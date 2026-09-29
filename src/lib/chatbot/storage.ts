@@ -61,23 +61,28 @@ export async function getChatbotConfig(accountId: string, userId?: string): Prom
     return cache[cacheKey];
   }
 
-  // 1. Try Firebase Firestore
-  try {
-    const { getAdminDb } = await import('@/lib/firebase/admin');
-    const fDb = getAdminDb();
-    const docRef = fDb.collection('chatbot_settings').doc(cacheKey);
-    const snap = await docRef.get();
-    if (snap.exists) {
-      const data = snap.data() as any;
-      const merged: ChatbotSettings = {
-        ...DEFAULT_SETTINGS,
-        ...data,
-      };
-      cache[cacheKey] = merged;
-      return merged;
+  // 1. Try Firebase Firestore with strict 1500ms timeout
+  if (process.env.FIREBASE_ADMIN_PROJECT_ID && process.env.FIREBASE_ADMIN_CLIENT_EMAIL) {
+    try {
+      const { getAdminDb } = await import('@/lib/firebase/admin');
+      const fDb = getAdminDb();
+      const docRef = fDb.collection('chatbot_settings').doc(cacheKey);
+      const snap = await Promise.race([
+        docRef.get(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('firestore_timeout')), 1500))
+      ]);
+      if (snap && snap.exists) {
+        const data = snap.data() as any;
+        const merged: ChatbotSettings = {
+          ...DEFAULT_SETTINGS,
+          ...data,
+        };
+        cache[cacheKey] = merged;
+        return merged;
+      }
+    } catch (fErr) {
+      // Firestore lookup optional / timed out - fallback to Supabase or defaults
     }
-  } catch (fErr) {
-    // Firestore lookup optional
   }
 
   // 2. Try Supabase baileys_settings
@@ -139,18 +144,23 @@ export async function saveChatbotConfig(
   const cache = getSettingsCache();
   cache[cacheKey] = updated;
 
-  // 1. Save to Firebase Firestore
-  try {
-    const { getAdminDb } = await import('@/lib/firebase/admin');
-    const fDb = getAdminDb();
-    await fDb.collection('chatbot_settings').doc(cacheKey).set({
-      ...updated,
-      account_id: accountId,
-      user_id: userId,
-      updated_at: new Date().toISOString(),
-    }, { merge: true });
-  } catch (fErr) {
-    console.warn('[chatbot/storage] Could not save to Firestore:', fErr);
+  // 1. Save to Firebase Firestore with timeout
+  if (process.env.FIREBASE_ADMIN_PROJECT_ID && process.env.FIREBASE_ADMIN_CLIENT_EMAIL) {
+    try {
+      const { getAdminDb } = await import('@/lib/firebase/admin');
+      const fDb = getAdminDb();
+      await Promise.race([
+        fDb.collection('chatbot_settings').doc(cacheKey).set({
+          ...updated,
+          account_id: accountId,
+          user_id: userId,
+          updated_at: new Date().toISOString(),
+        }, { merge: true }),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('firestore_save_timeout')), 2000))
+      ]);
+    } catch (fErr) {
+      console.warn('[chatbot/storage] Could not save to Firestore:', fErr);
+    }
   }
 
   // 2. Also save to Supabase baileys_settings if available

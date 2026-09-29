@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { to, message, mediaUrl, mediaType, templateName, templateLanguage } = body;
+    const { to, message, mediaUrl, mediaType, templateName, templateLanguage, buttons } = body;
 
     if (!to || (!message && !mediaUrl && !templateName)) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -26,19 +26,60 @@ export async function POST(request: Request) {
       jid = `${jid}@s.whatsapp.net`;
     }
 
+    // Format interactive buttons if provided
+    let finalMessage = message || '';
+    if (buttons && Array.isArray(buttons) && buttons.length > 0) {
+      const buttonLines = buttons.map((b: any) => {
+        if (b.type === 'URL') return `🌐 ${b.text}: ${b.url}`;
+        if (b.type === 'PHONE_NUMBER') return `📞 ${b.text}: ${b.phone_number}`;
+        return `🔘 [${b.text}]`;
+      }).join('\n');
+
+      if (!finalMessage.includes('🔘 [') && !finalMessage.includes('🌐 ') && !finalMessage.includes('📞 ')) {
+        finalMessage = finalMessage 
+          ? `${finalMessage}\n\n────────────────\n${buttonLines}`
+          : buttonLines;
+      }
+    }
+
     if (userSocket) {
       // Baileys mode
       const lowerMediaType = mediaType?.toLowerCase();
       if (mediaUrl && ['image', 'video', 'document'].includes(lowerMediaType)) {
         if (lowerMediaType === 'image') {
-          await userSocket.sendMessage(jid, { image: { url: mediaUrl }, caption: message });
+          await userSocket.sendMessage(jid, { image: { url: mediaUrl }, caption: finalMessage });
         } else if (lowerMediaType === 'video') {
-          await userSocket.sendMessage(jid, { video: { url: mediaUrl }, caption: message });
+          await userSocket.sendMessage(jid, { video: { url: mediaUrl }, caption: finalMessage });
         } else if (lowerMediaType === 'document') {
-          await userSocket.sendMessage(jid, { document: { url: mediaUrl }, fileName: 'document', mimetype: 'application/octet-stream', caption: message });
+          await userSocket.sendMessage(jid, { document: { url: mediaUrl }, fileName: 'document', mimetype: 'application/octet-stream', caption: finalMessage });
         }
       } else {
-        await userSocket.sendMessage(jid, { text: message });
+        await userSocket.sendMessage(jid, { text: finalMessage });
+      }
+
+      // Record message into Baileys store for live conversation view
+      const sentMsg = {
+        key: {
+          id: `msg-${Date.now()}`,
+          fromMe: true,
+          remoteJid: jid,
+        },
+        message: {
+          conversation: finalMessage || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
+        },
+        buttons: Array.isArray(buttons) && buttons.length > 0 ? buttons : undefined,
+        messageTimestamp: Math.floor(Date.now() / 1000),
+        status: "SERVER_ACK",
+      };
+
+      if (!global.waStores) global.waStores = {};
+      if (!global.waStores[user.id]) global.waStores[user.id] = { chats: {}, messages: {} };
+      if (!global.waStores[user.id].messages) global.waStores[user.id].messages = {};
+      if (!global.waStores[user.id].messages[jid]) global.waStores[user.id].messages[jid] = [];
+      global.waStores[user.id].messages[jid].push(sentMsg);
+
+      if (global.waStores[user.id].chats?.[jid]) {
+        global.waStores[user.id].chats[jid].conversationTimestamp = Math.floor(Date.now() / 1000);
       }
     } else {
       // Cloud API mode fallback

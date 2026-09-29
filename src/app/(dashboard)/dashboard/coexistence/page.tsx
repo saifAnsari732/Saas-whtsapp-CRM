@@ -33,7 +33,16 @@ import {
   Camera,
   Wifi,
   Battery,
-  Mic
+  Mic,
+  Plus,
+  Trash2,
+  Edit2,
+  ExternalLink,
+  FileText,
+  Check,
+  Copy,
+  X,
+  Layers
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -60,9 +69,69 @@ interface Template {
   header_media_url?: string | null;
   header_format?: string | null;
   header_content?: string | null;
-  footer_text?: string | null;
   buttons?: any;
   language?: string;
+}
+
+function formatJidDisplay(jid: string, name?: string | null): {
+  title: string;
+  subtitle: string;
+  isGroup: boolean;
+  initials: string;
+  avatarBg: string;
+} {
+  const isGroup = jid.endsWith("@g.us");
+  if (isGroup) {
+    const title = name || "WhatsApp Group";
+    const initials = title.slice(0, 2).toUpperCase();
+    return {
+      title,
+      subtitle: "Group conversation",
+      isGroup: true,
+      initials,
+      avatarBg: "from-violet-500 to-purple-600 text-white shadow-violet-500/20"
+    };
+  }
+
+  const rawPhone = jid.split("@")[0].replace(/\D/g, "");
+  let formattedPhone = `+${rawPhone}`;
+  if (rawPhone.startsWith("91") && rawPhone.length === 12) {
+    formattedPhone = `+91 ${rawPhone.slice(2, 7)} ${rawPhone.slice(7)}`;
+  } else if (rawPhone.length === 10) {
+    formattedPhone = `+91 ${rawPhone.slice(0, 5)} ${rawPhone.slice(5)}`;
+  }
+
+  const gradients = [
+    "from-emerald-500 to-teal-600 text-white shadow-emerald-500/20",
+    "from-blue-500 to-indigo-600 text-white shadow-blue-500/20",
+    "from-amber-500 to-orange-600 text-white shadow-amber-500/20",
+    "from-rose-500 to-pink-600 text-white shadow-rose-500/20",
+    "from-cyan-500 to-blue-600 text-white shadow-cyan-500/20",
+    "from-violet-500 to-fuchsia-600 text-white shadow-violet-500/20",
+  ];
+  let charSum = 0;
+  for (let i = 0; i < rawPhone.length; i++) charSum += rawPhone.charCodeAt(i);
+  const avatarBg = gradients[charSum % gradients.length];
+
+  if (name && name.trim() && name !== rawPhone && !name.includes("@")) {
+    const parts = name.trim().split(/\s+/);
+    const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
+    return {
+      title: name,
+      subtitle: formattedPhone,
+      isGroup: false,
+      initials,
+      avatarBg
+    };
+  }
+
+  return {
+    title: formattedPhone,
+    subtitle: "Direct Contact",
+    isGroup: false,
+    initials: rawPhone.length >= 2 ? rawPhone.slice(-2) : "WA",
+    avatarBg
+  };
 }
 
 export default function CoexistenceSetupPage() {
@@ -76,15 +145,29 @@ export default function CoexistenceSetupPage() {
     return "checking";
   });
   
-  // Chats & Groups State with sessionStorage cache to prevent 0 chat flashes
+  // Chats & Groups State with Persistent LocalStorage Cache (One-Time Sync Feature)
   const [chats, setChats] = useState<BaileysChat[]>(() => {
     if (typeof window !== "undefined") {
       try {
+        const persistent = localStorage.getItem("wacrm_persistent_chats");
+        if (persistent) {
+          const parsed = JSON.parse(persistent);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
         const cached = sessionStorage.getItem("wacrm_cached_chats");
-        if (cached) return JSON.parse(cached);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
       } catch {}
     }
     return [];
+  });
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("wacrm_chats_last_synced_str") || "";
+    }
+    return "";
   });
   const [fetchingChats, setFetchingChats] = useState(false);
   const [searchChat, setSearchChat] = useState("");
@@ -104,6 +187,7 @@ export default function CoexistenceSetupPage() {
   const [sendingBulk, setSendingBulk] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
   const [bulkTotal, setBulkTotal] = useState(0);
+  const [bulkButtons, setBulkButtons] = useState<any[]>([]);
 
   // Schedules State
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -120,6 +204,27 @@ export default function CoexistenceSetupPage() {
   const [quickMessageText, setQuickMessageText] = useState("");
   const [sendingQuick, setSendingQuick] = useState(false);
 
+  // Enhanced Template & Studio State
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [selectedTemplateForBroadcast, setSelectedTemplateForBroadcast] = useState<string>("");
+  const [templateSearchQuery, setTemplateSearchQuery] = useState("");
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState<string>("all");
+
+  // Template Form Fields
+  const [tmplFormName, setTmplFormName] = useState("");
+  const [tmplFormCategory, setTmplFormCategory] = useState("Marketing");
+  const [tmplFormHeader, setTmplFormHeader] = useState("");
+  const [tmplFormBody, setTmplFormBody] = useState("");
+  const [tmplFormFooter, setTmplFormFooter] = useState("");
+  const [tmplFormButtons, setTmplFormButtons] = useState<any[]>([]);
+
+  // Attached Template for current live message
+  const [attachedTemplate, setAttachedTemplate] = useState<any | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
   // Live Phone Interface State
   const [activeLiveChat, setActiveLiveChat] = useState<BaileysChat | null>(null);
   const [activeLiveMessages, setActiveLiveMessages] = useState<any[]>([]);
@@ -129,9 +234,12 @@ export default function CoexistenceSetupPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const disconnectCounterRef = useRef(0);
+  const isSyncingRef = useRef(false);
+  const lastSyncTimestampRef = useRef<number>(0);
 
   const isConnected = status === "connected" || status === "open" || status === "PAIRED";
   const isChecking = status === "checking" || status === "connecting" || status === "reconnecting";
+  const isEffectivelyConnected = isConnected || (chats.length > 0 && status !== "disconnected");
 
   const detectedNumbersList = useMemo(() => {
     return pastedNumbers
@@ -141,26 +249,36 @@ export default function CoexistenceSetupPage() {
   }, [pastedNumbers]);
   const detectedNumbersCount = detectedNumbersList.length;
 
-  const groups = chats.filter((c) => c.type === "group" || c.id.includes("@g.us"));
-  const filteredGroups = groups.filter((g) => (g.name || "").toLowerCase().includes(searchGroupQuery.toLowerCase()) || g.id.toLowerCase().includes(searchGroupQuery.toLowerCase()));
+  const groups = useMemo(() => {
+    return chats.filter((c) => c.type === "group" || c.id.includes("@g.us"));
+  }, [chats]);
 
-  const filteredChats = chats.filter((c) => {
-    const isGroup = c.type === "group" || c.id.includes("@g.us");
-    if (chatFilter === "groups" && !isGroup) return false;
-    if (chatFilter === "direct" && isGroup) return false;
+  const filteredGroups = useMemo(() => {
+    const q = searchGroupQuery.toLowerCase().trim();
+    if (!q) return groups;
+    return groups.filter((g) => (g.name || "").toLowerCase().includes(q) || g.id.toLowerCase().includes(q));
+  }, [groups, searchGroupQuery]);
 
-    if (searchChat.trim()) {
-      const q = searchChat.toLowerCase();
-      const name = (c.name || "").toLowerCase();
-      const id = c.id.toLowerCase();
-      return name.includes(q) || id.includes(q);
-    }
-    return true;
-  }).sort((a, b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0));
+  const filteredChats = useMemo(() => {
+    const q = searchChat.toLowerCase().trim();
+    return chats.filter((c) => {
+      const isGroup = c.type === "group" || c.id.includes("@g.us");
+      if (chatFilter === "groups" && !isGroup) return false;
+      if (chatFilter === "direct" && isGroup) return false;
 
-  // Poll connection status with debounce
+      if (q) {
+        const name = (c.name || "").toLowerCase();
+        const id = c.id.toLowerCase();
+        return name.includes(q) || id.includes(q);
+      }
+      return true;
+    }).sort((a, b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0));
+  }, [chats, chatFilter, searchChat]);
+
+  // Poll connection status with visibility detection & stable state transitions
   useEffect(() => {
     const fetchStatus = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       try {
         const res = await fetch("/api/whatsapp/coexistence/status", { method: "POST" });
         if (res.ok) {
@@ -169,19 +287,18 @@ export default function CoexistenceSetupPage() {
           
           if (currentStatus === "connected" || currentStatus === "open" || currentStatus === "PAIRED") {
             disconnectCounterRef.current = 0;
-            setStatus("open");
+            setStatus((prev) => (prev === "open" ? prev : "open"));
             if (typeof window !== "undefined") {
               localStorage.setItem("wacrm_coex_status", "connected");
             }
             setQrCodeBase64(null);
           } else if (currentStatus === "connecting" || currentStatus === "reconnecting") {
-            setStatus("connecting");
+            setStatus((prev) => (prev === "connecting" ? prev : "connecting"));
           } else if (currentStatus === "disconnected") {
-            // Require 3 consecutive polls to confirm actual disconnect before swapping UI
             disconnectCounterRef.current += 1;
             const wasConnected = typeof window !== "undefined" && localStorage.getItem("wacrm_coex_status") === "connected";
             if (!wasConnected || disconnectCounterRef.current >= 3) {
-              setStatus("disconnected");
+              setStatus((prev) => (prev === "disconnected" ? prev : "disconnected"));
               if (typeof window !== "undefined") {
                 localStorage.removeItem("wacrm_coex_status");
               }
@@ -196,44 +313,72 @@ export default function CoexistenceSetupPage() {
         console.error("Status fetch error:", error); 
       }
     };
+
     fetchStatus();
-    const interval = setInterval(fetchStatus, 4000);
+    const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  const fetchChatsAndGroups = useCallback(async (notify = false) => {
+  // Advanced One-Time WhatsApp Chat Sync & Persistent Cache Algorithm
+  const fetchChatsAndGroups = useCallback(async (notify = false, force = false) => {
+    // If not forced and we already have cached chats, NEVER re-sync automatically!
+    if (!force && chats.length > 0) {
+      return;
+    }
+
+    // Concurrency Mutex: Prevent duplicate overlapping network requests
+    if (isSyncingRef.current) return;
+
+    isSyncingRef.current = true;
     setFetchingChats(true);
     try {
-      const res = await fetch("/api/whatsapp/baileys/chats");
-      const data = await res.json();
-      if (data.data && Array.isArray(data.data)) {
-        setChats(data.data);
-        if (typeof window !== "undefined") {
-          try { sessionStorage.setItem("wacrm_cached_chats", JSON.stringify(data.data)); } catch {}
+      const url = force ? "/api/whatsapp/baileys/chats?force=true" : "/api/whatsapp/baileys/chats";
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.data && Array.isArray(data.data)) {
+          setChats(data.data);
+          lastSyncTimestampRef.current = Date.now();
+          const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          setLastSyncTime(timeStr);
+
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("wacrm_persistent_chats", JSON.stringify(data.data));
+              localStorage.setItem("wacrm_chats_last_synced_str", timeStr);
+              sessionStorage.setItem("wacrm_cached_chats", JSON.stringify(data.data));
+            } catch {}
+          }
+          if (notify) toast.success(`Synced ${data.data.length} chats from WhatsApp! Saved to persistent cache.`);
         }
-        if (notify) toast.success(`Synced ${data.data.length} chats & groups from WhatsApp!`);
       }
     } catch (error) { 
       if (notify) toast.error("Failed to fetch chats");
     } finally {
+      isSyncingRef.current = false;
       setFetchingChats(false);
     }
-  }, []);
+  }, [chats.length]);
 
+  // ONE-TIME SYNC ONLY: If chats are already in cache, never trigger network sync automatically!
   useEffect(() => { 
-    if (isConnected) {
-      fetchChatsAndGroups();
+    if (isConnected && chats.length === 0) {
+      fetchChatsAndGroups(false, false);
     }
-  }, [isConnected, fetchChatsAndGroups]);
+  }, [isConnected, chats.length, fetchChatsAndGroups]);
 
-  // Auto-select first chat if none selected
+  // Stable Auto-select active chat: preserves current selection and prevents re-render loops
   useEffect(() => {
-    if (!activeLiveChat && filteredChats.length > 0) {
-      setActiveLiveChat(filteredChats[0]);
+    if (filteredChats.length > 0) {
+      setActiveLiveChat((prev) => {
+        if (!prev) return filteredChats[0];
+        const stillExists = filteredChats.some((c) => c.id === prev.id);
+        return stillExists ? prev : filteredChats[0];
+      });
     }
-  }, [filteredChats, activeLiveChat]);
+  }, [filteredChats]);
 
-  // Fetch messages when activeLiveChat changes
+  // Fetch messages when active chat ID changes
   const fetchLiveMessages = useCallback(async (chatId: string) => {
     setFetchingLiveMessages(true);
     try {
@@ -251,32 +396,36 @@ export default function CoexistenceSetupPage() {
     }
   }, []);
 
+  const activeChatId = activeLiveChat?.id;
   useEffect(() => {
-    if (activeLiveChat) {
-      fetchLiveMessages(activeLiveChat.id);
+    if (activeChatId) {
+      fetchLiveMessages(activeChatId);
     }
-  }, [activeLiveChat, fetchLiveMessages]);
+  }, [activeChatId, fetchLiveMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeLiveMessages]);
 
-  // Send message directly from WhatsApp phone composer
-  const handleSendLiveMessage = async (textToSend?: string) => {
+  // Send message directly from WhatsApp phone composer (supports interactive buttons & templates)
+  const handleSendLiveMessage = async (textToSend?: string, buttonsToSend?: any[]) => {
     const text = (textToSend || liveMessageText).trim();
-    if (!activeLiveChat || !text || sendingLiveMessage) return;
+    const buttons = buttonsToSend || (attachedTemplate ? attachedTemplate.buttons : undefined);
+    if (!activeLiveChat || (!text && !buttons) || sendingLiveMessage) return;
 
     setSendingLiveMessage(true);
     const tempId = `msg-${Date.now()}`;
     const newMsg = {
       key: { id: tempId, fromMe: true },
       message: { conversation: text },
+      buttons: buttons && Array.isArray(buttons) && buttons.length > 0 ? buttons : undefined,
       messageTimestamp: Math.floor(Date.now() / 1000),
       status: "PENDING"
     };
 
     setActiveLiveMessages(prev => [...prev, newMsg]);
     setLiveMessageText("");
+    setAttachedTemplate(null);
 
     try {
       const res = await fetch("/api/whatsapp/baileys/send", {
@@ -285,6 +434,7 @@ export default function CoexistenceSetupPage() {
         body: JSON.stringify({
           to: activeLiveChat.id,
           message: text,
+          buttons: buttons && Array.isArray(buttons) && buttons.length > 0 ? buttons : undefined,
         })
       });
 
@@ -301,6 +451,198 @@ export default function CoexistenceSetupPage() {
     } finally {
       setSendingLiveMessage(false);
     }
+  };
+
+  // Fetch Templates from Database
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const res = await fetch("/api/whatsapp/templates");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.templates && Array.isArray(data.templates)) {
+          setTemplates(data.templates);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load templates:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
+
+  const handleOpenCreateTemplate = () => {
+    setEditingTemplate(null);
+    setTmplFormName("");
+    setTmplFormCategory("Marketing");
+    setTmplFormHeader("");
+    setTmplFormBody("");
+    setTmplFormFooter("");
+    setTmplFormButtons([
+      { type: "QUICK_REPLY", text: "Interested" },
+      { type: "URL", text: "Visit Website", url: "https://chatflyr.com" }
+    ]);
+    setTemplateEditorOpen(true);
+  };
+
+  const handleOpenEditTemplate = (tmpl: any) => {
+    setEditingTemplate(tmpl);
+    setTmplFormName(tmpl.name || "");
+    setTmplFormCategory(tmpl.category || "Marketing");
+    setTmplFormHeader(tmpl.header_content || "");
+    setTmplFormBody(tmpl.body_text || "");
+    setTmplFormFooter(tmpl.footer_text || "");
+    setTmplFormButtons(Array.isArray(tmpl.buttons) ? [...tmpl.buttons] : []);
+    setTemplateEditorOpen(true);
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!tmplFormName.trim() || !tmplFormBody.trim()) {
+      toast.error("Please enter both template name and body text");
+      return;
+    }
+
+    setSavingTemplate(true);
+    try {
+      const payload = {
+        name: tmplFormName,
+        category: tmplFormCategory,
+        header_content: tmplFormHeader,
+        body_text: tmplFormBody,
+        footer_text: tmplFormFooter,
+        buttons: tmplFormButtons,
+      };
+
+      const isEdit = !!editingTemplate?.id;
+      const url = "/api/whatsapp/templates";
+      const method = isEdit ? "PUT" : "POST";
+      const body = isEdit ? { id: editingTemplate.id, ...payload } : payload;
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(isEdit ? "Template updated in database!" : "Template created and saved in database!");
+        setTemplateEditorOpen(false);
+        await fetchTemplates();
+      } else {
+        toast.error(data.error || "Failed to save template");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save template");
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm("Are you sure you want to delete this template from the database?")) return;
+    try {
+      const res = await fetch(`/api/whatsapp/templates?id=${encodeURIComponent(templateId)}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        toast.success("Template deleted from database");
+        await fetchTemplates();
+      } else {
+        toast.error("Failed to delete template");
+      }
+    } catch {
+      toast.error("Network error deleting template");
+    }
+  };
+
+  const handleApplyTemplateToLive = (tmpl: any) => {
+    if (!activeLiveChat) return;
+    const activeInfo = formatJidDisplay(activeLiveChat.id, activeLiveChat.name);
+    let text = tmpl.body_text || "";
+    text = text.replace(/\{\{name\}\}/gi, activeInfo.title);
+    if (tmpl.header_content) {
+      text = `*${tmpl.header_content}*\n\n${text}`;
+    }
+    if (tmpl.footer_text) {
+      text = `${text}\n\n_${tmpl.footer_text}_`;
+    }
+    setLiveMessageText(text);
+    setAttachedTemplate(tmpl);
+    setTemplatePickerOpen(false);
+    toast.success(`Template "${tmpl.name}" loaded into message composer`);
+  };
+
+  const handleSendTemplateDirectlyToLive = async (tmpl: any) => {
+    if (!activeLiveChat) return;
+    const activeInfo = formatJidDisplay(activeLiveChat.id, activeLiveChat.name);
+    let text = tmpl.body_text || "";
+    text = text.replace(/\{\{name\}\}/gi, activeInfo.title);
+    if (tmpl.header_content) {
+      text = `*${tmpl.header_content}*\n\n${text}`;
+    }
+    if (tmpl.footer_text) {
+      text = `${text}\n\n_${tmpl.footer_text}_`;
+    }
+    setTemplatePickerOpen(false);
+    await handleSendLiveMessage(text, tmpl.buttons);
+  };
+
+  const filteredTemplatesList = useMemo(() => {
+    return templates.filter((t) => {
+      if (templateCategoryFilter !== "all" && t.category !== templateCategoryFilter) return false;
+      if (templateSearchQuery) {
+        const q = templateSearchQuery.toLowerCase();
+        return (t.name || "").toLowerCase().includes(q) || (t.body_text || "").toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [templates, templateCategoryFilter, templateSearchQuery]);
+
+  const handleSelectTemplateForBulk = (templateId: string) => {
+    setSelectedTemplateForBroadcast(templateId);
+    if (!templateId) {
+      setBulkButtons([]);
+      return;
+    }
+    const tmpl = templates.find((t) => t.id === templateId);
+    if (tmpl) {
+      let text = tmpl.body_text || "";
+      if (tmpl.header_content) {
+        text = `*${tmpl.header_content}*\n\n${text}`;
+      }
+      if (tmpl.footer_text) {
+        text = `${text}\n\n_${tmpl.footer_text}_`;
+      }
+      setBulkMessage(text);
+      if (Array.isArray(tmpl.buttons) && tmpl.buttons.length > 0) {
+        setBulkButtons(tmpl.buttons);
+      } else {
+        setBulkButtons([]);
+      }
+      toast.success(`Template "${tmpl.name}" loaded with interactive action buttons!`);
+    } else {
+      setBulkButtons([]);
+    }
+  };
+
+  const handleUseTemplateForBroadcast = (tmpl: any) => {
+    setSelectedTemplateForBroadcast(tmpl.id);
+    let text = tmpl.body_text || "";
+    if (tmpl.header_content) {
+      text = `*${tmpl.header_content}*\n\n${text}`;
+    }
+    if (tmpl.footer_text) {
+      text = `${text}\n\n_${tmpl.footer_text}_`;
+    }
+    setBulkMessage(text);
+    if (Array.isArray(tmpl.buttons) && tmpl.buttons.length > 0) {
+      setBulkButtons(tmpl.buttons);
+    } else {
+      setBulkButtons([]);
+    }
+    setActiveTab("messaging");
+    toast.success(`Template "${tmpl.name}" loaded for bulk dispatch! Choose numbers or groups.`);
   };
 
   useEffect(() => {
@@ -508,7 +850,11 @@ export default function CoexistenceSetupPage() {
           const res = await fetch("/api/whatsapp/baileys/send", { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
-            body: JSON.stringify({ to: targetRecipients[i], message: bulkMessage }) 
+            body: JSON.stringify({ 
+              to: targetRecipients[i], 
+              message: bulkMessage,
+              buttons: bulkButtons.length > 0 ? bulkButtons : undefined
+            }) 
           });
           if (res.ok) successCount++;
         } catch (err) { 
@@ -521,6 +867,8 @@ export default function CoexistenceSetupPage() {
       if (successCount > 0) { 
         toast.success(`Successfully dispatched to ${successCount}/${targetRecipients.length} recipients!`); 
         setBulkMessage(""); 
+        setBulkButtons([]);
+        setSelectedTemplateForBroadcast("");
         if (dispatchMode === "numbers") setPastedNumbers("");
         else setSelectedGroups([]); 
       }
@@ -617,17 +965,25 @@ export default function CoexistenceSetupPage() {
           </div>
           
           <div className="flex items-center gap-3">
-            {isConnected && (
+            {isEffectivelyConnected && (
               <>
+                {lastSyncTime && (
+                  <Badge variant="outline" className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25 text-xs font-semibold">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Cache Saved ({chats.length})</span>
+                    <span className="text-[10px] text-muted-foreground">• {lastSyncTime}</span>
+                  </Badge>
+                )}
+
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={() => fetchChatsAndGroups(true)} 
+                  onClick={() => fetchChatsAndGroups(true, true)} 
                   disabled={fetchingChats}
                   className="rounded-xl text-xs font-bold gap-1.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 h-9"
                 >
                   <RefreshCw className={cn("h-3.5 w-3.5", fetchingChats && "animate-spin")} />
-                  <span>Sync WhatsApp</span>
+                  <span>{fetchingChats ? "Syncing..." : "Sync WhatsApp"}</span>
                 </Button>
 
                 <Button 
@@ -643,22 +999,22 @@ export default function CoexistenceSetupPage() {
             )}
 
             <Badge className={cn("px-4 py-2 border text-xs font-bold rounded-xl flex items-center gap-2 shadow-2xs", 
-              isConnected 
+              isConnected || isEffectivelyConnected
                 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" 
                 : isChecking 
                   ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800" 
                   : "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-slate-300 border-slate-200 dark:border-zinc-700"
             )}>
               <span className={cn("h-2.5 w-2.5 rounded-full", 
-                isConnected ? "bg-emerald-500 animate-pulse" : isChecking ? "bg-amber-500 animate-pulse" : "bg-slate-400"
+                isConnected || isEffectivelyConnected ? "bg-emerald-500 animate-pulse" : isChecking ? "bg-amber-500 animate-pulse" : "bg-slate-400"
               )} />
-              {isConnected ? "Connected & Active" : isChecking ? "Syncing Connection..." : "Disconnected"}
+              {isConnected || isEffectivelyConnected ? "Connected & Active" : isChecking ? "Syncing Connection..." : "Disconnected"}
             </Badge>
           </div>
         </div>
 
-        {/* VIEW 0: CHECKING / CONNECTING IN PROGRESS (Prevents false disconnect UI flash on refresh) */}
-        {!isConnected && isChecking && !qrCodeBase64 && (
+        {/* VIEW 0: CHECKING / CONNECTING IN PROGRESS (Only shows on empty fresh load, NEVER blocks cached chats) */}
+        {!isEffectivelyConnected && isChecking && !qrCodeBase64 && chats.length === 0 && (
           <Card className="border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-3xl p-12 text-center shadow-xs">
             <div className="flex flex-col items-center justify-center space-y-4 max-w-md mx-auto">
               <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
@@ -675,7 +1031,7 @@ export default function CoexistenceSetupPage() {
         )}
 
         {/* VIEW 1: DISCONNECTED (NO QR YET & NOT CHECKING) */}
-        {!isConnected && !isChecking && !qrCodeBase64 && (
+        {!isEffectivelyConnected && !isChecking && !qrCodeBase64 && chats.length === 0 && (
           <Card className="border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-3xl shadow-xs overflow-hidden">
             <CardHeader className="p-6 sm:p-8">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -763,7 +1119,7 @@ export default function CoexistenceSetupPage() {
         )}
 
         {/* VIEW 2: DISCONNECTED (QR CODE DISPLAY) */}
-        {!isConnected && qrCodeBase64 && (
+        {!isEffectivelyConnected && qrCodeBase64 && (
           <Card className="border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-3xl shadow-xs overflow-hidden">
             <CardHeader className="text-center pb-2 pt-6">
               <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 mb-3 w-fit mx-auto font-bold px-4 py-1.5 text-xs">
@@ -801,10 +1157,10 @@ export default function CoexistenceSetupPage() {
         )}
 
         {/* ONLY RENDER INLINE GUIDE ON DISCONNECTED STATES */}
-        {!isConnected && <CoexistenceGuide />}
+        {!isEffectivelyConnected && <CoexistenceGuide />}
 
         {/* VIEW 3: CONNECTED DASHBOARD */}
-        {isConnected && (
+        {isEffectivelyConnected && (
           <div className="space-y-6">
             {/* Top 4 KPI Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -906,6 +1262,20 @@ export default function CoexistenceSetupPage() {
                   </span>
                 </TabsTrigger>
 
+                {/* TAB: TEMPLATES (IN-BUILT & CUSTOM INTERACTIVE TEMPLATES) */}
+                <TabsTrigger 
+                  value="templates" 
+                  className="min-h-[52px] h-auto py-2.5 px-3 rounded-xl font-black text-xs transition-all duration-200 border border-emerald-500/25 shadow-xs bg-white dark:bg-zinc-900 text-slate-800 dark:text-slate-200 hover:border-emerald-500/60 hover:bg-emerald-50/50 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-600/35 data-[state=active]:border-emerald-400 flex items-center justify-center gap-2"
+                >
+                  <div className="p-1 rounded-lg bg-emerald-500/15 data-[state=active]:bg-white/20 shrink-0 text-emerald-600 dark:text-emerald-400 data-[state=active]:text-white">
+                    <Sparkles className="h-4 w-4 shrink-0" />
+                  </div>
+                  <span>Templates</span>
+                  <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 data-[state=active]:bg-white/25 data-[state=active]:text-white data-[state=active]:border-white/30 shrink-0">
+                    {templates.length || "DB"}
+                  </span>
+                </TabsTrigger>
+
                 {/* TAB 4: GROUPS */}
                 <TabsTrigger 
                   value="groups" 
@@ -965,11 +1335,13 @@ export default function CoexistenceSetupPage() {
 
               {/* TAB 1: CHATS (PHONE-LIKE WHATSAPP ACCOUNT UI) */}
               <TabsContent value="chats" className="space-y-4 mt-6">
-                {/* Smartphone Device Mockup Container */}
-                <div className="max-w-6xl mx-auto rounded-[32px] sm:rounded-[38px] border-4 sm:border-8 border-slate-800 dark:border-zinc-800 shadow-2xl bg-[#0B141A] overflow-hidden">
+                {/* Smartphone Device Mockup Container - Responsive viewport height & dedicated layout */}
+                <div className="max-w-6xl mx-auto rounded-[28px] sm:rounded-[36px] border-4 sm:border-8 border-slate-800 dark:border-zinc-800 shadow-2xl bg-[#0B141A] overflow-hidden flex flex-col h-[calc(100vh-210px)] min-h-[580px] max-h-[760px]">
                   
-                  {/* Smartphone Top Notch & Speaker Bar */}
-                  <div className="bg-slate-900 px-6 py-2 flex items-center justify-between border-b border-slate-800/80">
+                  {/* Smartphone Top Notch & WhatsApp App Bar - Pinned Sticky Header */}
+                  <div className="shrink-0 sticky top-0 z-30 select-none">
+                    {/* Top Notch & Status */}
+                    <div className="bg-slate-900 px-6 py-1.5 flex items-center justify-between border-b border-slate-800/80">
                     <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
                       <span>9:41</span>
                       <span className="text-[10px] text-emerald-400 font-extrabold uppercase">● 5G</span>
@@ -1006,12 +1378,12 @@ export default function CoexistenceSetupPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => fetchChatsAndGroups(true)}
+                        onClick={() => fetchChatsAndGroups(true, true)}
                         disabled={fetchingChats}
                         className="h-8 px-2.5 rounded-lg text-white hover:bg-emerald-700/60 dark:hover:bg-zinc-700/60 text-xs font-semibold gap-1.5"
                       >
                         <RefreshCw className={cn("h-3.5 w-3.5", fetchingChats && "animate-spin")} />
-                        <span className="hidden sm:inline">Sync Phone</span>
+                        <span className="hidden sm:inline">{fetchingChats ? "Syncing..." : "Sync Phone"}</span>
                       </Button>
                       <Camera className="h-4 w-4 text-emerald-100 cursor-pointer hover:text-white transition-colors" />
                       <MoreVertical className="h-4 w-4 text-emerald-100 cursor-pointer hover:text-white transition-colors" />
@@ -1062,30 +1434,31 @@ export default function CoexistenceSetupPage() {
                       )}
                     </button>
                   </div>
+                </div>
 
-                  {/* Two-Pane WhatsApp Layout */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 h-[640px] bg-white dark:bg-[#111B21]">
-                    
-                    {/* Left Pane: WhatsApp Chat List */}
-                    <div className={cn(
-                      "md:col-span-5 lg:col-span-4 border-r border-slate-200/80 dark:border-zinc-800 flex flex-col h-full bg-white dark:bg-[#111B21]",
-                      activeLiveChat ? "hidden md:flex" : "flex"
-                    )}>
-                      {/* In-app Search Bar */}
-                      <div className="p-3 border-b border-slate-100 dark:border-zinc-800/80 bg-slate-50/70 dark:bg-[#111B21]">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                          <Input
-                            placeholder="Search or start new chat..."
-                            value={searchChat}
-                            onChange={(e) => setSearchChat(e.target.value)}
-                            className="pl-9 text-xs h-9 rounded-xl bg-white dark:bg-[#202C33] border-slate-200/80 dark:border-zinc-700/80 shadow-2xs"
-                          />
-                        </div>
+                {/* Two-Pane WhatsApp Layout */}
+                <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 bg-white dark:bg-[#111B21] overflow-hidden">
+                  
+                  {/* Left Pane: WhatsApp Chat List */}
+                  <div className={cn(
+                    "md:col-span-5 lg:col-span-4 border-r border-slate-200/80 dark:border-zinc-800 flex flex-col h-full min-h-0 bg-white dark:bg-[#111B21]",
+                    activeLiveChat ? "hidden md:flex" : "flex"
+                  )}>
+                    {/* In-app Search Bar */}
+                    <div className="p-2.5 border-b border-slate-100 dark:border-zinc-800/80 bg-slate-50/70 dark:bg-[#111B21] shrink-0 sticky top-0 z-10">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                        <Input
+                          placeholder="Search or start new chat..."
+                          value={searchChat}
+                          onChange={(e) => setSearchChat(e.target.value)}
+                          className="pl-9 text-xs h-8.5 rounded-xl bg-white dark:bg-[#202C33] border-slate-200/80 dark:border-zinc-700/80 shadow-2xs"
+                        />
                       </div>
+                    </div>
 
-                      {/* Chats Scroll Area */}
-                      <div className="flex-1 overflow-y-auto divide-y divide-slate-100/80 dark:divide-zinc-800/60">
+                    {/* Chats Scroll Area */}
+                    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain divide-y divide-slate-100/80 dark:divide-zinc-800/60">
                         {fetchingChats ? (
                           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
                             <Loader2 className="h-7 w-7 animate-spin text-[#008069]" />
@@ -1099,38 +1472,35 @@ export default function CoexistenceSetupPage() {
                           </div>
                         ) : (
                           filteredChats.map((chat) => {
-                            const isGroup = chat.type === "group" || chat.id.includes("@g.us");
                             const isSelected = activeLiveChat?.id === chat.id;
-                            const displayName = chat.name || chat.id.split("@")[0];
+                            const info = formatJidDisplay(chat.id, chat.name);
 
                             return (
                               <div
                                 key={chat.id}
                                 onClick={() => setActiveLiveChat(chat)}
                                 className={cn(
-                                  "flex items-center gap-3 p-3.5 cursor-pointer transition-colors relative",
+                                  "flex items-center gap-3.5 px-3.5 py-3 cursor-pointer transition-all relative border-b border-slate-100 dark:border-zinc-800/60",
                                   isSelected 
-                                    ? "bg-[#F0F2F5] dark:bg-[#2A3942] border-l-4 border-l-[#008069]" 
+                                    ? "bg-[#F0F2F5] dark:bg-[#2A3942] border-l-4 border-l-[#00A884]" 
                                     : "hover:bg-slate-50 dark:hover:bg-[#202C33]/60"
                                 )}
                               >
                                 {/* Contact Avatar */}
                                 <div className={cn(
-                                  "h-12 w-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-2xs",
-                                  isGroup 
-                                    ? "bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30" 
-                                    : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+                                  "h-12 w-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm bg-gradient-to-br",
+                                  info.avatarBg
                                 )}>
-                                  {isGroup ? <Users className="h-5 w-5" /> : displayName.slice(0, 2).toUpperCase()}
+                                  {info.isGroup ? <Users className="h-5 w-5 text-white" /> : info.initials}
                                 </div>
 
                                 {/* Chat Info */}
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center justify-between gap-1">
-                                    <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
-                                      {displayName}
+                                    <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
+                                      {info.title}
                                     </h4>
-                                    <span className="text-[10px] text-muted-foreground font-medium shrink-0">
+                                    <span className="text-[11px] text-muted-foreground font-medium shrink-0">
                                       {chat.conversationTimestamp 
                                         ? new Date(chat.conversationTimestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
                                         : "Just now"}
@@ -1138,8 +1508,9 @@ export default function CoexistenceSetupPage() {
                                   </div>
 
                                   <div className="flex items-center justify-between gap-2 mt-0.5">
-                                    <p className="text-[11px] text-muted-foreground truncate font-mono">
-                                      {chat.id}
+                                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                                      <CheckCheck className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                                      <span className="truncate">{info.subtitle}</span>
                                     </p>
                                     {chat.unreadCount ? (
                                       <span className="h-4 min-w-4 px-1.5 rounded-full bg-[#25D366] text-white text-[10px] font-black flex items-center justify-center shrink-0">
@@ -1157,95 +1528,146 @@ export default function CoexistenceSetupPage() {
 
                     {/* Right Pane: WhatsApp Live Chat Conversation */}
                     <div className={cn(
-                      "md:col-span-7 lg:col-span-8 flex-col h-full bg-[#EFEAE2]/60 dark:bg-[#0B141A] relative",
+                      "md:col-span-7 lg:col-span-8 flex flex-col h-full min-h-0 bg-[#EFEAE2] dark:bg-[#0B141A] relative overflow-hidden",
                       activeLiveChat ? "flex" : "hidden md:flex"
                     )}>
                       {activeLiveChat ? (
-                        <>
-                          {/* Chat Thread Header */}
-                          <div className="bg-[#F0F2F5] dark:bg-[#202C33] border-b border-slate-200/80 dark:border-zinc-800 p-3 px-4 flex items-center justify-between shadow-xs shrink-0">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setActiveLiveChat(null)}
-                                className="md:hidden p-1 h-8 w-8 rounded-full"
-                              >
-                                <ArrowLeft className="h-4 w-4" />
-                              </Button>
+                        <div className="flex flex-col h-full min-h-0">
+                          {/* Chat Thread Header - Pinned Sticky */}
+                          {(() => {
+                            const activeInfo = formatJidDisplay(activeLiveChat.id, activeLiveChat.name);
+                            return (
+                              <div className="bg-[#F0F2F5] dark:bg-[#202C33] border-b border-slate-200/80 dark:border-zinc-800 p-2.5 px-4 flex items-center justify-between shadow-xs shrink-0 sticky top-0 z-20">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setActiveLiveChat(null)}
+                                    className="md:hidden p-1 h-8 w-8 rounded-full"
+                                  >
+                                    <ArrowLeft className="h-4 w-4" />
+                                  </Button>
 
-                              <div className="relative">
-                                <div className={cn(
-                                  "h-10 w-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0",
-                                  activeLiveChat.type === "group" || activeLiveChat.id.includes("@g.us")
-                                    ? "bg-violet-500/20 text-violet-700 dark:text-violet-300"
-                                    : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                                )}>
-                                  {activeLiveChat.type === "group" || activeLiveChat.id.includes("@g.us") ? <Users className="h-4 w-4" /> : (activeLiveChat.name || activeLiveChat.id).slice(0, 2).toUpperCase()}
+                                  <div className="relative">
+                                    <div className={cn(
+                                      "h-10 w-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-sm bg-gradient-to-br",
+                                      activeInfo.avatarBg
+                                    )}>
+                                      {activeInfo.isGroup ? <Users className="h-5 w-5 text-white" /> : activeInfo.initials}
+                                    </div>
+                                    <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-[#25D366] border-2 border-white dark:border-[#202C33]" />
+                                  </div>
+
+                                  <div className="min-w-0">
+                                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate flex items-center gap-2">
+                                      <span>{activeInfo.title}</span>
+                                      <span className="text-[10px] font-semibold px-2 py-0.2 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                        Live Mobile Sync
+                                      </span>
+                                    </h3>
+                                    <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">online</span>
+                                      <span>•</span>
+                                      <span>{activeInfo.subtitle}</span>
+                                    </p>
+                                  </div>
                                 </div>
-                                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-[#25D366] border-2 border-white dark:border-[#202C33]" />
-                              </div>
 
-                              <div className="min-w-0">
-                                <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
-                                  {activeLiveChat.name || activeLiveChat.id.split("@")[0]}
-                                </h3>
-                                <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1.5 font-mono">
-                                  <span className="text-[#008069] font-semibold">online</span>
-                                  <span>•</span>
-                                  <span>{activeLiveChat.id}</span>
+                                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setTemplatePickerOpen(true)}
+                                    className="h-8 px-2.5 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 gap-1.5 cursor-pointer shadow-2xs"
+                                  >
+                                    <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                                    <span className="hidden sm:inline">Templates</span>
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-200/60 dark:hover:bg-zinc-700/60">
+                                    <Search className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-200/60 dark:hover:bg-zinc-700/60">
+                                    <Phone className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-200/60 dark:hover:bg-zinc-700/60">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Quick Template Suggestion Strip Floating Above Stream */}
+                          <div className="shrink-0 bg-white/95 dark:bg-[#111B21]/95 border-b border-slate-200/60 dark:border-zinc-800/60 px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar z-10">
+                            <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 flex items-center gap-1 shrink-0 px-1">
+                              <Sparkles className="h-3 w-3" />
+                              <span>Quick:</span>
+                            </span>
+                            {templates.slice(0, 5).map((tmpl) => (
+                              <button
+                                key={tmpl.id}
+                                type="button"
+                                onClick={() => handleApplyTemplateToLive(tmpl)}
+                                className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-slate-300 border border-slate-200/80 dark:border-zinc-700 transition-all flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>⚡ {tmpl.name.replace(/_/g, " ")}</span>
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setTemplatePickerOpen(true)}
+                              className="shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                              <Sparkles className="h-3 w-3 text-emerald-600" />
+                              <span>All Templates ({templates.length})</span>
+                            </button>
+                          </div>
+
+                          {/* Chat Message Stream - Dedicated Scrollable Container */}
+                          <div 
+                            className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3"
+                            style={{
+                              backgroundColor: "#efeae2",
+                              backgroundImage: "radial-gradient(#0000000d 1px, transparent 1px), radial-gradient(#0000000d 1px, #efeae2 1px)",
+                              backgroundSize: "20px 20px",
+                              backgroundPosition: "0 0, 10px 10px"
+                            }}
+                          >
+                            {/* Privacy Notice Banner */}
+                            <div className="flex justify-center my-1">
+                              <div className="px-3.5 py-1.5 rounded-xl bg-amber-100/80 dark:bg-amber-950/40 border border-amber-300/60 dark:border-amber-700/50 shadow-2xs max-w-md text-center">
+                                <p className="text-[11px] text-amber-900 dark:text-amber-200 font-medium leading-relaxed flex items-center justify-center gap-1.5">
+                                  <span>🔒</span>
+                                  <span>Messages sent here dispatch live to destination WhatsApp phones.</span>
                                 </p>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1 sm:gap-2 text-slate-600 dark:text-slate-300">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-200/60 dark:hover:bg-zinc-700/60">
-                                <Video className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-200/60 dark:hover:bg-zinc-700/60">
-                                <Phone className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => openSendModal(activeLiveChat)}
-                                className="h-8 px-2 rounded-xl text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20"
-                              >
-                                Templates
-                              </Button>
-                            </div>
-                          </div>
-
-                          {/* Chat Message Stream */}
-                          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#EFEAE2]/60 dark:bg-[#0B141A]">
                             {/* Date Badge */}
                             <div className="flex justify-center my-2">
-                              <span className="bg-white/80 dark:bg-[#182229] text-[10px] uppercase font-bold text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full shadow-2xs border border-slate-200/60 dark:border-zinc-800">
+                              <span className="bg-white/90 dark:bg-[#182229] text-[10px] uppercase font-bold text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full shadow-2xs border border-slate-200/60 dark:border-zinc-800">
                                 Today
                               </span>
                             </div>
 
-                            {/* Info Banner */}
-                            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center max-w-md mx-auto">
-                              <p className="text-[11px] text-amber-800 dark:text-amber-200 font-medium">
-                                🔒 Messages sent here are dispatched live through your connected mobile WhatsApp account.
-                              </p>
-                            </div>
-
                             {/* Messages List */}
                             {fetchingLiveMessages ? (
-                              <div className="flex justify-center py-10">
+                              <div className="flex flex-col items-center justify-center py-16 space-y-2">
                                 <Loader2 className="h-6 w-6 animate-spin text-[#008069]" />
+                                <span className="text-xs text-muted-foreground font-medium">Loading live messages...</span>
                               </div>
                             ) : activeLiveMessages.length === 0 ? (
-                              <div className="text-center py-12 space-y-2">
-                                <div className="p-3 bg-white/80 dark:bg-[#202C33] rounded-2xl w-fit mx-auto shadow-2xs border border-slate-200/60 dark:border-zinc-800">
-                                  <MessageSquare className="h-6 w-6 text-[#008069]" />
+                              <div className="text-center py-16 space-y-3">
+                                <div className="p-3.5 bg-white/90 dark:bg-[#202C33] rounded-2xl w-fit mx-auto shadow-xs border border-slate-200/80 dark:border-zinc-800">
+                                  <MessageSquare className="h-7 w-7 text-[#008069]" />
                                 </div>
-                                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">No cached messages yet</p>
-                                <p className="text-[11px] text-muted-foreground max-w-xs mx-auto">
-                                  Type any message below to send directly to this contact via WhatsApp!
-                                </p>
+                                <div className="space-y-1">
+                                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">Start Live WhatsApp Chat</p>
+                                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                                    Send a message or select a template below. It will dispatch live through your connected mobile WhatsApp device.
+                                  </p>
+                                </div>
                               </div>
                             ) : (
                               activeLiveMessages.map((msg, i) => {
@@ -1258,15 +1680,41 @@ export default function CoexistenceSetupPage() {
                                 return (
                                   <div key={msg.key?.id || i} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
                                     <div className={cn(
-                                      "max-w-[78%] rounded-2xl p-3 shadow-xs space-y-1 relative text-xs",
+                                      "max-w-[85%] sm:max-w-[75%] rounded-2xl p-3 px-3.5 shadow-xs space-y-2 relative text-xs leading-relaxed",
                                       isMe 
                                         ? "bg-[#D9FDD3] dark:bg-[#005C4B] text-slate-900 dark:text-emerald-50 rounded-tr-xs" 
                                         : "bg-white dark:bg-[#202C33] text-slate-900 dark:text-slate-100 rounded-tl-xs"
                                     )}>
-                                      <p className="leading-relaxed whitespace-pre-wrap select-text">{text}</p>
-                                      <div className="flex items-center justify-end gap-1 text-[9px] text-muted-foreground mt-0.5">
+                                      <p className="whitespace-pre-wrap select-text font-normal">{text}</p>
+                                      
+                                      {/* Interactive Buttons Preview in Message Bubble */}
+                                      {msg.buttons && Array.isArray(msg.buttons) && msg.buttons.length > 0 && (
+                                        <div className="pt-2 border-t border-black/10 dark:border-white/10 space-y-1.5">
+                                          {msg.buttons.map((btn: any, bIdx: number) => (
+                                            <div 
+                                              key={bIdx}
+                                              className={cn(
+                                                "px-3 py-1.5 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs border transition-all",
+                                                isMe 
+                                                  ? "bg-white/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 border-emerald-300/40" 
+                                                  : "bg-[#00A884]/10 text-[#00A884] dark:text-[#25D366] border-[#00A884]/30"
+                                              )}
+                                            >
+                                              {btn.type === "URL" ? (
+                                                <span className="flex items-center gap-1">🌐 {btn.text}</span>
+                                              ) : btn.type === "PHONE_NUMBER" ? (
+                                                <span className="flex items-center gap-1">📞 {btn.text}</span>
+                                              ) : (
+                                                <span className="flex items-center gap-1">🔘 {btn.text}</span>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1">
                                         <span>{time}</span>
-                                        {isMe && <CheckCheck className="h-3 w-3 text-[#53BDEB]" />}
+                                        {isMe && <CheckCheck className="h-3.5 w-3.5 text-[#53BDEB]" />}
                                       </div>
                                     </div>
                                   </div>
@@ -1276,56 +1724,113 @@ export default function CoexistenceSetupPage() {
                             <div ref={messagesEndRef} />
                           </div>
 
-                          {/* WhatsApp Chat Composer Bar */}
-                          <div className="p-3 px-4 bg-[#F0F2F5] dark:bg-[#202C33] border-t border-slate-200/80 dark:border-zinc-800 flex items-center gap-2">
-                            <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-full">
-                              <Smile className="h-5 w-5" />
-                            </Button>
+                          {/* WhatsApp Chat Composer Bar - Pinned Sticky at bottom */}
+                          <div className="p-2.5 sm:p-3 px-3 sm:px-4 bg-[#F0F2F5] dark:bg-[#202C33] border-t border-slate-200/80 dark:border-zinc-800 flex items-center gap-2 shrink-0 sticky bottom-0 z-20">
+                            {/* Emoji Button */}
+                            <div className="relative">
+                              <Button 
+                                type="button"
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => setShowEmojiPicker(prev => !prev)}
+                                className="h-9 w-9 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white rounded-full hover:bg-slate-200/70 dark:hover:bg-zinc-700/60 cursor-pointer"
+                              >
+                                <Smile className="h-5 w-5" />
+                              </Button>
+
+                              {showEmojiPicker && (
+                                <div className="absolute bottom-12 left-0 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-2xl p-2 shadow-xl flex items-center gap-1.5 z-30">
+                                  {["👍", "❤️", "😂", "🙏", "🎉", "🔥", "✅", "👋"].map((emoji) => (
+                                    <button
+                                      key={emoji}
+                                      type="button"
+                                      onClick={() => {
+                                        setLiveMessageText(prev => prev + emoji);
+                                        setShowEmojiPicker(false);
+                                      }}
+                                      className="h-8 w-8 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg flex items-center justify-center text-lg transition-transform hover:scale-125 cursor-pointer"
+                                    >
+                                      {emoji}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Templates Picker Trigger Pill Button */}
                             <Button 
+                              type="button"
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => setTemplatePickerOpen(true)}
+                              className="h-9 px-2.5 sm:px-3 rounded-full text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 gap-1.5 shrink-0 shadow-2xs cursor-pointer"
+                            >
+                              <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                              <span className="hidden sm:inline">Templates</span>
+                            </Button>
+
+                            {/* Attachment Button */}
+                            <Button 
+                              type="button"
                               variant="ghost" 
                               size="icon" 
                               onClick={() => openSendModal(activeLiveChat)}
-                              className="h-9 w-9 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-full"
+                              className="h-9 w-9 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white rounded-full hover:bg-slate-200/70 dark:hover:bg-zinc-700/60 shrink-0 cursor-pointer"
                             >
                               <Paperclip className="h-5 w-5" />
                             </Button>
 
-                            <Input
-                              placeholder="Type a message..."
-                              value={liveMessageText}
-                              onChange={(e) => setLiveMessageText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" && !e.shiftKey) {
-                                  e.preventDefault();
-                                  handleSendLiveMessage();
-                                }
-                              }}
-                              className="flex-1 bg-white dark:bg-[#111B21] border-0 h-10 px-4 rounded-full text-xs shadow-2xs focus-visible:ring-1 focus-visible:ring-[#008069]"
-                            />
+                            {/* Chat Message Input Box */}
+                            <div className="flex-1 relative flex items-center">
+                              <Input
+                                placeholder={`Message ${formatJidDisplay(activeLiveChat.id, activeLiveChat.name).title}...`}
+                                value={liveMessageText}
+                                onChange={(e) => setLiveMessageText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSendLiveMessage();
+                                  }
+                                }}
+                                className="w-full bg-white dark:bg-[#111B21] border border-slate-300/80 dark:border-zinc-700/80 h-10 px-4 rounded-full text-xs sm:text-sm text-slate-900 dark:text-white shadow-2xs focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:border-transparent placeholder:text-muted-foreground/80"
+                              />
+                              {attachedTemplate && (
+                                <Badge className="absolute right-3 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                                  <span>⚡ Template attached</span>
+                                  <button type="button" onClick={() => setAttachedTemplate(null)} className="ml-1 hover:text-rose-200">×</button>
+                                </Badge>
+                              )}
+                            </div>
 
+                            {/* Send Message Button */}
                             <Button
+                              type="button"
                               onClick={() => handleSendLiveMessage()}
-                              disabled={sendingLiveMessage || !liveMessageText.trim()}
-                              className="h-10 w-10 rounded-full bg-[#00A884] hover:bg-[#008F6F] text-white flex items-center justify-center shrink-0 shadow-md transition-all active:scale-95 disabled:opacity-50"
+                              disabled={sendingLiveMessage || (!liveMessageText.trim() && !attachedTemplate)}
+                              className="h-10 w-10 rounded-full bg-[#00A884] hover:bg-[#008F6F] active:scale-95 text-white flex items-center justify-center shrink-0 shadow-md transition-all disabled:opacity-40 cursor-pointer"
                             >
                               {sendingLiveMessage ? (
                                 <Loader2 className="h-4 w-4 animate-spin text-white" />
                               ) : (
-                                <Send className="h-4 w-4 text-white" />
+                                <Send className="h-4 w-4 text-white ml-0.5" />
                               )}
                             </Button>
                           </div>
-                        </>
+                        </div>
                       ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
-                          <div className="h-16 w-16 rounded-full bg-[#008069]/10 text-[#008069] flex items-center justify-center border border-[#008069]/20 shadow-xs">
-                            <MessageSquare className="h-8 w-8" />
+                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4 bg-[#F8F9FA] dark:bg-[#111B21]">
+                          <div className="h-20 w-20 rounded-3xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20 shadow-sm">
+                            <Smartphone className="h-10 w-10" />
                           </div>
-                          <div className="space-y-1">
-                            <h3 className="font-bold text-base text-slate-900 dark:text-white">WhatsApp Live Phone View</h3>
-                            <p className="text-xs text-muted-foreground max-w-sm">
-                              Select any conversation on the left to start live chatting directly through your paired phone.
+                          <div className="space-y-1.5 max-w-sm">
+                            <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">WhatsApp Coexistence Live View</h3>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              Select any contact or group on the left to start live chatting directly through your connected mobile WhatsApp device.
                             </p>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 bg-emerald-500/10 px-3.5 py-1.5 rounded-full border border-emerald-500/20">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            <span>Dual-Device Sync Active</span>
                           </div>
                         </div>
                       )}
@@ -1486,6 +1991,107 @@ export default function CoexistenceSetupPage() {
                       </div>
                     )}
                     
+                    {/* Inbuilt Interactive Template Picker */}
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="h-6 w-6 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                            <Sparkles className="h-3.5 w-3.5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-foreground">Inbuilt Interactive Templates</p>
+                            <p className="text-[10px] text-muted-foreground">Select pre-built templates with interactive action buttons or write custom message.</p>
+                          </div>
+                        </div>
+                        {selectedTemplateForBroadcast && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => {
+                              setSelectedTemplateForBroadcast("");
+                              setBulkMessage("");
+                              setBulkButtons([]);
+                            }}
+                            className="h-6 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 px-2 rounded-lg"
+                          >
+                            Clear Template
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <Select 
+                          value={selectedTemplateForBroadcast} 
+                          onValueChange={(val) => handleSelectTemplateForBulk(val || "")}
+                        >
+                          <SelectTrigger className="w-full bg-background border-border/80 text-xs rounded-xl h-9">
+                            <SelectValue placeholder="⚡ Choose Inbuilt Demo / Custom Template..." />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl shadow-lg">
+                            {templates.map((t) => (
+                              <SelectItem key={t.id} value={t.id} className="cursor-pointer text-xs">
+                                <span className="font-bold">{t.name}</span>
+                                {t.buttons && t.buttons.length > 0 && (
+                                  <span className="ml-2 text-[10px] text-emerald-600 dark:text-emerald-400">({t.buttons.length} buttons)</span>
+                                )}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+                          {templates.slice(0, 3).map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => handleSelectTemplateForBulk(t.id)}
+                              className={cn(
+                                "px-2.5 py-1.5 rounded-lg text-[11px] font-bold truncate transition-all shrink-0 border",
+                                selectedTemplateForBroadcast === t.id
+                                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                  : "bg-background hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-300 border-border/80"
+                              )}
+                            >
+                              ⚡ {t.name.split("_").slice(0, 2).join(" ")}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {bulkButtons.length > 0 && (
+                        <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                              <Zap className="h-3 w-3" />
+                              Interactive Action Buttons Attached ({bulkButtons.length}):
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setBulkButtons([])}
+                              className="text-[10px] text-rose-600 hover:underline"
+                            >
+                              Remove Buttons
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {bulkButtons.map((b, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shadow-xs"
+                              >
+                                {b.type === "URL" && <ExternalLink className="h-3 w-3 text-blue-500" />}
+                                {b.type === "PHONE_NUMBER" && <Phone className="h-3 w-3 text-emerald-500" />}
+                                {b.type === "QUICK_REPLY" && <Check className="h-3 w-3 text-violet-500" />}
+                                <span>{b.text}</span>
+                                {b.url && <span className="text-[9px] text-muted-foreground font-mono truncate max-w-[120px]">({b.url})</span>}
+                                {b.phone_number && <span className="text-[9px] text-muted-foreground font-mono">({b.phone_number})</span>}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
                     <div className="space-y-2 pt-2 border-t border-border/60">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-bold">Message Content *</Label>
@@ -1535,6 +2141,216 @@ export default function CoexistenceSetupPage() {
                 </Card>
               </TabsContent>
 
+              {/* TAB: TEMPLATES (IN-BUILT & EDITABLE INTERACTIVE TEMPLATES STORED IN DB) */}
+              <TabsContent value="templates" className="space-y-6 mt-6">
+                <Card className="rounded-2xl border-border/80 shadow-xs">
+                  <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 bg-muted/20">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <CardTitle className="text-lg font-bold flex items-center gap-2">
+                          <span>Interactive WhatsApp Templates</span>
+                        </CardTitle>
+                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[11px] font-bold">
+                          {templates.length} in Database
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-xs mt-1">
+                        Pre-built high-converting templates with interactive action buttons. Stored in your database, fully customizable, and ready for instant 1-click broadcast or live chat.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => fetchTemplates(true)}
+                        className="rounded-xl text-xs font-bold gap-1.5 h-9"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Refresh
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleOpenCreateTemplate}
+                        className="rounded-xl text-xs font-bold gap-1.5 h-9 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Create Template
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-6">
+                    {/* Search & Category Filter Toolbar */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                      <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                          placeholder="Search templates by title or content..."
+                          value={templateSearchQuery}
+                          onChange={(e) => setTemplateSearchQuery(e.target.value)}
+                          className="pl-9 h-9 text-xs rounded-xl bg-background border-border/80"
+                        />
+                        {templateSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setTemplateSearchQuery("")}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                        {["all", "Marketing", "Utility", "Support"].map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setTemplateCategoryFilter(cat)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 border",
+                              templateCategoryFilter === cat
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                : "bg-card hover:bg-muted/60 text-muted-foreground border-border/80"
+                            )}
+                          >
+                            {cat === "all" ? "All Categories" : cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Templates Grid */}
+                    {filteredTemplatesList.length === 0 ? (
+                      <div className="text-center py-16 border-2 border-dashed border-border/80 rounded-2xl p-8 space-y-3">
+                        <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto">
+                          <Sparkles className="h-6 w-6" />
+                        </div>
+                        <h4 className="font-bold text-sm text-foreground">No templates found</h4>
+                        <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                          {templateSearchQuery || templateCategoryFilter !== "all"
+                            ? "No templates match your search filter. Try clearing your filters or create a new custom template."
+                            : "Your database currently has no templates. Click below to create your first interactive template."}
+                        </p>
+                        <Button
+                          size="sm"
+                          onClick={handleOpenCreateTemplate}
+                          className="rounded-xl text-xs font-bold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white mt-2"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Create New Template
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {filteredTemplatesList.map((tmpl) => {
+                          const buttons = Array.isArray(tmpl.buttons) ? tmpl.buttons : [];
+                          return (
+                            <div
+                              key={tmpl.id}
+                              className="rounded-2xl border border-border/80 bg-card hover:border-emerald-500/50 hover:shadow-lg transition-all flex flex-col justify-between overflow-hidden group shadow-xs"
+                            >
+                              <div className="p-4 space-y-3">
+                                {/* Card Header / Badges */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full border",
+                                      tmpl.category === "Marketing" && "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+                                      tmpl.category === "Utility" && "bg-blue-500/10 text-blue-600 border-blue-500/30",
+                                      tmpl.category === "Support" && "bg-violet-500/10 text-violet-600 border-violet-500/30",
+                                      !["Marketing", "Utility", "Support"].includes(tmpl.category) && "bg-muted text-muted-foreground border-border"
+                                    )}
+                                  >
+                                    {tmpl.category || "General"}
+                                  </Badge>
+
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-mono text-muted-foreground uppercase">{tmpl.language || "en_US"}</span>
+                                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] font-bold">
+                                      Active
+                                    </Badge>
+                                  </div>
+                                </div>
+
+                                {/* Template Title */}
+                                <div>
+                                  <h4 className="font-extrabold text-sm text-foreground line-clamp-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                    {tmpl.name}
+                                  </h4>
+                                </div>
+
+                                {/* Simulated Authentic WhatsApp Bubble Preview */}
+                                <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/40 space-y-2 text-xs">
+                                  {tmpl.header_content && (
+                                    <p className="font-extrabold text-xs text-foreground/90 pb-1 border-b border-emerald-200/40 dark:border-emerald-800/30">
+                                      {tmpl.header_content}
+                                    </p>
+                                  )}
+                                  <p className="text-foreground/80 leading-relaxed text-[11px] whitespace-pre-wrap line-clamp-4 font-sans">
+                                    {tmpl.body_text}
+                                  </p>
+                                  {tmpl.footer_text && (
+                                    <p className="text-[10px] text-muted-foreground italic pt-1">
+                                      {tmpl.footer_text}
+                                    </p>
+                                  )}
+
+                                  {/* Interactive Buttons Preview Inside Bubble */}
+                                  {buttons.length > 0 && (
+                                    <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 space-y-1.5">
+                                      {buttons.map((b: any, bIdx: number) => (
+                                        <div
+                                          key={bIdx}
+                                          className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-white/90 dark:bg-zinc-900/90 border border-emerald-300/60 dark:border-emerald-700/60 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] shadow-2xs"
+                                        >
+                                          {b.type === "URL" && <ExternalLink className="h-3 w-3 text-blue-500 shrink-0" />}
+                                          {b.type === "PHONE_NUMBER" && <Phone className="h-3 w-3 text-emerald-500 shrink-0" />}
+                                          {b.type === "QUICK_REPLY" && <Check className="h-3 w-3 text-violet-500 shrink-0" />}
+                                          <span className="truncate">{b.text}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Card Action Footer */}
+                              <div className="p-3 bg-muted/30 border-t border-border/80 flex items-center justify-between gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleUseTemplateForBroadcast(tmpl)}
+                                  className="flex-1 h-8 rounded-xl text-xs font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                                >
+                                  <Zap className="h-3 w-3" />
+                                  Broadcast
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenEditTemplate(tmpl)}
+                                  className="h-8 px-2.5 rounded-xl text-xs font-bold border-border/80 hover:bg-muted/80"
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteTemplate(tmpl.id)}
+                                  className="h-8 px-2.5 rounded-xl text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               {/* TAB 3: GROUPS LIST */}
               <TabsContent value="groups" className="space-y-6 mt-6">
                 <Card className="rounded-2xl border-border/80 shadow-xs">
@@ -1551,12 +2367,12 @@ export default function CoexistenceSetupPage() {
                     <Button 
                       size="sm" 
                       variant="outline" 
-                      onClick={() => fetchChatsAndGroups(true)} 
+                      onClick={() => fetchChatsAndGroups(true, true)} 
                       disabled={fetchingChats} 
                       className="rounded-xl text-xs gap-1.5 font-bold border-violet-500/30 text-violet-600 hover:bg-violet-500/10"
                     >
                       <RefreshCw className={cn("h-3.5 w-3.5", fetchingChats && "animate-spin")} />
-                      Refresh Groups
+                      {fetchingChats ? "Syncing..." : "Refresh Groups"}
                     </Button>
                   </CardHeader>
                   <CardContent className="p-6">
@@ -1794,6 +2610,390 @@ export default function CoexistenceSetupPage() {
                   <>
                     <Send className="mr-2 h-4 w-4" />
                     Send Message
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 1. Quick Template Picker Drawer/Modal (From Live Chat Composer) */}
+        <Dialog open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+          <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden border-0 shadow-2xl rounded-2xl bg-card">
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-5 text-white">
+              <DialogHeader className="text-left">
+                <DialogTitle className="text-lg font-bold flex items-center gap-2 text-white">
+                  <Sparkles className="h-5 w-5" />
+                  Select Interactive Template
+                </DialogTitle>
+                <DialogDescription className="text-emerald-100 text-xs mt-1">
+                  Choose a pre-built template from your database. You can insert it into the composer or send it directly.
+                </DialogDescription>
+              </DialogHeader>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[65vh] overflow-y-auto overscroll-contain">
+              {templates.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground space-y-2">
+                  <Sparkles className="h-8 w-8 mx-auto text-emerald-500 opacity-40" />
+                  <p className="text-xs font-bold text-foreground">No templates found in database</p>
+                  <p className="text-[11px]">Create a new template from the Templates tab.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {templates.map((tmpl) => {
+                    const buttons = Array.isArray(tmpl.buttons) ? tmpl.buttons : [];
+                    return (
+                      <div
+                        key={tmpl.id}
+                        className="p-4 rounded-xl border border-border/80 bg-background hover:border-emerald-500/50 hover:bg-muted/30 transition-all space-y-2.5 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-foreground">{tmpl.name}</span>
+                          <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                            {tmpl.category || "Marketing"}
+                          </Badge>
+                        </div>
+
+                        {/* WhatsApp preview bubble */}
+                        <div className="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/40 text-[11px] space-y-1.5 font-sans">
+                          {tmpl.header_content && <p className="font-bold text-foreground/90">{tmpl.header_content}</p>}
+                          <p className="text-foreground/80 leading-relaxed whitespace-pre-wrap">{tmpl.body_text}</p>
+                          {tmpl.footer_text && <p className="text-[10px] text-muted-foreground italic">{tmpl.footer_text}</p>}
+                          {buttons.length > 0 && (
+                            <div className="pt-1.5 flex flex-wrap gap-1">
+                              {buttons.map((b: any, idx: number) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+                                >
+                                  {b.type === "URL" && <ExternalLink className="h-2.5 w-2.5 text-blue-500" />}
+                                  {b.type === "PHONE_NUMBER" && <Phone className="h-2.5 w-2.5 text-emerald-500" />}
+                                  {b.type === "QUICK_REPLY" && <Check className="h-2.5 w-2.5 text-violet-500" />}
+                                  {b.text}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleApplyTemplateToLive(tmpl)}
+                            className="h-7 px-3 text-xs font-bold rounded-lg border-border/80"
+                          >
+                            Insert in Composer
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleSendTemplateDirectlyToLive(tmpl)}
+                            className="h-7 px-3 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white gap-1 shadow-xs"
+                          >
+                            <Send className="h-3 w-3" />
+                            Send Directly
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="p-4 bg-muted/20 border-t border-border/60">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setTemplatePickerOpen(false)}
+                className="rounded-xl text-xs"
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 2. Interactive Template Builder & Editor Dialog (Stored in DB) */}
+        <Dialog open={templateEditorOpen} onOpenChange={setTemplateEditorOpen}>
+          <DialogContent className="sm:max-w-[760px] p-0 overflow-hidden border-0 shadow-2xl rounded-2xl bg-card">
+            <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 p-5 text-white">
+              <DialogHeader className="text-left">
+                <DialogTitle className="text-lg font-bold flex items-center gap-2 text-white">
+                  <Sparkles className="h-5 w-5" />
+                  {editingTemplate?.id ? "Edit Interactive Template" : "Create New Interactive Template"}
+                </DialogTitle>
+                <DialogDescription className="text-emerald-100 text-xs mt-1">
+                  Design WhatsApp interactive message templates with action buttons (Quick Reply, URL Link, Phone Call). Stored directly in your database.
+                </DialogDescription>
+              </DialogHeader>
+            </div>
+
+            <div className="p-6 grid grid-cols-1 md:grid-cols-12 gap-6 max-h-[75vh] overflow-y-auto overscroll-contain">
+              {/* Left Column: Form Fields */}
+              <div className="md:col-span-7 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold">Template Name *</Label>
+                    <Input
+                      placeholder="e.g. festive_offer_30"
+                      value={tmplFormName}
+                      onChange={(e) => setTmplFormName(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
+                      className="h-9 text-xs rounded-xl bg-background border-border/80 font-mono"
+                    />
+                    <span className="text-[10px] text-muted-foreground">Lowercase & underscores only</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold">Category</Label>
+                    <select
+                      value={tmplFormCategory}
+                      onChange={(e) => setTmplFormCategory(e.target.value)}
+                      className="w-full h-9 px-3 rounded-xl bg-background border border-border/80 text-xs font-semibold"
+                    >
+                      <option value="Marketing">Marketing</option>
+                      <option value="Utility">Utility</option>
+                      <option value="Support">Support</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold">Header Text (Optional)</Label>
+                  <Input
+                    placeholder="e.g. Special Festive Announcement 🎉"
+                    value={tmplFormHeader}
+                    onChange={(e) => setTmplFormHeader(e.target.value)}
+                    className="h-9 text-xs rounded-xl bg-background border-border/80"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold">Body Message Content *</Label>
+                    <span className="text-[10px] text-muted-foreground">Supports &#123;&#123;name&#125;&#125; variable</span>
+                  </div>
+                  <Textarea
+                    placeholder="Type template message body text here... Use {{name}} to personalize with contact name."
+                    value={tmplFormBody}
+                    onChange={(e) => setTmplFormBody(e.target.value)}
+                    className="min-h-28 text-xs rounded-xl bg-background border-border/80 p-3 leading-relaxed"
+                  />
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <span className="text-[10px] text-muted-foreground font-medium">Quick Insert:</span>
+                    {["{{name}}", "{{phone}}", "{{discount}}", "{{code}}"].map((variable) => (
+                      <button
+                        key={variable}
+                        type="button"
+                        onClick={() => setTmplFormBody((prev) => `${prev} ${variable}`)}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground hover:text-foreground border border-border/60 transition-colors"
+                      >
+                        {variable}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold">Footer Text (Optional)</Label>
+                  <Input
+                    placeholder="e.g. Reply STOP to unsubscribe • ChatFlyr"
+                    value={tmplFormFooter}
+                    onChange={(e) => setTmplFormFooter(e.target.value)}
+                    className="h-9 text-xs rounded-xl bg-background border-border/80"
+                  />
+                </div>
+
+                {/* Interactive Action Buttons Builder */}
+                <div className="space-y-2.5 pt-2 border-t border-border/60">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5 text-emerald-500" />
+                      <Label className="text-xs font-bold">Interactive Action Buttons (Max 3)</Label>
+                    </div>
+                    {tmplFormButtons.length < 3 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setTmplFormButtons((prev) => [
+                            ...prev,
+                            { type: "QUICK_REPLY", text: `Action ${prev.length + 1}` }
+                          ])
+                        }
+                        className="h-7 px-2.5 rounded-lg text-xs font-bold text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 gap-1"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add Button
+                      </Button>
+                    )}
+                  </div>
+
+                  {tmplFormButtons.length === 0 ? (
+                    <div className="p-3 rounded-xl border border-dashed border-border/80 text-center text-muted-foreground text-xs">
+                      No buttons added yet. Click &quot;Add Button&quot; to create Quick Replies, Website Links, or Phone Call triggers.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {tmplFormButtons.map((btn, bIdx) => (
+                        <div
+                          key={bIdx}
+                          className="p-3 rounded-xl border border-border/80 bg-background space-y-2 shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-extrabold text-foreground">Button #{bIdx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => setTmplFormButtons((prev) => prev.filter((_, i) => i !== bIdx))}
+                              className="text-rose-600 hover:text-rose-700 text-xs"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <select
+                              value={btn.type}
+                              onChange={(e) =>
+                                setTmplFormButtons((prev) =>
+                                  prev.map((b, i) => (i === bIdx ? { ...b, type: e.target.value } : b))
+                                )
+                              }
+                              className="h-8 px-2.5 rounded-lg bg-background border border-border/80 text-xs font-medium"
+                            >
+                              <option value="QUICK_REPLY">Quick Reply (Text)</option>
+                              <option value="URL">Website Link (URL)</option>
+                              <option value="PHONE_NUMBER">Phone Call (Tel)</option>
+                            </select>
+
+                            <Input
+                              placeholder="Button Label Text"
+                              value={btn.text}
+                              onChange={(e) =>
+                                setTmplFormButtons((prev) =>
+                                  prev.map((b, i) => (i === bIdx ? { ...b, text: e.target.value } : b))
+                                )
+                              }
+                              className="h-8 text-xs rounded-lg bg-background border-border/80"
+                            />
+                          </div>
+
+                          {btn.type === "URL" && (
+                            <Input
+                              placeholder="https://example.com/page"
+                              value={btn.url || ""}
+                              onChange={(e) =>
+                                setTmplFormButtons((prev) =>
+                                  prev.map((b, i) => (i === bIdx ? { ...b, url: e.target.value } : b))
+                                )
+                              }
+                              className="h-8 text-xs rounded-lg bg-background border-border/80 font-mono"
+                            />
+                          )}
+
+                          {btn.type === "PHONE_NUMBER" && (
+                            <Input
+                              placeholder="+919876543210"
+                              value={btn.phone_number || ""}
+                              onChange={(e) =>
+                                setTmplFormButtons((prev) =>
+                                  prev.map((b, i) => (i === bIdx ? { ...b, phone_number: e.target.value } : b))
+                                )
+                              }
+                              className="h-8 text-xs rounded-lg bg-background border-border/80 font-mono"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Real-Time Phone Bubble Preview */}
+              <div className="md:col-span-5 flex flex-col items-center">
+                <div className="w-full space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                    <Smartphone className="h-4 w-4 text-emerald-500" />
+                    <span>Live WhatsApp Preview</span>
+                  </div>
+
+                  <div className="w-full rounded-2xl border-4 border-slate-800 bg-[#E5DDD5] dark:bg-[#0B141A] p-4 shadow-xl min-h-[360px] flex flex-col justify-center">
+                    {/* WhatsApp Chat Bubble */}
+                    <div className="bg-white dark:bg-[#1F2C34] rounded-xl shadow-md p-3.5 space-y-2 text-xs border border-black/5 dark:border-white/5">
+                      {tmplFormHeader ? (
+                        <p className="font-extrabold text-xs text-foreground pb-1 border-b border-border/60">
+                          {tmplFormHeader}
+                        </p>
+                      ) : (
+                        <p className="font-extrabold text-[11px] text-muted-foreground/60 italic pb-1 border-b border-dashed border-border/40">
+                          (No Header)
+                        </p>
+                      )}
+
+                      <p className="text-foreground/90 leading-relaxed text-xs whitespace-pre-wrap font-sans">
+                        {tmplFormBody || "Your message body content will appear here in real time..."}
+                      </p>
+
+                      {tmplFormFooter && (
+                        <p className="text-[10px] text-muted-foreground italic pt-1">
+                          {tmplFormFooter}
+                        </p>
+                      )}
+
+                      <div className="flex justify-end pt-1">
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          9:41 AM <CheckCheck className="h-3 w-3 text-sky-500" />
+                        </span>
+                      </div>
+
+                      {/* Interactive Buttons Stack Inside Preview */}
+                      {tmplFormButtons.length > 0 && (
+                        <div className="pt-2 border-t border-border/60 space-y-1.5">
+                          {tmplFormButtons.map((b, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 font-bold text-xs shadow-2xs hover:bg-emerald-100 transition-colors cursor-pointer"
+                            >
+                              {b.type === "URL" && <ExternalLink className="h-3 w-3 text-blue-500" />}
+                              {b.type === "PHONE_NUMBER" && <Phone className="h-3 w-3 text-emerald-500" />}
+                              {b.type === "QUICK_REPLY" && <Check className="h-3 w-3 text-violet-500" />}
+                              <span className="truncate">{b.text || `Button ${i + 1}`}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="p-4 bg-muted/20 border-t border-border/60 flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setTemplateEditorOpen(false)}
+                className="rounded-xl text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveTemplate}
+                disabled={savingTemplate || !tmplFormName.trim() || !tmplFormBody.trim()}
+                className="rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-xs"
+              >
+                {savingTemplate ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving to Database...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Save Template in Database
                   </>
                 )}
               </Button>
