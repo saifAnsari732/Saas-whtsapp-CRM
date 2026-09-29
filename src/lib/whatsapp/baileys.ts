@@ -74,6 +74,52 @@ function restoreSessionIfAvailable(authFolder: string, backupFolder: string) {
   return false;
 }
 
+/**
+ * Completely clean up and remove all session files & state for a user
+ */
+export function cleanUserSession(userId: string) {
+  if (!userId) return;
+
+  const authFolder = `baileys_auth_info_${userId}`;
+  const backupFolder = `baileys_auth_info_backup_${userId}`;
+  const storeFile = `baileys_store_${userId}.json`;
+
+  if (global.waSockets?.[userId]) {
+    try {
+      global.waSockets[userId]?.end?.();
+    } catch (e) {}
+    delete global.waSockets[userId];
+  }
+  delete global.waQrs?.[userId];
+  delete global.waStores?.[userId];
+
+  if (global.waStatuses) {
+    global.waStatuses[userId] = 'disconnected';
+  }
+  if (global.waConnectionLocks) {
+    global.waConnectionLocks[userId] = false;
+  }
+  if (global.waReconnectCounters) {
+    global.waReconnectCounters[userId] = 0;
+  }
+
+  try {
+    if (fs.existsSync(authFolder)) {
+      fs.rmSync(authFolder, { recursive: true, force: true });
+    }
+    if (fs.existsSync(backupFolder)) {
+      fs.rmSync(backupFolder, { recursive: true, force: true });
+    }
+    if (fs.existsSync(storeFile)) {
+      fs.rmSync(storeFile, { force: true });
+    }
+    console.log(`[Baileys] Successfully cleaned up session files for user ${userId}`);
+  } catch (err) {
+    console.error(`[Baileys] Error cleaning session files for user ${userId}:`, err);
+  }
+}
+
+
 export async function connectToWhatsApp(userId: string) {
   if (!userId) return;
 
@@ -323,12 +369,34 @@ export async function connectToWhatsApp(userId: string) {
 
         delete global.waSockets[userId];
 
-        // Backup creds on close to preserve latest keys
+        // If disconnection is due to loggedOut (401), bad session, or session replaced - clean up session & stop auto-reconnect loop
+        const isLoggedOut = 
+          statusCode === DisconnectReason.loggedOut || 
+          statusCode === 401 || 
+          statusCode === 403 || 
+          statusCode === DisconnectReason.badSession || 
+          statusCode === DisconnectReason.connectionReplaced;
+
+        if (isLoggedOut) {
+          console.warn(`[Baileys] Session logged out / invalid for user ${userId} (StatusCode: ${statusCode}). Wiping session and stopping auto-reconnect.`);
+          cleanUserSession(userId);
+          return;
+        }
+
+        // Backup creds on close only for recoverable disconnects
         backupSessionFolder(authFolder, backupFolder);
 
-        // Auto-reconnect with intelligent backoff
+        // Auto-reconnect with intelligent backoff (capped at 10 attempts)
         global.waReconnectCounters[userId] = (global.waReconnectCounters[userId] || 0) + 1;
         const retryCount = global.waReconnectCounters[userId];
+
+        if (retryCount > 10) {
+          console.warn(`[Baileys] Max reconnect attempts (${retryCount}) reached for user ${userId}. Stopping auto-reconnect.`);
+          global.waStatuses[userId] = 'disconnected';
+          global.waConnectionLocks[userId] = false;
+          return;
+        }
+
         const delay = statusCode === DisconnectReason.restartRequired ? 1500 : Math.min(15000, 2000 * retryCount);
 
         global.waStatuses[userId] = 'reconnecting';

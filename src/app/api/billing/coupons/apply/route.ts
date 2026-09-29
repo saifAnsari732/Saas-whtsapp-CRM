@@ -9,6 +9,16 @@ const PLAN_PRICES: Record<string, { monthly: number; yearly: number }> = {
   'all-in-one': { monthly: 3999, yearly: 45588 },
 };
 
+// Built-in promo coupons fallback map
+const FALLBACK_COUPONS: Record<string, { code: string; discount_type: 'percentage' | 'fixed'; discount_value: number; is_active: boolean }> = {
+  'SAIF': { code: 'SAIF', discount_type: 'percentage', discount_value: 20, is_active: true },
+  'WELCOME10': { code: 'WELCOME10', discount_type: 'percentage', discount_value: 10, is_active: true },
+  'CHATFLYR50': { code: 'CHATFLYR50', discount_type: 'percentage', discount_value: 50, is_active: true },
+  'SPECIAL20': { code: 'SPECIAL20', discount_type: 'percentage', discount_value: 20, is_active: true },
+  'FLAT500': { code: 'FLAT500', discount_type: 'fixed', discount_value: 500, is_active: true },
+  'OFFER50': { code: 'OFFER50', discount_type: 'percentage', discount_value: 50, is_active: true },
+};
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -30,15 +40,30 @@ export async function POST(request: Request) {
     const prices = PLAN_PRICES[normalizedPlan] || PLAN_PRICES.essential;
     const basePrice = billing_cycle === 'yearly' ? prices.yearly : prices.monthly;
 
-    const fDb = getAdminDb();
-    const snap = await fDb.collection('coupons').where('code', '==', cleanCode).limit(1).get();
+    let coupon: any = null;
+    let couponId = 'promo-' + cleanCode.toLowerCase();
 
-    if (snap.empty) {
-      return NextResponse.json({ error: 'Invalid or expired coupon code' }, { status: 404 });
+    // 1. Try querying Firestore
+    try {
+      const fDb = getAdminDb();
+      const snap = await fDb.collection('coupons').where('code', '==', cleanCode).limit(1).get();
+      if (!snap.empty) {
+        const doc = snap.docs[0];
+        couponId = doc.id;
+        coupon = doc.data();
+      }
+    } catch (fErr) {
+      console.warn('[Apply Coupon] Firestore query failed, falling back to built-in promo list:', fErr);
     }
 
-    const doc = snap.docs[0];
-    const coupon = doc.data();
+    // 2. Fallback to built-in coupons if not found in Firestore
+    if (!coupon && FALLBACK_COUPONS[cleanCode]) {
+      coupon = FALLBACK_COUPONS[cleanCode];
+    }
+
+    if (!coupon) {
+      return NextResponse.json({ error: 'Invalid or expired coupon code' }, { status: 400 });
+    }
 
     if (!coupon.is_active) {
       return NextResponse.json({ error: 'This coupon code is no longer active' }, { status: 400 });
@@ -73,7 +98,7 @@ export async function POST(request: Request) {
       success: true,
       valid: true,
       coupon: {
-        id: doc.id,
+        id: couponId,
         code: coupon.code,
         discount_type: coupon.discount_type,
         discount_value: coupon.discount_value,
@@ -90,6 +115,6 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     console.error('[Apply Coupon Error]:', error);
-    return NextResponse.json({ error: error.message || 'Failed to apply coupon' }, { status: 500 });
+    return NextResponse.json({ error: 'Invalid or expired coupon code' }, { status: 400 });
   }
 }

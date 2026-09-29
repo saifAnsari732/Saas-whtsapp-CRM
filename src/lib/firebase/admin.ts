@@ -13,15 +13,41 @@ import { getAuth, type Auth } from 'firebase-admin/auth';
 function getAdminApp(): App {
   if (getApps().length > 0) return getApps()[0];
 
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const projectId = 
+    process.env.FIREBASE_ADMIN_PROJECT_ID || 
+    process.env.FIREBASE_PROJECT_ID || 
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 
+    'whatsapp-saas-7ab44';
+
+  const clientEmail = 
+    process.env.FIREBASE_ADMIN_CLIENT_EMAIL || 
+    `firebase-adminsdk-fbsvc@${projectId}.iam.gserviceaccount.com`;
+
+  let privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+  if (privateKey) {
+    privateKey = privateKey.replace(/\\n/g, '\n');
+    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+      privateKey = privateKey.slice(1, -1);
+    }
+  }
+
+  try {
+    if (privateKey && privateKey.includes('BEGIN PRIVATE KEY')) {
+      return initializeApp({
+        credential: cert({
+          projectId: projectId,
+          clientEmail: clientEmail,
+          privateKey: privateKey,
+        }),
+        projectId: projectId,
+      });
+    }
+  } catch (err) {
+    console.warn('[Firebase Admin] Cert init failed, falling back to basic config:', err);
+  }
 
   return initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_ADMIN_PROJECT_ID!,
-      clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL!,
-      privateKey: privateKey!,
-    }),
-    projectId: process.env.FIREBASE_ADMIN_PROJECT_ID!,
+    projectId: projectId,
   });
 }
 

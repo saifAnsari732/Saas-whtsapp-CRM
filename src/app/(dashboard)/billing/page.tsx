@@ -174,9 +174,12 @@ export default function BillingPage() {
       const data = await res.json();
       if (res.ok && data.valid) {
         setAppliedCoupon(data.coupon);
-        toast.success(`Coupon '${data.coupon.code}' applied successfully!`);
+        const desc = data.coupon.discount_type === 'percentage' 
+          ? `${data.coupon.discount_value}% OFF` 
+          : `₹${data.coupon.discount_value} OFF`;
+        toast.success(`Coupon '${data.coupon.code}' applied! (${desc})`);
       } else {
-        toast.error(data.error || 'Invalid coupon code');
+        toast.error(data.error || 'Invalid or expired coupon code');
       }
     } catch (err) {
       toast.error('Failed to apply coupon');
