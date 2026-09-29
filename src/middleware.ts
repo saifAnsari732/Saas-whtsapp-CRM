@@ -196,6 +196,38 @@ export async function middleware(request: NextRequest) {
               return withRefreshedCookies(NextResponse.redirect(url));
             }
           }
+
+          // 2. Feature-Level Plan Route Gating Enforcement
+          const isTrialActive = account.subscription_status === 'trial' || (!account.subscription_status && isActive);
+          const rawPlan = account.subscription_plan || 'essential';
+          const normalizedPlan = rawPlan.toLowerCase().replace(/[-_]/g, '');
+
+          // Check Agent Team Management Route Gating (/agents)
+          if (pathname.startsWith('/agents')) {
+            const allowsAgents = isTrialActive || normalizedPlan === 'growth' || normalizedPlan === 'allinone' || normalizedPlan === 'enterprise';
+            if (!allowsAgents) {
+              const url = request.nextUrl.clone();
+              url.pathname = '/billing';
+              url.search = '?upgrade=true&feature=agents&required=growth';
+              return withRefreshedCookies(NextResponse.redirect(url));
+            }
+          }
+
+          // Check API Feature Gating (/api/agents)
+          if (pathname.startsWith('/api/agents')) {
+            const allowsAgents = isTrialActive || normalizedPlan === 'growth' || normalizedPlan === 'allinone' || normalizedPlan === 'enterprise';
+            if (!allowsAgents) {
+              return withRefreshedCookies(
+                NextResponse.json({
+                  error: "Feature Gated",
+                  code: "FEATURE_LOCKED",
+                  message: "Team Agent Management is available on Growth and All-In-One Enterprise plans. Please upgrade your plan.",
+                  required_plan: "growth",
+                  upgrade_url: "/billing"
+                }, { status: 403 })
+              );
+            }
+          }
         }
       }
     }

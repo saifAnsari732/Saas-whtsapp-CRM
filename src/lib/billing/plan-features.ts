@@ -84,8 +84,8 @@ export const PLAN_CONFIGS: Record<string, PlanFeatureConfig> = {
       sharedInbox: true,
       broadcasts: true,
       automations: true,
-      flows: false,
-      aiReply: false,
+      flows: true,
+      aiReply: true,
       pipelines: true,
       templates: true,
       webhooks: true,
@@ -100,6 +100,8 @@ export const PLAN_CONFIGS: Record<string, PlanFeatureConfig> = {
       '/broadcasts',
       '/broadcasts/new',
       '/automations',
+      '/flows',
+      '/keyword-flows',
       '/contacts',
       '/pipelines',
       '/notifications',
@@ -107,7 +109,7 @@ export const PLAN_CONFIGS: Record<string, PlanFeatureConfig> = {
       '/settings',
       '/profile'
     ],
-    description: '5 Team members, 15,000 messages, QR coexistence, bulk broadcasts & automations.',
+    description: '2 WhatsApp Numbers, 5 Agents FREE, 15,000 Messages, AI Agent & Flow Builder Included.',
     badge: 'Essential'
   },
 
@@ -151,7 +153,7 @@ export const PLAN_CONFIGS: Record<string, PlanFeatureConfig> = {
       '/settings',
       '/profile'
     ],
-    description: '15 Team members, 50,000 messages, visual flow builder, AI smart replies & unlimited contacts.',
+    description: '3 WhatsApp Numbers, 15 Agents FREE, 50,000 Messages, Unlimited Contacts & Smart Routing.',
     badge: 'Growth'
   },
 
@@ -195,7 +197,7 @@ export const PLAN_CONFIGS: Record<string, PlanFeatureConfig> = {
       '/settings',
       '/profile'
     ],
-    description: 'Unlimited messaging, unlimited contacts, custom integrations & dedicated manager.',
+    description: 'Unlimited WhatsApp Numbers, Unlimited Agents, Unlimited Messaging & Dedicated Manager.',
     badge: 'Enterprise'
   },
 
