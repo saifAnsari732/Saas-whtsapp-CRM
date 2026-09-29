@@ -2,20 +2,21 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 import { MessageTemplate } from '@/types';
 import { useBroadcastSending } from '@/hooks/use-broadcast-sending';
 import { uploadAccountMedia } from '@/lib/storage/upload-media';
-import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
+import { sanitizePhoneForMeta, validatePhone, PhoneValidation } from '@/lib/whatsapp/phone-utils';
+import { WhatsAppPhoneMockup } from '@/components/broadcasts/whatsapp-phone-mockup';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -30,14 +31,19 @@ import {
   UploadCloud, 
   Smartphone,
   Phone,
-  ExternalLink,
-  Reply,
-  CheckCheck,
   Rocket,
   Sparkles,
-  Send,
   ShieldCheck,
-  UserCheck
+  CheckCircle2,
+  AlertTriangle,
+  ArrowLeft,
+  Calendar,
+  Zap,
+  Copy,
+  Trash2,
+  FileText,
+  Tag,
+  Check
 } from 'lucide-react';
 
 export default function NewBroadcastPage() {
@@ -50,17 +56,40 @@ export default function NewBroadcastPage() {
   const [name, setName] = useState('');
   
   // Recipients
-  const [recipientMode, setRecipientMode] = useState<'group' | 'numbers'>('group');
+  const [recipientMode, setRecipientMode] = useState<'group' | 'numbers'>('numbers');
   const [groupId, setGroupId] = useState('');
   const [pastedNumbers, setPastedNumbers] = useState('');
 
-  const detectedNumbersList = useMemo(() => {
-    return pastedNumbers
-      .split(/[\n,]+/)
-      .map((n) => sanitizePhoneForMeta(n.trim()))
-      .filter((n) => n.length >= 8);
+  // Advanced phone parsing & live validation
+  const parsedPhoneList = useMemo(() => {
+    if (!pastedNumbers.trim()) {
+      return { valid: [] as PhoneValidation[], invalid: [] as { raw: string; error: string }[] };
+    }
+    const lines = pastedNumbers
+      .split(/[\n,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const valid: PhoneValidation[] = [];
+    const invalid: { raw: string; error: string }[] = [];
+    const seenPhones = new Set<string>();
+
+    for (const raw of lines) {
+      const res = validatePhone(raw);
+      if (res.isValid && res.phone) {
+        if (!seenPhones.has(res.phone)) {
+          seenPhones.add(res.phone);
+          valid.push(res);
+        }
+      } else {
+        invalid.push({ raw, error: res.error || 'Invalid phone' });
+      }
+    }
+    return { valid, invalid };
   }, [pastedNumbers]);
-  const detectedNumbersCount = detectedNumbersList.length;
+
+  const validCount = parsedPhoneList.valid.length;
+  const invalidCount = parsedPhoneList.invalid.length;
 
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [groupSelection, setGroupSelection] = useState<string>('create_new');
@@ -179,7 +208,7 @@ export default function NewBroadcastPage() {
 
     try {
       setIsUploading(true);
-      toast.info('Uploading media...');
+      toast.info('Uploading media attachment...');
       
       const { publicUrl } = await uploadAccountMedia('chat-media', file);
       setHeaderMediaUrl(publicUrl);
@@ -242,7 +271,10 @@ export default function NewBroadcastPage() {
       }
       
       if (groupNumbers.trim()) {
-        const numbers = groupNumbers.split(/[\n,]+/).map(n => sanitizePhoneForMeta(n.trim())).filter(Boolean);
+        const numbers = groupNumbers
+          .split(/[\n,]+/)
+          .map(n => sanitizePhoneForMeta(n.trim()))
+          .filter(Boolean);
         
         if (numbers.length > 0) {
           const { data: existingContacts } = await supabase.from('contacts').select('id, phone').eq('account_id', profile.account_id).in('phone', numbers);
@@ -320,8 +352,8 @@ export default function NewBroadcastPage() {
       toast.error('Please select a contact group');
       return;
     }
-    if (recipientMode === 'numbers' && !pastedNumbers.trim()) {
-      toast.error('Please paste at least one phone number');
+    if (recipientMode === 'numbers' && validCount === 0) {
+      toast.error('Please paste at least one valid phone number');
       return;
     }
     if (sendWhen === 'later' && !scheduleDate) {
@@ -329,11 +361,11 @@ export default function NewBroadcastPage() {
       return;
     }
     if (!selectedTemplate) {
-      toast.error('Please select a WhatsApp Template');
+      toast.error('Please select an approved WhatsApp Template');
       return;
     }
     if (requiresMedia && !headerMediaUrl.trim()) {
-      toast.error('This template requires a media attachment URL');
+      toast.error('This template requires a header media attachment');
       return;
     }
     
@@ -347,13 +379,11 @@ export default function NewBroadcastPage() {
           audience = { type: 'tags', tagIds: [groupId] };
         }
       } else if (recipientMode === 'numbers') {
-        const numbers = pastedNumbers
-          .split(/[\n,]+/)
-          .map(n => sanitizePhoneForMeta(n.trim()))
-          .filter(Boolean);
+        // Use sanitized & validated phone numbers
+        const sanitizedPhones = parsedPhoneList.valid.map(v => v.phone);
         audience = { 
           type: 'csv', 
-          csvContacts: numbers.map(phone => ({ phone })) 
+          csvContacts: sanitizedPhones.map(phone => ({ phone })) 
         };
       }
 
@@ -368,7 +398,7 @@ export default function NewBroadcastPage() {
         batchDelayMs: sendDelaySeconds * 1000,
       } as any);
 
-      toast.success(sendWhen === 'later' ? 'Campaign scheduled successfully!' : 'Campaign created and sending started!');
+      toast.success(sendWhen === 'later' ? 'Campaign scheduled successfully!' : 'Campaign launched successfully!');
       
       if (sendWhen === 'later') {
         router.push('/broadcasts');
@@ -382,350 +412,571 @@ export default function NewBroadcastPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex flex-col min-h-screen bg-slate-50/50 dark:bg-zinc-950">
+      {/* Modal for Group Creation */}
       <Dialog open={isGroupModalOpen} onOpenChange={setIsGroupModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[440px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Manage Contact Group</DialogTitle>
-            <DialogDescription>
-              Create a new group or add numbers to an existing one.
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Users className="h-5 w-5 text-emerald-600" />
+              <span>Manage Contact Group</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Create a new contact audience or append numbers to an existing group.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label>Select Group</Label>
+          <div className="grid gap-4 py-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Group Selection</Label>
               <Select value={groupSelection} onValueChange={(v) => setGroupSelection(v || '')}>
-                <SelectTrigger>
+                <SelectTrigger className="rounded-xl h-10 text-xs">
                   <SelectValue placeholder="Select group" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="create_new" className="font-semibold text-primary">+ Create New Group</SelectItem>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="create_new" className="font-bold text-emerald-600">
+                    + Create New Group
+                  </SelectItem>
                   {contactGroups.map((tag) => (
-                    <SelectItem key={tag.id} value={tag.id}>{tag.name}</SelectItem>
+                    <SelectItem key={tag.id} value={tag.id} className="text-xs">
+                      {tag.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             
             {groupSelection === 'create_new' && (
-              <div className="space-y-2">
-                <Label>New Group Name</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">New Group Name *</Label>
                 <Input 
-                  placeholder="e.g. Premium Customers" 
+                  placeholder="e.g. VIP Customers, Diwali Buyers" 
                   value={newGroupName} 
                   onChange={e => setNewGroupName(e.target.value)} 
+                  className="rounded-xl h-10 text-xs"
                 />
               </div>
             )}
             
-            <div className="space-y-2">
-              <Label>Add Numbers (Optional)</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Add Phone Numbers (Optional)</Label>
               <Textarea 
-                placeholder="Paste numbers separated by commas or newlines (e.g. 919876543210, 919876543211)..."
+                placeholder="Paste numbers separated by newlines (e.g. 919876543210, 9511450924)..."
                 value={groupNumbers}
                 onChange={e => setGroupNumbers(e.target.value)}
-                className="min-h-[100px]"
+                className="min-h-[110px] rounded-xl text-xs font-mono"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsGroupModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveGroup} disabled={isSavingGroup}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" size="sm" onClick={() => setIsGroupModalOpen(false)} className="rounded-xl text-xs">
+              Cancel
+            </Button>
+            <Button 
+              size="sm"
+              onClick={handleSaveGroup} 
+              disabled={isSavingGroup}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"
+            >
+              {isSavingGroup ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
               {isSavingGroup ? "Saving..." : "Save Group"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       
-      <div className="w-full px-4 sm:px-8 py-6 pb-28 max-w-7xl mx-auto">
-        {/* Top Header Row with Action Buttons */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-5 border-b border-border/80">
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
-              <span>Create New Campaign</span>
-              <span className="text-xs font-bold px-3 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30">
-                Bulk Broadcast
-              </span>
-            </h1>
-            <p className="text-xs text-muted-foreground mt-1">
-              Configure campaign details, select target contact groups, and schedule automatic dispatches.
+      {/* Main Container */}
+      <div className="w-full px-4 sm:px-8 py-6 pb-24 max-w-7xl mx-auto space-y-6">
+        
+        {/* Top Breadcrumb & Header Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-zinc-800">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
+              <Link href="/broadcasts" className="hover:text-foreground flex items-center gap-1 transition-colors">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>Campaigns</span>
+              </Link>
+              <span>/</span>
+              <span className="text-foreground font-semibold">New Broadcast</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                Create WhatsApp Campaign
+              </h1>
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60 font-bold text-[10px] px-2.5 py-0.5 rounded-full">
+                Meta Official Cloud API
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Configure campaign details, select verified audience, schedule delivery speed, and preview message in real-time.
             </p>
           </div>
           
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Header Action Buttons */}
+          <div className="flex items-center gap-2.5 shrink-0">
             <Button 
               variant="outline" 
               size="sm" 
               onClick={() => router.push('/broadcasts')} 
-              className="gap-1.5 rounded-xl border-border/80 text-xs font-semibold px-4"
+              className="gap-1.5 rounded-xl border-slate-200 dark:border-zinc-800 text-xs font-semibold px-4 h-9"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
               <span>Cancel</span>
             </Button>
             <Button 
               onClick={handleSend} 
               disabled={isProcessing} 
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all gap-2"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-5 h-9 rounded-xl shadow-sm transition-all gap-1.5 active:scale-[0.98]"
             >
-              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-              <span>{isProcessing ? (sendWhen === 'later' ? 'Scheduling...' : 'Sending...') : (sendWhen === 'later' ? 'Schedule Campaign' : '🚀 Launch Campaign Now')}</span>
+              {isProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
+              <span>
+                {isProcessing 
+                  ? (sendWhen === 'later' ? 'Scheduling...' : 'Dispatching...') 
+                  : (sendWhen === 'later' ? 'Schedule Broadcast' : 'Launch Campaign Now')}
+              </span>
             </Button>
           </div>
         </div>
 
-        {/* 4-Step Intuitive Workflow Guide */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <div className="p-3 rounded-xl bg-card border border-border/80 shadow-xs flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-emerald-500/15 text-emerald-600 font-black text-xs flex items-center justify-center shrink-0">1</div>
+        {/* 4-Step Sleek Workflow Guide */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className={cn(
+            "p-3 rounded-2xl border transition-all flex items-center gap-3",
+            name.trim() 
+              ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/60" 
+              : "bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs"
+          )}>
+            <div className={cn(
+              "h-8 w-8 rounded-xl font-bold text-xs flex items-center justify-center shrink-0",
+              name.trim() ? "bg-emerald-600 text-white" : "bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300"
+            )}>
+              {name.trim() ? <Check className="h-4 w-4 stroke-[2.5]" /> : "1"}
+            </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-foreground truncate">1. Campaign Title</p>
-              <p className="text-[10px] text-muted-foreground truncate">Name your broadcast</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">1. Campaign Title</p>
+              <p className="text-[11px] text-muted-foreground truncate">{name.trim() || 'Name broadcast'}</p>
             </div>
           </div>
-          <div className="p-3 rounded-xl bg-card border border-border/80 shadow-xs flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-blue-500/15 text-blue-600 font-black text-xs flex items-center justify-center shrink-0">2</div>
+
+          <div className={cn(
+            "p-3 rounded-2xl border transition-all flex items-center gap-3",
+            (recipientMode === 'numbers' ? validCount > 0 : !!groupId)
+              ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/60" 
+              : "bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs"
+          )}>
+            <div className={cn(
+              "h-8 w-8 rounded-xl font-bold text-xs flex items-center justify-center shrink-0",
+              (recipientMode === 'numbers' ? validCount > 0 : !!groupId) 
+                ? "bg-emerald-600 text-white" 
+                : "bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300"
+            )}>
+              {(recipientMode === 'numbers' ? validCount > 0 : !!groupId) ? <Check className="h-4 w-4 stroke-[2.5]" /> : "2"}
+            </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-foreground truncate">2. Target Audience</p>
-              <p className="text-[10px] text-muted-foreground truncate">Group or Paste Numbers</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">2. Target Audience</p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {recipientMode === 'numbers' 
+                  ? (validCount > 0 ? `${validCount} Valid Numbers` : 'Paste numbers') 
+                  : (groupId ? 'Group selected' : 'Choose group')}
+              </p>
             </div>
           </div>
-          <div className="p-3 rounded-xl bg-card border border-border/80 shadow-xs flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-amber-500/15 text-amber-600 font-black text-xs flex items-center justify-center shrink-0">3</div>
+
+          <div className="p-3 rounded-2xl border bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs flex items-center gap-3">
+            <div className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center justify-center shrink-0">
+              3
+            </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-foreground truncate">3. Delivery Timing</p>
-              <p className="text-[10px] text-muted-foreground truncate">Instant or Scheduled</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">3. Delivery Speed</p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {sendWhen === 'immediately' ? `Instant (${sendDelaySeconds}s delay)` : 'Scheduled'}
+              </p>
             </div>
           </div>
-          <div className="p-3 rounded-xl bg-card border border-border/80 shadow-xs flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-purple-500/15 text-purple-600 font-black text-xs flex items-center justify-center shrink-0">4</div>
+
+          <div className={cn(
+            "p-3 rounded-2xl border transition-all flex items-center gap-3",
+            selectedTemplate 
+              ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/60" 
+              : "bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs"
+          )}>
+            <div className={cn(
+              "h-8 w-8 rounded-xl font-bold text-xs flex items-center justify-center shrink-0",
+              selectedTemplate ? "bg-emerald-600 text-white" : "bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300"
+            )}>
+              {selectedTemplate ? <Check className="h-4 w-4 stroke-[2.5]" /> : "4"}
+            </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-foreground truncate">4. Live Preview</p>
-              <p className="text-[10px] text-muted-foreground truncate">Verify & Launch</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">4. Template & Preview</p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {selectedTemplate ? selectedTemplate.name : 'Choose template'}
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Main Configuration Cards (7 Columns) */}
+        {/* 2-Column Responsive Workspace */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* Left Column: Form & Step Cards (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
             
-            {/* Section 1: Basic Information */}
-            <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold border-b border-border/60 pb-3">
-                <Settings className="h-4 w-4 text-emerald-500" />
-                <h2 className="text-xs uppercase tracking-wider">1. Basic Information</h2>
+            {/* Step 1: Campaign Details */}
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800/80 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold text-xs">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">1. Campaign Details</h2>
+                    <p className="text-[11px] text-muted-foreground">Give your broadcast a recognizable reference name</p>
+                  </div>
+                </div>
               </div>
               
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-foreground">Campaign Name *</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Campaign Name <span className="text-rose-500">*</span>
+                </Label>
                 <Input 
-                  placeholder="e.g., Festive Offer Sale Campaign" 
+                  placeholder="e.g. Diwali Mega Festive Offer, September Newsletter" 
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-background border-border/80 text-sm focus:border-emerald-500 transition-colors rounded-xl h-11"
+                  className="bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-sm focus-visible:ring-emerald-500 rounded-xl h-11"
                 />
               </div>
             </div>
 
-            {/* Section 2: Target Recipients */}
-            <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold border-b border-border/60 pb-3">
-                <Users className="h-4 w-4 text-blue-500" />
-                <h2 className="text-xs uppercase tracking-wider">2. Target Audience & Recipients *</h2>
+            {/* Step 2: Target Audience & Smart Numbers */}
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800/80 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center font-bold text-xs">
+                    <Users className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">2. Target Audience & Numbers <span className="text-rose-500">*</span></h2>
+                    <p className="text-[11px] text-muted-foreground">Select saved contact tags or paste direct phone numbers</p>
+                  </div>
+                </div>
               </div>
               
               <Tabs value={recipientMode} onValueChange={(v: any) => setRecipientMode(v)} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 p-1.5 bg-muted/80 rounded-xl mb-4 h-12 gap-1.5">
-                  <TabsTrigger value="group" className="rounded-lg font-bold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs py-2">
-                    🏷️ Select Contact Group
-                  </TabsTrigger>
-                  <TabsTrigger value="numbers" className="rounded-lg font-bold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs py-2 flex items-center justify-center gap-1.5">
-                    <span>📋 Paste Direct Numbers</span>
-                    {detectedNumbersCount > 0 && (
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded-full font-black">
-                        {detectedNumbersCount}
+                <TabsList className="grid w-full grid-cols-2 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl mb-4 h-11 gap-1">
+                  <TabsTrigger 
+                    value="numbers" 
+                    className="rounded-lg font-bold text-xs data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs py-1.5 flex items-center justify-center gap-1.5"
+                  >
+                    <Phone className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Paste Direct Numbers</span>
+                    {validCount > 0 && (
+                      <span className="text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.2 rounded-full font-bold">
+                        {validCount}
                       </span>
                     )}
                   </TabsTrigger>
+
+                  <TabsTrigger 
+                    value="group" 
+                    className="rounded-lg font-bold text-xs data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs py-1.5 flex items-center justify-center gap-1.5"
+                  >
+                    <Tag className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Select Contact Group</span>
+                  </TabsTrigger>
                 </TabsList>
 
+                {/* TAB: Direct Numbers */}
+                <TabsContent value="numbers" className="mt-0 space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        Phone Numbers List
+                      </Label>
+                      {validCount > 0 && (
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 text-[11px] font-bold py-0.5">
+                          ✓ {validCount} Ready (+91 Formatted)
+                        </Badge>
+                      )}
+                      {invalidCount > 0 && (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-300 dark:border-amber-800 text-[11px] font-bold py-0.5">
+                          ⚠️ {invalidCount} Invalid/Skipped
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setPastedNumbers("9511450924\n9876543210\n919876543211")} 
+                        className="text-[11px] h-7 px-2 text-slate-600 hover:text-emerald-600 rounded-lg"
+                      >
+                        Sample Numbers
+                      </Button>
+                      {pastedNumbers.trim() && (
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setPastedNumbers("")} 
+                          className="text-[11px] h-7 px-2 text-slate-400 hover:text-rose-500 rounded-lg"
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <Textarea 
+                    placeholder="Paste numbers (one per line, with or without 91):&#10;9511450924&#10;9876543210&#10;+91 91234 56789" 
+                    className="min-h-[130px] bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 font-mono text-xs rounded-xl p-3 leading-relaxed focus-visible:ring-emerald-500"
+                    value={pastedNumbers}
+                    onChange={(e) => setPastedNumbers(e.target.value)}
+                  />
+
+                  {/* Formatted Number Chips Preview */}
+                  {validCount > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground font-medium">
+                        <span>Formatted Dispatch Preview ({validCount} total):</span>
+                        {validCount > 4 && <span>Showing first 4</span>}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {parsedPhoneList.valid.slice(0, 4).map((item, idx) => (
+                          <span 
+                            key={idx} 
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-mono text-xs font-semibold"
+                          >
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            {item.displayPhone || `+${item.phone}`}
+                          </span>
+                        ))}
+                        {validCount > 4 && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-400 text-xs font-medium">
+                            +{validCount - 4} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Smart Validation Explanatory Card */}
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200/80 dark:border-zinc-800/80 text-[11px] space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      <span>Smart Number Auto-Correction Active</span>
+                    </div>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Indian 10-digit mobile numbers (e.g. <code>9511450924</code>) automatically receive country code <code>91</code>. Accidental duplicate prefixes (<code>9191...</code>), international zeros (<code>0091...</code>), trunk zeros (<code>0...</code>), hyphens, and spaces are automatically filtered so no message ever fails.
+                    </p>
+                  </div>
+                </TabsContent>
+
+                {/* TAB: Contact Group */}
                 <TabsContent value="group" className="mt-0 space-y-3">
                   <div className="flex items-center gap-2">
                     <Select value={groupId} onValueChange={(v) => setGroupId(v || '')}>
-                      <SelectTrigger className="bg-background border-border/80 w-full rounded-xl h-11">
-                        <SelectValue placeholder="Choose a contact group..." />
+                      <SelectTrigger className="bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 w-full rounded-xl h-11 text-xs font-medium">
+                        <SelectValue placeholder="Choose an audience group..." />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">⚡ All Contacts</SelectItem>
+                      <SelectContent className="rounded-xl">
+                        <SelectItem value="all" className="font-bold text-emerald-600">
+                          ⚡ All Contacts (Broadcast to entire CRM)
+                        </SelectItem>
                         {contactGroups.map(g => (
-                          <SelectItem key={g.id} value={g.id}>
+                          <SelectItem key={g.id} value={g.id} className="text-xs">
                             🏷️ {g.name || 'Unnamed Group'}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button type="button" variant="outline" onClick={() => setIsGroupModalOpen(true)} className="shrink-0 font-bold text-xs rounded-xl h-11 border-blue-500/30 text-blue-600 hover:bg-blue-500/10">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setIsGroupModalOpen(true)} 
+                      className="shrink-0 font-bold text-xs rounded-xl h-11 border-blue-500/30 text-blue-600 hover:bg-blue-500/10 px-4"
+                    >
                       + New Group
                     </Button>
                   </div>
                   <p className="text-[11px] text-muted-foreground">Select an existing audience group saved from your contacts or tags list.</p>
                 </TabsContent>
-
-                <TabsContent value="numbers" className="mt-0 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-foreground">Paste Phone Numbers (one per line or comma-separated)</span>
-                    <div className="flex items-center gap-2">
-                      {detectedNumbersCount > 0 && (
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[11px] font-bold">
-                          ✓ {detectedNumbersCount} Numbers Detected
-                        </Badge>
-                      )}
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => setPastedNumbers("919876543210\n919876543211\n919876543212")} 
-                        className="text-[11px] h-7 rounded-lg"
-                      >
-                        Insert Sample
-                      </Button>
-                    </div>
-                  </div>
-                  <Textarea 
-                    placeholder="919876543210&#10;919876543211&#10;919876543212" 
-                    className="min-h-[120px] bg-background border-border/80 font-mono text-xs rounded-xl p-3 leading-relaxed"
-                    value={pastedNumbers}
-                    onChange={(e) => setPastedNumbers(e.target.value)}
-                  />
-                  <p className="text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-xl border border-border/60">
-                    💡 <strong>Smart Format:</strong> 10-digit Indian numbers (e.g. 9511450914) are automatically formatted with country code <code>91</code>. You can paste with or without 91.
-                  </p>
-                </TabsContent>
               </Tabs>
             </div>
 
-            {/* Section 3: Dispatch Timing & Delay */}
-            <div className="bg-rose-500/5 border border-rose-500/20 rounded-2xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-rose-500/20 pb-3">
-                <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-xs uppercase tracking-wider">
-                  <Clock className="h-4 w-4 text-rose-500" />
-                  <span>3. Dispatch Timing & Anti-Ban Protection *</span>
+            {/* Step 3: Delivery Schedule & Anti-Ban Speed */}
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800/80 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                    <Clock className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">3. Delivery Schedule & Anti-Ban Speed <span className="text-rose-500">*</span></h2>
+                    <p className="text-[11px] text-muted-foreground">Configure dispatch schedule and protect your WhatsApp number reputation</p>
+                  </div>
                 </div>
               </div>
 
-              <RadioGroup value={sendWhen} onValueChange={(v: any) => setSendWhen(v)} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className={cn(
-                  "flex items-start space-x-3 p-3.5 rounded-xl border transition-all cursor-pointer",
-                  sendWhen === 'immediately' ? "bg-background border-rose-500 ring-1 ring-rose-500/40 shadow-xs" : "bg-card border-border/60 hover:border-border"
-                )}>
-                  <RadioGroupItem value="immediately" id="immed" className="mt-0.5" />
-                  <Label htmlFor="immed" className="font-semibold text-xs cursor-pointer space-y-1">
-                    <span className="block text-foreground font-bold">Send Immediately</span>
-                    <span className="text-[11px] text-muted-foreground font-normal block">Campaign starts dispatching right after creation</span>
-                  </Label>
+              {/* Delivery Timing Options */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div 
+                  onClick={() => setSendWhen('immediately')}
+                  className={cn(
+                    "p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between space-y-1.5",
+                    sendWhen === 'immediately' 
+                      ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-500 ring-1 ring-emerald-500/30 shadow-xs" 
+                      : "bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 hover:border-slate-300"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Zap className="h-4 w-4 text-emerald-600" />
+                      Send Immediately
+                    </span>
+                    {sendWhen === 'immediately' && <Check className="h-4 w-4 text-emerald-600 stroke-[2.5]" />}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Broadcast dispatches immediately through Meta Cloud API upon launch.
+                  </p>
                 </div>
 
-                <div className={cn(
-                  "flex items-start space-x-3 p-3.5 rounded-xl border transition-all cursor-pointer",
-                  sendWhen === 'later' ? "bg-background border-rose-500 ring-1 ring-rose-500/40 shadow-xs" : "bg-card border-border/60 hover:border-border"
-                )}>
-                  <RadioGroupItem value="later" id="later" className="mt-0.5" />
-                  <Label htmlFor="later" className="font-semibold text-xs cursor-pointer space-y-1">
-                    <span className="block text-foreground font-bold">Schedule for Later</span>
-                    <span className="text-[11px] text-muted-foreground font-normal block">Choose custom date & time slot</span>
-                  </Label>
+                <div 
+                  onClick={() => setSendWhen('later')}
+                  className={cn(
+                    "p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between space-y-1.5",
+                    sendWhen === 'later' 
+                      ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-500 ring-1 ring-emerald-500/30 shadow-xs" 
+                      : "bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 hover:border-slate-300"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Calendar className="h-4 w-4 text-indigo-600" />
+                      Schedule for Later
+                    </span>
+                    {sendWhen === 'later' && <Check className="h-4 w-4 text-emerald-600 stroke-[2.5]" />}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Set a future date and time slot for automated campaign delivery.
+                  </p>
                 </div>
-              </RadioGroup>
+              </div>
 
               {sendWhen === 'later' && (
-                <div className="pt-2">
-                  <Label className="text-xs font-semibold text-foreground mb-1.5 block">Select Schedule Date & Time</Label>
-                  <Input type="datetime-local" className="bg-background max-w-sm border-border/80 rounded-xl" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+                <div className="pt-2 space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Select Schedule Date & Time <span className="text-rose-500">*</span>
+                  </Label>
+                  <Input 
+                    type="datetime-local" 
+                    className="bg-slate-50/50 dark:bg-zinc-950 max-w-sm border-slate-200 dark:border-zinc-800 rounded-xl h-11 text-xs" 
+                    value={scheduleDate} 
+                    onChange={e => setScheduleDate(e.target.value)} 
+                  />
                 </div>
               )}
 
-              <div className="pt-4 border-t border-rose-500/20 space-y-2">
+              {/* Anti-Ban Interval Protection */}
+              <div className="pt-4 border-t border-slate-100 dark:border-zinc-800/80 space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="font-bold text-foreground text-xs flex items-center gap-2">
-                    <span>Message Interval (Anti-Ban Protection)</span>
-                    <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/30 px-2 py-0.5 rounded-full">Anti-Ban Guard</span>
+                  <Label className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                    <span>Message Dispatch Interval (Anti-Ban Guard)</span>
                   </Label>
+                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 text-[10px] font-bold">
+                    Safe Stagger
+                  </Badge>
                 </div>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <Select value={String(sendDelaySeconds)} onValueChange={(v) => setSendDelaySeconds(Number(v))}>
-                    <SelectTrigger className="w-56 bg-background font-semibold border-border/80 text-xs rounded-xl">
-                      <SelectValue placeholder="Select delay" />
+                    <SelectTrigger className="w-full sm:w-60 bg-slate-50/50 dark:bg-zinc-950 font-semibold border-slate-200 dark:border-zinc-800 text-xs rounded-xl h-10">
+                      <SelectValue placeholder="Select interval" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1 Second (Fast)</SelectItem>
-                      <SelectItem value="2">2 Seconds</SelectItem>
-                      <SelectItem value="3">3 Seconds (Recommended)</SelectItem>
-                      <SelectItem value="5">5 Seconds (Safe)</SelectItem>
-                      <SelectItem value="10">10 Seconds (Very Safe)</SelectItem>
-                      <SelectItem value="15">15 Seconds (Extra Safe)</SelectItem>
-                      <SelectItem value="30">30 Seconds</SelectItem>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="1" className="text-xs">1 Second (High Speed)</SelectItem>
+                      <SelectItem value="2" className="text-xs">2 Seconds (Normal)</SelectItem>
+                      <SelectItem value="3" className="text-xs font-bold text-emerald-600">3 Seconds (Recommended)</SelectItem>
+                      <SelectItem value="5" className="text-xs">5 Seconds (Very Safe)</SelectItem>
+                      <SelectItem value="10" className="text-xs">10 Seconds (Ultra Protection)</SelectItem>
+                      <SelectItem value="15" className="text-xs">15 Seconds (Extra Safe)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <span className="text-[11px] text-muted-foreground font-medium">Wait {sendDelaySeconds}s between each message.</span>
+                  <span className="text-[11px] text-muted-foreground font-medium">
+                    Waits {sendDelaySeconds} second{sendDelaySeconds > 1 ? 's' : ''} between each message to protect phone health.
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Section 4: WhatsApp Message Configuration */}
-            <div className="bg-card text-card-foreground border border-border/80 rounded-2xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold border-b border-border/60 pb-3">
-                <MessageSquare className="h-4 w-4 text-rose-500" />
-                <h2 className="text-xs uppercase tracking-wider">4. Message Configuration & Template *</h2>
+            {/* Step 4: Template & Dynamic Personalization */}
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800/80 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold text-xs">
+                    <MessageSquare className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">4. Message Template & Personalization <span className="text-rose-500">*</span></h2>
+                    <p className="text-[11px] text-muted-foreground">Select approved Meta template and map dynamic variables</p>
+                  </div>
+                </div>
               </div>
 
+              {/* Template Selector */}
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-foreground">Select WhatsApp Template *</Label>
+                <Label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Select Approved Template <span className="text-rose-500">*</span>
+                </Label>
                 <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v || '')} disabled={isLoadingTemplates}>
-                  <SelectTrigger className="bg-background border-border/80 font-medium rounded-xl">
+                  <SelectTrigger className="bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 font-medium rounded-xl h-11 text-xs">
                     <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Choose an approved template..."} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-xl">
                     {templates.length === 0 && !isLoadingTemplates && (
                       <SelectItem value="none" disabled>No approved templates found</SelectItem>
                     )}
                     {templates.map(t => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name} ({t.language})
+                      <SelectItem key={t.id} value={t.id} className="text-xs">
+                        {t.name} ({t.category || 'Utility'}) — {t.language || 'en'}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground">Select from Meta-approved WhatsApp Business templates for bulk broadcast dispatch.</p>
+
+                {/* Meta Marketing Notice */}
                 {selectedTemplate?.category?.toUpperCase() === 'MARKETING' && (
-                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs">
-                    <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
                     <div className="space-y-1">
                       <p className="font-bold">Meta Cloud API: Marketing Template Notice</p>
-                      <p className="text-[11px] leading-relaxed text-amber-800/80 dark:text-amber-200/80">
-                        This is a <strong>Marketing</strong> template. Meta charges per conversation for marketing messages. Ensure your WhatsApp Business Account has a valid <strong>Payment Method (Card)</strong> added in Meta WhatsApp Manager (Business Settings &gt; WhatsApp Accounts &gt; Billing). If not configured, Meta will accept the send but fail delivery with <em>&quot;Business eligibility payment issue&quot;</em>.
+                      <p className="text-[11px] leading-relaxed text-amber-900/80 dark:text-amber-200/80">
+                        This is a <strong>Marketing</strong> template. Ensure your WhatsApp Business Account has a valid <strong>Payment Method (Card)</strong> added in Meta WhatsApp Manager (Business Settings &gt; WhatsApp Accounts &gt; Billing). Without a linked card, Meta may accept the API call but pause delivery with <em>&quot;Business eligibility payment issue&quot;</em>.
                       </p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Variable Mapping UI */}
+              {/* Dynamic Variables Mapper */}
               {selectedTemplate && placeholders.length > 0 && (
-                <div className="space-y-4 pt-4 border-t border-border/60">
-                  <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-xs">
-                    <Settings className="h-3.5 w-3.5 text-rose-500" />
-                    <h3>Template Variables Personalization</h3>
+                <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80">
+                  <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-bold text-xs">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Personalize Dynamic Variables</span>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {placeholders.map((ph) => {
                       const key = ph.replace(/[\{\}]/g, '');
                       const current = variables[key] || { type: 'field', value: 'name' };
                       return (
-                        <div key={ph} className="p-3 border border-border/80 rounded-xl bg-background space-y-2">
+                        <div key={ph} className="p-3 border border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50/50 dark:bg-zinc-950 space-y-2">
                           <div className="flex items-center justify-between font-bold text-xs">
-                            <span>Variable {ph}</span>
-                            <span className="text-[10px] bg-rose-500/10 text-rose-600 border border-rose-500/30 px-2 py-0.5 rounded font-semibold">
+                            <span className="text-slate-900 dark:text-white font-mono">{ph}</span>
+                            <span className="text-[10px] bg-slate-200/70 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-semibold">
                               {current.type === 'field' ? 'Contact Field' : current.type === 'custom_field' ? 'Custom Field' : 'Static Text'}
                             </span>
                           </div>
@@ -739,13 +990,13 @@ export default function NewBroadcastPage() {
                                 }));
                               }}
                             >
-                              <SelectTrigger className="text-xs h-8 bg-card border-border/60 rounded-lg">
+                              <SelectTrigger className="text-xs h-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 rounded-lg">
                                 <SelectValue placeholder="Type" />
                               </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="field">Contact Field</SelectItem>
-                                <SelectItem value="static">Static Text</SelectItem>
-                                <SelectItem value="custom_field">Custom Field</SelectItem>
+                              <SelectContent className="rounded-xl">
+                                <SelectItem value="field" className="text-xs">Contact Field</SelectItem>
+                                <SelectItem value="static" className="text-xs">Static Text</SelectItem>
+                                <SelectItem value="custom_field" className="text-xs">Custom Field</SelectItem>
                               </SelectContent>
                             </Select>
 
@@ -761,14 +1012,14 @@ export default function NewBroadcastPage() {
                                   }
                                 }}
                               >
-                                <SelectTrigger className="text-xs h-8 bg-card border-border/60 rounded-lg">
+                                <SelectTrigger className="text-xs h-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 rounded-lg">
                                   <SelectValue placeholder="Field" />
                                 </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="name">Name</SelectItem>
-                                  <SelectItem value="phone">Phone Number</SelectItem>
-                                  <SelectItem value="email">Email</SelectItem>
-                                  <SelectItem value="company">Company</SelectItem>
+                                <SelectContent className="rounded-xl">
+                                  <SelectItem value="name" className="text-xs">Name</SelectItem>
+                                  <SelectItem value="phone" className="text-xs">Phone Number</SelectItem>
+                                  <SelectItem value="email" className="text-xs">Email</SelectItem>
+                                  <SelectItem value="company" className="text-xs">Company</SelectItem>
                                 </SelectContent>
                               </Select>
                             ) : (
@@ -782,7 +1033,7 @@ export default function NewBroadcastPage() {
                                     [key]: { type: current.type, value: val }
                                   }));
                                 }}
-                                className="text-xs h-8 bg-card border-border/60 rounded-lg"
+                                className="text-xs h-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 rounded-lg"
                               />
                             )}
                           </div>
@@ -793,19 +1044,21 @@ export default function NewBroadcastPage() {
                 </div>
               )}
 
+              {/* Header Media Attachment */}
               {requiresMedia && (
-                <div className="space-y-3 pt-4 border-t border-border/60">
-                  <Label className="flex items-center gap-2 text-xs font-bold text-foreground">
-                    Header Media Attachment (Required)
+                <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80">
+                  <Label className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
+                    <UploadCloud className="h-4 w-4 text-emerald-600" />
+                    <span>Header Media Attachment (Required by Template)</span>
                   </Label>
                   
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-2.5">
                     <div className="flex gap-2">
                       <Input 
-                        placeholder="https://example.com/image.jpg"
+                        placeholder="https://example.com/banner.jpg"
                         value={headerMediaUrl}
                         onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                        className="bg-background flex-1 text-xs rounded-xl"
+                        className="bg-slate-50/50 dark:bg-zinc-950 flex-1 text-xs rounded-xl h-10 border-slate-200 dark:border-zinc-800"
                       />
                       
                       <input
@@ -816,24 +1069,21 @@ export default function NewBroadcastPage() {
                         onChange={handleFileUpload}
                       />
                       <Button 
-                        type="button"
-                        variant="outline"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="gap-2 shrink-0 text-xs font-semibold rounded-xl"
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => fileInputRef.current?.click()} 
+                        disabled={isUploading} 
+                        className="gap-1.5 shrink-0 text-xs font-semibold rounded-xl h-10 border-slate-200 dark:border-zinc-800"
                       >
-                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                        Upload File
+                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4 text-emerald-600" />}
+                        <span>Upload File</span>
                       </Button>
                     </div>
 
-                    <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-start gap-2 text-xs text-muted-foreground bg-slate-50 dark:bg-zinc-950 p-2.5 rounded-xl border border-slate-200/80 dark:border-zinc-800">
                       <Info className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
-                      <p>
-                        Paste a public URL or upload a file. 
-                        <strong className="text-rose-600 dark:text-rose-400 block mt-0.5">
-                          Uploaded media is saved directly into your account storage.
-                        </strong>
+                      <p className="text-[11px] leading-relaxed">
+                        Paste any public HTTPS media link or upload directly. Uploaded media is securely stored in your CRM storage bucket and saved to this template.
                       </p>
                     </div>
                   </div>
@@ -841,146 +1091,74 @@ export default function NewBroadcastPage() {
               )}
             </div>
 
-            {/* Bottom Form Action Buttons */}
-            <div className="flex items-center justify-between p-4 bg-card border border-border/80 rounded-2xl shadow-xs">
+            {/* Bottom Form Actions */}
+            <div className="flex items-center justify-between p-4 bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl shadow-xs">
               <Button 
                 variant="outline" 
                 onClick={() => router.push('/broadcasts')} 
-                className="gap-1.5 rounded-xl border-border/80 text-xs font-semibold px-5"
+                className="rounded-xl border-slate-200 dark:border-zinc-800 text-xs font-semibold px-4 h-10"
               >
                 Cancel
               </Button>
               <Button 
                 onClick={handleSend} 
                 disabled={isProcessing} 
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all gap-2"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-6 h-10 rounded-xl shadow-sm transition-all gap-2 active:scale-[0.98]"
               >
                 {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                <span>{isProcessing ? (sendWhen === 'later' ? 'Scheduling...' : 'Sending...') : (sendWhen === 'later' ? 'Schedule Campaign' : '🚀 Launch Campaign Now')}</span>
+                <span>
+                  {isProcessing 
+                    ? (sendWhen === 'later' ? 'Scheduling...' : 'Dispatching...') 
+                    : (sendWhen === 'later' ? 'Schedule Broadcast' : '🚀 Launch Campaign Now')}
+                </span>
               </Button>
             </div>
 
           </div>
 
-          {/* Right Column: Live Message Preview & Campaign Trigger (5 Columns) */}
+          {/* Right Column: Realistic Sticky Smartphone Preview (5 cols) */}
           <div className="lg:col-span-5">
-            <div className="sticky top-6 bg-card border border-border/80 rounded-2xl p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-                  <Smartphone className="h-4 w-4 text-rose-500" />
+            <div className="sticky top-6 bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-3xl p-5 shadow-sm space-y-4">
+              
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <Smartphone className="h-4 w-4 text-emerald-600" />
                   Live WhatsApp Preview
                 </span>
-                <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Real-time
                 </span>
               </div>
 
-              {/* Realistic Phone Mockup Shell */}
-              <div className="bg-[#efeae2] dark:bg-[#0b141a] rounded-2xl overflow-hidden border border-slate-300 dark:border-slate-800 shadow-md">
-                {/* Phone Header Strip */}
-                <div className="bg-[#075e54] dark:bg-[#1f2c34] text-white px-4 py-2.5 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs text-white shadow-xs">
-                    CF
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold truncate">ChatFlyr Business</h4>
-                    <p className="text-[10px] text-emerald-200 truncate">Official Business Account</p>
-                  </div>
-                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
+              {/* Realistic High-End Smartphone Device Mockup */}
+              <WhatsAppPhoneMockup 
+                businessName="ChatFlyr Business"
+                template={selectedTemplate}
+                bodyText={previewBodyText}
+                headerMediaUrl={headerMediaUrl}
+              />
+
+              {/* Campaign Quick Summary & Launch Box */}
+              <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 space-y-2.5">
+                <div className="flex items-center justify-between text-xs px-1">
+                  <span className="text-muted-foreground font-medium">Ready Recipients:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {recipientMode === 'numbers' ? `${validCount} Contacts` : groupId ? 'Group Selected' : 'None Selected'}
+                  </span>
                 </div>
 
-                {/* WhatsApp Chat Wall & Message Bubble Container */}
-                <div className="p-4 min-h-[560px] max-h-[720px] h-[640px] overflow-y-auto flex flex-col justify-start gap-3 bg-[radial-gradient(#0000000a_1px,transparent_1px)] dark:bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:16px_16px]">
-                  
-                  {/* System Date Badge */}
-                  <div className="self-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-xs text-[10px] font-semibold text-slate-500 dark:text-slate-400 px-3 py-1 rounded-full shadow-2xs border border-slate-200/50 dark:border-slate-700/50">
-                    TODAY
-                  </div>
-
-                  {selectedTemplate ? (
-                    <div className="bg-white dark:bg-[#202c33] text-slate-800 dark:text-slate-100 rounded-xl p-3.5 shadow-sm text-xs space-y-2.5 max-w-[92%] self-start border border-slate-200/80 dark:border-slate-700/60 relative group">
-                      
-                      {/* Optional Header Media */}
-                      {headerMediaUrl && (
-                        <div className="rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 max-h-52">
-                          {selectedTemplate.header_type === 'video' ? (
-                            <video src={headerMediaUrl} controls className="w-full max-h-48 object-contain bg-black" />
-                          ) : (
-                            <img src={headerMediaUrl} alt="Header Preview" className="w-full max-h-48 object-contain bg-slate-50 dark:bg-slate-900" />
-                          )}
-                        </div>
-                      )}
-
-                      {/* Header Text (if text header type) */}
-                      {selectedTemplate.header_type === 'text' && selectedTemplate.header_content && (
-                        <div className="font-bold text-sm text-slate-900 dark:text-white">
-                          {selectedTemplate.header_content}
-                        </div>
-                      )}
-
-                      {/* Main Message Body Text */}
-                      <p className="whitespace-pre-wrap font-sans leading-relaxed text-xs text-slate-800 dark:text-slate-100">
-                        {previewBodyText || selectedTemplate.body_text}
-                      </p>
-
-                      {/* Footer Text */}
-                      {selectedTemplate.footer_text && (
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-700/50 pt-1.5 font-medium">
-                          {selectedTemplate.footer_text}
-                        </p>
-                      )}
-
-                      {/* Time & Double Checkmark */}
-                      <div className="flex items-center justify-end gap-1 text-[9px] text-slate-400 dark:text-slate-500 pt-0.5">
-                        <span>12:00 PM</span>
-                        <CheckCheck className="h-3 w-3 text-blue-500" />
-                      </div>
-
-                      {/* Template Buttons Preview */}
-                      {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
-                        <div className="mt-3 border-t border-slate-200/80 dark:border-slate-700/80 divide-y divide-slate-200/80 dark:divide-slate-700/80 -mx-3.5 -mb-3.5 rounded-b-xl overflow-hidden">
-                          {selectedTemplate.buttons.map((btn: any, idx: number) => (
-                            <div 
-                              key={idx} 
-                              className="py-2.5 px-3 text-center font-bold text-xs text-[#00a884] dark:text-[#00a884] flex items-center justify-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
-                            >
-                              {btn.type === 'URL' ? <ExternalLink className="h-3.5 w-3.5" /> : btn.type === 'PHONE_NUMBER' ? <Phone className="h-3.5 w-3.5" /> : <Reply className="h-3.5 w-3.5" />}
-                              <span>{btn.text}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full my-auto py-24 px-4 text-center text-slate-400 dark:text-slate-500 space-y-3">
-                      <MessageSquare className="h-12 w-12 stroke-[1.5] text-slate-300 dark:text-slate-700" />
-                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 max-w-xs">
-                        Select a WhatsApp Template on the left to view real-time message layout & preview.
-                      </p>
-                    </div>
-                  )}
-
-                </div>
-              </div>
-
-              {/* Sidebar Action Trigger */}
-              <div className="pt-3 border-t border-border/60 space-y-2">
                 <Button 
                   onClick={handleSend} 
                   disabled={isProcessing} 
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 text-xs shadow-md rounded-xl transition-all gap-2"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-11 text-xs shadow-sm rounded-xl transition-all gap-2 active:scale-[0.98]"
                 >
                   {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                  <span>{isProcessing ? (sendWhen === 'later' ? 'Scheduling...' : 'Sending...') : (sendWhen === 'later' ? 'Schedule Campaign' : '🚀 Launch Campaign Now')}</span>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => router.push('/broadcasts')}
-                  className="w-full text-xs font-semibold rounded-xl"
-                >
-                  Cancel
+                  <span>
+                    {isProcessing 
+                      ? (sendWhen === 'later' ? 'Scheduling...' : 'Dispatching...') 
+                      : (sendWhen === 'later' ? 'Schedule Broadcast' : '🚀 Launch Campaign Now')}
+                  </span>
                 </Button>
               </div>
 
