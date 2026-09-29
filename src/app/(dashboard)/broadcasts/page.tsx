@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2, Send, Users, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { Radio, Plus, Loader2, Send, Users, CheckCircle2, Clock, AlertCircle, X } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -65,6 +65,23 @@ export default function BroadcastsPage() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isNoticeDismissed, setIsNoticeDismissed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const dismissed = localStorage.getItem('hide_meta_payment_notice');
+      if (dismissed === 'true') {
+        setIsNoticeDismissed(true);
+      }
+    }
+  }, []);
+
+  const handleDismissNotice = () => {
+    setIsNoticeDismissed(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hide_meta_payment_notice', 'true');
+    }
+  };
 
   // Used to kick off polling only while something is actively sending.
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -238,29 +255,41 @@ export default function BroadcastsPage() {
       </div>
 
       {/* Meta Delivery & Payment Troubleshooting Guide */}
-      <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 shadow-xs">
-        <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-        <div className="text-xs space-y-1">
-          <p className="font-bold text-amber-950 dark:text-amber-100 flex items-center gap-2">
-            <span>Message Status &quot;Sent&quot; but not received on device? Check Meta Payment Setup</span>
-          </p>
-          <p className="text-[11px] leading-relaxed text-amber-900/80 dark:text-amber-200/80">
-            For <strong>Marketing Templates</strong> (e.g. <code>kisan_choice</code>), Meta WhatsApp Cloud API requires a valid <strong>Payment Method (Credit/Debit Card)</strong> and Business Tax info (GSTIN/PAN) attached to your WhatsApp Business Account. Without a payment method, Meta accepts the message request with a message ID, but pauses/withholds delivery to destination devices (Meta error 131042: <em>&quot;Business eligibility payment issue&quot;</em>).
-          </p>
-          <div className="flex items-center gap-3 pt-1 text-[11px]">
-            <a 
-              href="https://business.facebook.com/wa/manage/home/" 
-              target="_blank" 
-              rel="noreferrer" 
-              className="font-bold underline text-amber-800 dark:text-amber-300 hover:text-amber-950 inline-flex items-center gap-1"
-            >
-              Open Meta WhatsApp Manager &rarr;
-            </a>
-            <span className="text-amber-600/60 dark:text-amber-400/60">&bull;</span>
-            <span className="text-muted-foreground">Also ensure phone numbers include the <strong>91</strong> country code prefix (e.g. 919511450914).</span>
+      {!isNoticeDismissed && (
+        <div className="flex items-start justify-between gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 shadow-xs relative animate-in fade-in-50 duration-200">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-xs space-y-1">
+              <p className="font-bold text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                <span>Message Status &quot;Sent&quot; but not received on device? Check Meta Payment Setup</span>
+              </p>
+              <p className="text-[11px] leading-relaxed text-amber-900/80 dark:text-amber-200/80">
+                For <strong>Marketing Templates</strong> (e.g. <code>kisan_choice</code>), Meta WhatsApp Cloud API requires a valid <strong>Payment Method (Credit/Debit Card)</strong> and Business Tax info (GSTIN/PAN) attached to your WhatsApp Business Account. Without a payment method, Meta accepts the message request with a message ID, but pauses/withholds delivery to destination devices (Meta error 131042: <em>&quot;Business eligibility payment issue&quot;</em>).
+              </p>
+              <div className="flex items-center gap-3 pt-1 text-[11px] flex-wrap">
+                <a 
+                  href="https://business.facebook.com/wa/manage/home/" 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="font-bold underline text-amber-800 dark:text-amber-300 hover:text-amber-950 inline-flex items-center gap-1"
+                >
+                  Open Meta WhatsApp Manager &rarr;
+                </a>
+                <span className="text-amber-600/60 dark:text-amber-400/60">&bull;</span>
+                <span className="text-muted-foreground">Ensure phone numbers include the <strong>91</strong> country code prefix (e.g. 919511450914).</span>
+              </div>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={handleDismissNotice}
+            title="Dismiss notice"
+            className="p-1 rounded-lg text-amber-700/70 hover:text-amber-950 dark:text-amber-300/70 dark:hover:text-amber-100 hover:bg-amber-500/20 transition-colors shrink-0 cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
