@@ -219,19 +219,19 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               </Link>
 
               {/* Secondary Status Links - Column layout */}
-              <div className="flex flex-col gap-2 mt-2">
+              <div className="flex flex-col gap-1.5 mt-2.5">
                 <Link
                   href="/settings?tab=whatsapp"
-                  className="flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/40 shadow-xs transition-all"
+                  className="flex items-center justify-center gap-2 rounded-xl py-2 px-3 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100/80 hover:bg-slate-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-slate-200/80 dark:border-zinc-700/80 shadow-2xs transition-all"
                 >
-                  <Smartphone className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                  <Smartphone className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                   <span>Cloud API Settings</span>
                 </Link>
                 <Link
                   href="/dashboard/coexistence"
-                  className="flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/40 shadow-xs transition-all"
+                  className="flex items-center justify-center gap-2 rounded-xl py-2 px-3 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100/80 hover:bg-slate-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-slate-200/80 dark:border-zinc-700/80 shadow-2xs transition-all"
                 >
-                  <Smartphone className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                  <Smartphone className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                   <span>QR Scan Connectivity</span>
                 </Link>
               </div>
@@ -240,11 +240,6 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               const isActive =
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
-
-              const isRoseHighlighted =
-                item.href === "/broadcasts" ||
-                item.href === "/automations" ||
-                item.href === "/billing";
 
               const showUnreadDot =
                 item.href === "/inbox" && totalUnread > 0 && !isActive;
@@ -257,12 +252,10 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                   <Link
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 lg:py-2.5",
+                      "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-150",
                       isActive
-                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                        : isRoseHighlighted
-                        ? "border border-rose-500/40 bg-rose-500/5 text-rose-600 dark:text-rose-400 hover:bg-rose-500/15 hover:border-rose-500/60"
-                        : "text-foreground/80 hover:bg-muted hover:text-foreground border border-transparent",
+                        ? "bg-emerald-600 text-white shadow-xs font-bold"
+                        : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
