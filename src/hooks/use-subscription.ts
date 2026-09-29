@@ -48,7 +48,16 @@ export function useSubscription(): SubscriptionState {
     try {
       setState(prev => ({ ...prev, loading: true }));
       const response = await fetch('/api/billing/subscription');
-      if (!response.ok) throw new Error('Failed to fetch subscription');
+      if (response.status === 401) {
+        // User session not authenticated yet or refreshing
+        setState(prev => ({ ...prev, loading: false }));
+        return;
+      }
+      if (!response.ok) {
+        // Fallback gracefully without breaking UI
+        setState(prev => ({ ...prev, loading: false }));
+        return;
+      }
       const data = await response.json();
       
       setState({
@@ -67,8 +76,7 @@ export function useSubscription(): SubscriptionState {
         planFeatures: data.planFeatures,
         isTrial: data.isTrial,
       });
-    } catch (error) {
-      console.error('Error fetching subscription:', error);
+    } catch {
       setState(prev => ({ ...prev, loading: false }));
     }
   }, [user]);

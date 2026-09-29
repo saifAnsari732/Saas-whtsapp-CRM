@@ -86,8 +86,8 @@ export async function GET() {
   ] = await Promise.all([
     supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
     supabase.from('messages').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
-    supabase.from('campaigns').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
-    supabase.from('templates').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
+    supabase.from('broadcasts').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
+    supabase.from('message_templates').select('*', { count: 'exact', head: true }).eq('account_id', profile.account_id),
   ]);
   
   const trialUsage = {

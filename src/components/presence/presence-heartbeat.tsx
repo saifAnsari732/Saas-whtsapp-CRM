@@ -20,18 +20,15 @@ import { HEARTBEAT_MS, IDLE_AFTER_MS, type StoredPresence } from "@/lib/presence
  * 'offline' from staleness — no unreliable unload write needed.
  */
 export function PresenceHeartbeat() {
-  const { accountId } = useAuth();
+  const { accountId, user } = useAuth();
 
   // 0 = "never recorded"; set on mount so we don't read the clock during
   // render (impure). Until the effect runs the tab counts as active.
   const lastActivityRef = useRef<number>(0);
 
   useEffect(() => {
-    // Hold off until the account is known. Beating during the brief
-    // window on a fresh signup — authed but profile/account row not yet
-    // created — would make touch_presence raise "No account for caller"
-    // and log a spurious error. The effect re-runs once accountId lands.
-    if (!accountId) return;
+    // Hold off until the account and user are known.
+    if (!accountId || !user) return;
 
     const supabase = createClient();
     let cancelled = false;
@@ -56,14 +53,23 @@ export function PresenceHeartbeat() {
       const t = Date.now();
       if (t - lastBeatAt < 1_000) return;
       lastBeatAt = t;
+
+      // Verify active session before making RPC
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session || cancelled) return;
+
       const { error } = await supabase.rpc("touch_presence", {
         p_status: currentStatus(),
       });
       if (error && !cancelled) {
-        // Non-fatal: presence is best-effort. Log once per failure so a
-        // misconfigured RPC is visible without spamming.
-        if (!error.message.includes("Failed to fetch")) {
-          console.error("[PresenceHeartbeat] touch_presence failed:", error.message);
+        // Non-fatal: presence is best-effort. Suppress expected auth/network refresh noise
+        if (
+          !error.message.includes("Failed to fetch") &&
+          !error.message.includes("Unauthorized") &&
+          !error.message.includes("JWT") &&
+          !error.message.includes("auth")
+        ) {
+          console.warn("[PresenceHeartbeat] touch_presence:", error.message);
         }
       }
     };
