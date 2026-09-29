@@ -23,7 +23,17 @@ import {
   Filter,
   AlertCircle,
   Bot,
-  Sparkles
+  Sparkles,
+  Smile,
+  Paperclip,
+  Phone,
+  Video,
+  MoreVertical,
+  CheckCheck,
+  Camera,
+  Wifi,
+  Battery,
+  Mic
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -109,6 +119,14 @@ export default function CoexistenceSetupPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [quickMessageText, setQuickMessageText] = useState("");
   const [sendingQuick, setSendingQuick] = useState(false);
+
+  // Live Phone Interface State
+  const [activeLiveChat, setActiveLiveChat] = useState<BaileysChat | null>(null);
+  const [activeLiveMessages, setActiveLiveMessages] = useState<any[]>([]);
+  const [fetchingLiveMessages, setFetchingLiveMessages] = useState(false);
+  const [liveMessageText, setLiveMessageText] = useState("");
+  const [sendingLiveMessage, setSendingLiveMessage] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const disconnectCounterRef = useRef(0);
 
@@ -207,6 +225,83 @@ export default function CoexistenceSetupPage() {
       fetchChatsAndGroups();
     }
   }, [isConnected, fetchChatsAndGroups]);
+
+  // Auto-select first chat if none selected
+  useEffect(() => {
+    if (!activeLiveChat && filteredChats.length > 0) {
+      setActiveLiveChat(filteredChats[0]);
+    }
+  }, [filteredChats, activeLiveChat]);
+
+  // Fetch messages when activeLiveChat changes
+  const fetchLiveMessages = useCallback(async (chatId: string) => {
+    setFetchingLiveMessages(true);
+    try {
+      const res = await fetch(`/api/whatsapp/baileys/chats/${encodeURIComponent(chatId)}/messages`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.messages)) {
+        setActiveLiveMessages(data.messages);
+      } else {
+        setActiveLiveMessages([]);
+      }
+    } catch {
+      setActiveLiveMessages([]);
+    } finally {
+      setFetchingLiveMessages(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeLiveChat) {
+      fetchLiveMessages(activeLiveChat.id);
+    }
+  }, [activeLiveChat, fetchLiveMessages]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeLiveMessages]);
+
+  // Send message directly from WhatsApp phone composer
+  const handleSendLiveMessage = async (textToSend?: string) => {
+    const text = (textToSend || liveMessageText).trim();
+    if (!activeLiveChat || !text || sendingLiveMessage) return;
+
+    setSendingLiveMessage(true);
+    const tempId = `msg-${Date.now()}`;
+    const newMsg = {
+      key: { id: tempId, fromMe: true },
+      message: { conversation: text },
+      messageTimestamp: Math.floor(Date.now() / 1000),
+      status: "PENDING"
+    };
+
+    setActiveLiveMessages(prev => [...prev, newMsg]);
+    setLiveMessageText("");
+
+    try {
+      const res = await fetch("/api/whatsapp/baileys/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: activeLiveChat.id,
+          message: text,
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to send");
+      }
+
+      toast.success("Dispatched via WhatsApp phone!");
+      setActiveLiveMessages(prev => prev.map(m => m.key?.id === tempId ? { ...m, status: "SERVER_ACK" } : m));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to dispatch message");
+      setActiveLiveMessages(prev => prev.filter(m => m.key?.id !== tempId));
+    } finally {
+      setSendingLiveMessage(false);
+    }
+  };
 
   useEffect(() => {
     if (!isConnected) return;
@@ -868,135 +963,376 @@ export default function CoexistenceSetupPage() {
                 </TabsTrigger>
               </TabsList>
 
-              {/* TAB 1: CHATS (Migrated directly into Coexistence!) */}
+              {/* TAB 1: CHATS (PHONE-LIKE WHATSAPP ACCOUNT UI) */}
               <TabsContent value="chats" className="space-y-4 mt-6">
-                <Card className="rounded-2xl border-border/80 overflow-hidden shadow-xs">
-                  <CardHeader className="p-5 border-b border-border/80 bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-lg font-bold flex items-center gap-2">
-                        <span>WhatsApp Chats</span>
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-bold text-[11px]">
-                          {filteredChats.length} Active
-                        </Badge>
-                      </CardTitle>
-                      <CardDescription className="text-xs">Live phone conversations synced in real-time through Coexistence.</CardDescription>
-                    </div>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      onClick={() => fetchChatsAndGroups(true)} 
-                      disabled={fetchingChats} 
-                      className="rounded-xl text-xs gap-1.5 self-start sm:self-auto font-bold border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
-                    >
-                      <RefreshCw className={cn("h-3.5 w-3.5", fetchingChats && "animate-spin")} />
-                      Sync From WhatsApp
-                    </Button>
-                  </CardHeader>
-
-                  <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row gap-3 items-center justify-between bg-card">
-                    <div className="relative w-full sm:max-w-md">
-                      <Search className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        placeholder="Search contact name, group, or phone number..." 
-                        value={searchChat}
-                        onChange={(e) => setSearchChat(e.target.value)}
-                        className="pl-10 text-xs rounded-xl h-10 bg-muted/30 border-border/80"
-                      />
+                {/* Smartphone Device Mockup Container */}
+                <div className="max-w-6xl mx-auto rounded-[32px] sm:rounded-[38px] border-4 sm:border-8 border-slate-800 dark:border-zinc-800 shadow-2xl bg-[#0B141A] overflow-hidden">
+                  
+                  {/* Smartphone Top Notch & Speaker Bar */}
+                  <div className="bg-slate-900 px-6 py-2 flex items-center justify-between border-b border-slate-800/80">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
+                      <span>9:41</span>
+                      <span className="text-[10px] text-emerald-400 font-extrabold uppercase">● 5G</span>
                     </div>
                     
-                    <div className="flex items-center gap-2 w-full sm:w-auto p-1 bg-muted/60 rounded-xl">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setChatFilter("all")} 
-                        className={cn("text-xs font-bold rounded-lg px-3.5 h-8", chatFilter === "all" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground")}
-                      >
-                        All ({chats.length})
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setChatFilter("direct")} 
-                        className={cn("text-xs font-bold rounded-lg px-3.5 h-8", chatFilter === "direct" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground")}
-                      >
-                        Direct ({chats.filter(c => c.type !== "group" && !c.id.includes("@g.us")).length})
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setChatFilter("groups")} 
-                        className={cn("text-xs font-bold rounded-lg px-3.5 h-8", chatFilter === "groups" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground")}
-                      >
-                        Groups ({groups.length})
-                      </Button>
+                    {/* Front Camera & Speaker Notch */}
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-12 bg-slate-700 rounded-full" />
+                      <div className="h-2.5 w-2.5 bg-slate-700 rounded-full border border-slate-600" />
+                    </div>
+
+                    <div className="flex items-center gap-2 text-slate-300">
+                      <Wifi className="h-3.5 w-3.5" />
+                      <Battery className="h-3.5 w-3.5" />
                     </div>
                   </div>
 
-                  <CardContent className="p-0 min-h-[350px]">
-                    {fetchingChats ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
-                        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-                        <p className="text-xs font-semibold">Syncing WhatsApp chats...</p>
+                  {/* WhatsApp Mobile App Header */}
+                  <div className="bg-[#008069] dark:bg-[#1F2C34] text-white px-4 sm:px-6 py-3.5 shadow-md flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg sm:text-xl font-bold tracking-tight">WhatsApp</span>
+                        <Badge className="bg-emerald-700/80 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full border-0">
+                          COEXISTENCE
+                        </Badge>
                       </div>
-                    ) : filteredChats.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
-                        <MessageSquare className="h-12 w-12 stroke-[1.5] text-muted-foreground/30" />
-                        <p className="text-sm font-bold text-foreground">No conversations found</p>
-                        <p className="text-xs text-muted-foreground max-w-sm text-center">
-                          Click "Sync From WhatsApp" above to pull conversations directly from your connected device.
-                        </p>
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-emerald-100/90 font-medium">
+                        <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
+                        Phone Linked & Active
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => fetchChatsAndGroups(true)}
+                        disabled={fetchingChats}
+                        className="h-8 px-2.5 rounded-lg text-white hover:bg-emerald-700/60 dark:hover:bg-zinc-700/60 text-xs font-semibold gap-1.5"
+                      >
+                        <RefreshCw className={cn("h-3.5 w-3.5", fetchingChats && "animate-spin")} />
+                        <span className="hidden sm:inline">Sync Phone</span>
+                      </Button>
+                      <Camera className="h-4 w-4 text-emerald-100 cursor-pointer hover:text-white transition-colors" />
+                      <MoreVertical className="h-4 w-4 text-emerald-100 cursor-pointer hover:text-white transition-colors" />
+                    </div>
+                  </div>
+
+                  {/* WhatsApp Android Tabs */}
+                  <div className="bg-[#008069] dark:bg-[#1F2C34] text-white flex border-b border-emerald-700/60 dark:border-zinc-700/60 px-2 sm:px-4">
+                    <button
+                      type="button"
+                      onClick={() => setChatFilter("direct")}
+                      className={cn(
+                        "flex-1 py-2.5 text-center text-xs font-bold uppercase tracking-wider transition-all relative",
+                        chatFilter === "direct" ? "text-white font-extrabold" : "text-emerald-100/70 hover:text-white"
+                      )}
+                    >
+                      <span>Chats ({chats.filter(c => c.type !== "group" && !c.id.includes("@g.us")).length})</span>
+                      {chatFilter === "direct" && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-t-sm" />
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setChatFilter("groups")}
+                      className={cn(
+                        "flex-1 py-2.5 text-center text-xs font-bold uppercase tracking-wider transition-all relative",
+                        chatFilter === "groups" ? "text-white font-extrabold" : "text-emerald-100/70 hover:text-white"
+                      )}
+                    >
+                      <span>Groups ({groups.length})</span>
+                      {chatFilter === "groups" && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-t-sm" />
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setChatFilter("all")}
+                      className={cn(
+                        "flex-1 py-2.5 text-center text-xs font-bold uppercase tracking-wider transition-all relative",
+                        chatFilter === "all" ? "text-white font-extrabold" : "text-emerald-100/70 hover:text-white"
+                      )}
+                    >
+                      <span>All ({chats.length})</span>
+                      {chatFilter === "all" && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-t-sm" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Two-Pane WhatsApp Layout */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 h-[640px] bg-white dark:bg-[#111B21]">
+                    
+                    {/* Left Pane: WhatsApp Chat List */}
+                    <div className={cn(
+                      "md:col-span-5 lg:col-span-4 border-r border-slate-200/80 dark:border-zinc-800 flex flex-col h-full bg-white dark:bg-[#111B21]",
+                      activeLiveChat ? "hidden md:flex" : "flex"
+                    )}>
+                      {/* In-app Search Bar */}
+                      <div className="p-3 border-b border-slate-100 dark:border-zinc-800/80 bg-slate-50/70 dark:bg-[#111B21]">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                          <Input
+                            placeholder="Search or start new chat..."
+                            value={searchChat}
+                            onChange={(e) => setSearchChat(e.target.value)}
+                            className="pl-9 text-xs h-9 rounded-xl bg-white dark:bg-[#202C33] border-slate-200/80 dark:border-zinc-700/80 shadow-2xs"
+                          />
+                        </div>
                       </div>
-                    ) : (
-                      <div className="divide-y divide-border/60">
-                        {filteredChats.map((chat) => (
-                          <div 
-                            key={chat.id} 
-                            onClick={() => openSendModal(chat)}
-                            className="flex items-center justify-between p-4 hover:bg-muted/40 cursor-pointer transition-colors"
-                          >
-                            <div className="flex items-center gap-3.5 min-w-0">
-                              <div className={cn(
-                                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl font-bold border shadow-xs",
-                                chat.type === "group" || chat.id.includes("@g.us")
-                                  ? "bg-violet-500/10 text-violet-600 border-violet-500/20"
-                                  : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                              )}>
-                                {chat.type === "group" || chat.id.includes("@g.us") ? <Users className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
+
+                      {/* Chats Scroll Area */}
+                      <div className="flex-1 overflow-y-auto divide-y divide-slate-100/80 dark:divide-zinc-800/60">
+                        {fetchingChats ? (
+                          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
+                            <Loader2 className="h-7 w-7 animate-spin text-[#008069]" />
+                            <p className="text-xs font-semibold">Syncing phone chats...</p>
+                          </div>
+                        ) : filteredChats.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-2 p-4 text-center">
+                            <MessageSquare className="h-10 w-10 text-slate-300 dark:text-zinc-700 stroke-[1.5]" />
+                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">No conversations found</p>
+                            <p className="text-[11px] text-muted-foreground">Click "Sync Phone" at top to fetch chats.</p>
+                          </div>
+                        ) : (
+                          filteredChats.map((chat) => {
+                            const isGroup = chat.type === "group" || chat.id.includes("@g.us");
+                            const isSelected = activeLiveChat?.id === chat.id;
+                            const displayName = chat.name || chat.id.split("@")[0];
+
+                            return (
+                              <div
+                                key={chat.id}
+                                onClick={() => setActiveLiveChat(chat)}
+                                className={cn(
+                                  "flex items-center gap-3 p-3.5 cursor-pointer transition-colors relative",
+                                  isSelected 
+                                    ? "bg-[#F0F2F5] dark:bg-[#2A3942] border-l-4 border-l-[#008069]" 
+                                    : "hover:bg-slate-50 dark:hover:bg-[#202C33]/60"
+                                )}
+                              >
+                                {/* Contact Avatar */}
+                                <div className={cn(
+                                  "h-12 w-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-2xs",
+                                  isGroup 
+                                    ? "bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30" 
+                                    : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+                                )}>
+                                  {isGroup ? <Users className="h-5 w-5" /> : displayName.slice(0, 2).toUpperCase()}
+                                </div>
+
+                                {/* Chat Info */}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
+                                      {displayName}
+                                    </h4>
+                                    <span className="text-[10px] text-muted-foreground font-medium shrink-0">
+                                      {chat.conversationTimestamp 
+                                        ? new Date(chat.conversationTimestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                                        : "Just now"}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                                    <p className="text-[11px] text-muted-foreground truncate font-mono">
+                                      {chat.id}
+                                    </p>
+                                    {chat.unreadCount ? (
+                                      <span className="h-4 min-w-4 px-1.5 rounded-full bg-[#25D366] text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                                        {chat.unreadCount}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
                               </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Pane: WhatsApp Live Chat Conversation */}
+                    <div className={cn(
+                      "md:col-span-7 lg:col-span-8 flex-col h-full bg-[#EFEAE2]/60 dark:bg-[#0B141A] relative",
+                      activeLiveChat ? "flex" : "hidden md:flex"
+                    )}>
+                      {activeLiveChat ? (
+                        <>
+                          {/* Chat Thread Header */}
+                          <div className="bg-[#F0F2F5] dark:bg-[#202C33] border-b border-slate-200/80 dark:border-zinc-800 p-3 px-4 flex items-center justify-between shadow-xs shrink-0">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setActiveLiveChat(null)}
+                                className="md:hidden p-1 h-8 w-8 rounded-full"
+                              >
+                                <ArrowLeft className="h-4 w-4" />
+                              </Button>
+
+                              <div className="relative">
+                                <div className={cn(
+                                  "h-10 w-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0",
+                                  activeLiveChat.type === "group" || activeLiveChat.id.includes("@g.us")
+                                    ? "bg-violet-500/20 text-violet-700 dark:text-violet-300"
+                                    : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                                )}>
+                                  {activeLiveChat.type === "group" || activeLiveChat.id.includes("@g.us") ? <Users className="h-4 w-4" /> : (activeLiveChat.name || activeLiveChat.id).slice(0, 2).toUpperCase()}
+                                </div>
+                                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-[#25D366] border-2 border-white dark:border-[#202C33]" />
+                              </div>
+
                               <div className="min-w-0">
-                                <h4 className="font-bold text-sm text-foreground leading-tight truncate">
-                                  {chat.name || chat.id.split("@")[0]}
-                                </h4>
-                                <p className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate max-w-xs sm:max-w-md">
-                                  {chat.id}
+                                <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
+                                  {activeLiveChat.name || activeLiveChat.id.split("@")[0]}
+                                </h3>
+                                <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1.5 font-mono">
+                                  <span className="text-[#008069] font-semibold">online</span>
+                                  <span>•</span>
+                                  <span>{activeLiveChat.id}</span>
                                 </p>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-3 shrink-0">
-                              {chat.unreadCount ? (
-                                <span className="inline-flex items-center justify-center rounded-full bg-emerald-600 min-w-[20px] h-[20px] px-2 text-[10px] font-bold text-white shadow-xs">
-                                  {chat.unreadCount}
-                                </span>
-                              ) : null}
+                            <div className="flex items-center gap-1 sm:gap-2 text-slate-600 dark:text-slate-300">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-200/60 dark:hover:bg-zinc-700/60">
+                                <Video className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-200/60 dark:hover:bg-zinc-700/60">
+                                <Phone className="h-4 w-4" />
+                              </Button>
                               <Button 
+                                variant="ghost" 
                                 size="sm" 
-                                className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-1.5 shadow-xs px-3.5"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openSendModal(chat);
-                                }}
+                                onClick={() => openSendModal(activeLiveChat)}
+                                className="h-8 px-2 rounded-xl text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20"
                               >
-                                <Send className="w-3.5 h-3.5" />
-                                <span>Message</span>
+                                Templates
                               </Button>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+
+                          {/* Chat Message Stream */}
+                          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#EFEAE2]/60 dark:bg-[#0B141A]">
+                            {/* Date Badge */}
+                            <div className="flex justify-center my-2">
+                              <span className="bg-white/80 dark:bg-[#182229] text-[10px] uppercase font-bold text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full shadow-2xs border border-slate-200/60 dark:border-zinc-800">
+                                Today
+                              </span>
+                            </div>
+
+                            {/* Info Banner */}
+                            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center max-w-md mx-auto">
+                              <p className="text-[11px] text-amber-800 dark:text-amber-200 font-medium">
+                                🔒 Messages sent here are dispatched live through your connected mobile WhatsApp account.
+                              </p>
+                            </div>
+
+                            {/* Messages List */}
+                            {fetchingLiveMessages ? (
+                              <div className="flex justify-center py-10">
+                                <Loader2 className="h-6 w-6 animate-spin text-[#008069]" />
+                              </div>
+                            ) : activeLiveMessages.length === 0 ? (
+                              <div className="text-center py-12 space-y-2">
+                                <div className="p-3 bg-white/80 dark:bg-[#202C33] rounded-2xl w-fit mx-auto shadow-2xs border border-slate-200/60 dark:border-zinc-800">
+                                  <MessageSquare className="h-6 w-6 text-[#008069]" />
+                                </div>
+                                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">No cached messages yet</p>
+                                <p className="text-[11px] text-muted-foreground max-w-xs mx-auto">
+                                  Type any message below to send directly to this contact via WhatsApp!
+                                </p>
+                              </div>
+                            ) : (
+                              activeLiveMessages.map((msg, i) => {
+                                const isMe = msg.key?.fromMe;
+                                const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Media / Attachment]";
+                                const time = msg.messageTimestamp 
+                                  ? new Date(msg.messageTimestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                  : "Now";
+
+                                return (
+                                  <div key={msg.key?.id || i} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
+                                    <div className={cn(
+                                      "max-w-[78%] rounded-2xl p-3 shadow-xs space-y-1 relative text-xs",
+                                      isMe 
+                                        ? "bg-[#D9FDD3] dark:bg-[#005C4B] text-slate-900 dark:text-emerald-50 rounded-tr-xs" 
+                                        : "bg-white dark:bg-[#202C33] text-slate-900 dark:text-slate-100 rounded-tl-xs"
+                                    )}>
+                                      <p className="leading-relaxed whitespace-pre-wrap select-text">{text}</p>
+                                      <div className="flex items-center justify-end gap-1 text-[9px] text-muted-foreground mt-0.5">
+                                        <span>{time}</span>
+                                        {isMe && <CheckCheck className="h-3 w-3 text-[#53BDEB]" />}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                            <div ref={messagesEndRef} />
+                          </div>
+
+                          {/* WhatsApp Chat Composer Bar */}
+                          <div className="p-3 px-4 bg-[#F0F2F5] dark:bg-[#202C33] border-t border-slate-200/80 dark:border-zinc-800 flex items-center gap-2">
+                            <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-full">
+                              <Smile className="h-5 w-5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => openSendModal(activeLiveChat)}
+                              className="h-9 w-9 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-full"
+                            >
+                              <Paperclip className="h-5 w-5" />
+                            </Button>
+
+                            <Input
+                              placeholder="Type a message..."
+                              value={liveMessageText}
+                              onChange={(e) => setLiveMessageText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleSendLiveMessage();
+                                }
+                              }}
+                              className="flex-1 bg-white dark:bg-[#111B21] border-0 h-10 px-4 rounded-full text-xs shadow-2xs focus-visible:ring-1 focus-visible:ring-[#008069]"
+                            />
+
+                            <Button
+                              onClick={() => handleSendLiveMessage()}
+                              disabled={sendingLiveMessage || !liveMessageText.trim()}
+                              className="h-10 w-10 rounded-full bg-[#00A884] hover:bg-[#008F6F] text-white flex items-center justify-center shrink-0 shadow-md transition-all active:scale-95 disabled:opacity-50"
+                            >
+                              {sendingLiveMessage ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-white" />
+                              ) : (
+                                <Send className="h-4 w-4 text-white" />
+                              )}
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
+                          <div className="h-16 w-16 rounded-full bg-[#008069]/10 text-[#008069] flex items-center justify-center border border-[#008069]/20 shadow-xs">
+                            <MessageSquare className="h-8 w-8" />
+                          </div>
+                          <div className="space-y-1">
+                            <h3 className="font-bold text-base text-slate-900 dark:text-white">WhatsApp Live Phone View</h3>
+                            <p className="text-xs text-muted-foreground max-w-sm">
+                              Select any conversation on the left to start live chatting directly through your paired phone.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
               </TabsContent>
 
               {/* TAB 2: AI AUTO-REPLY CHATBOT & FOLLOW-UPS STUDIO */}
