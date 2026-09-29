@@ -193,7 +193,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         )}
         aria-label="Primary"
       >
-        {/* Logo row. On mobile we put a close button here; on desktop the
+        {/* Logo row. On mobile we put a close button here; on desktop the          ertnrttgbrfgn
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-22 shrink-0 items-center justify-between gap-2 border-b border-border  sm:px-5">
           <Link href="/dashboard" className="flex items-center ">

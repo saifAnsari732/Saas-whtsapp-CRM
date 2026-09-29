@@ -234,7 +234,8 @@ export default function BillingPage() {
 
         const vData = await verifyRes.json();
         if (verifyRes.ok && vData.success) {
-          toast.success(`Plan '${planId.toUpperCase()}' activated successfully!`);
+          const displayPlan = (planId || 'essential').toUpperCase();
+          toast.success(`Plan '${displayPlan}' activated successfully!`);
           if (type === 'subscription' && planId) {
             setCurrentPlan(planId);
             setTrialStatus("none");
