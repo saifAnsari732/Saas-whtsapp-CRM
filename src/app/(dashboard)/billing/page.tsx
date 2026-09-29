@@ -487,7 +487,21 @@ export default function BillingPage() {
         <div className="grid md:grid-cols-3 gap-4 items-start mt-4 max-w-5xl mx-auto">
           {plansData.map((plan, i) => {
             const isCurrentPlan = currentPlan === plan.id;
-            const price = isYearly ? Math.round(plan.price * 0.95 * 12) : plan.price;
+            const originalPrice = isYearly ? Math.round(plan.price * 0.95 * 12) : plan.price;
+            
+            let finalPrice = originalPrice;
+            let couponDiscountAmount = 0;
+
+            if (appliedCoupon) {
+              if (appliedCoupon.discount_type === 'percentage') {
+                couponDiscountAmount = Math.round(originalPrice * (Number(appliedCoupon.discount_value) / 100));
+              } else {
+                couponDiscountAmount = Number(appliedCoupon.discount_value);
+              }
+              couponDiscountAmount = Math.min(originalPrice, Math.max(0, couponDiscountAmount));
+              finalPrice = Math.max(0, originalPrice - couponDiscountAmount);
+            }
+
             const period = isYearly ? "/yr" : "/mo";
             
             return (
@@ -516,12 +530,27 @@ export default function BillingPage() {
                     {plan.name}
                   </h3>
                   
-                  <div className="flex items-end gap-1 mt-2 text-white">
-                    <span className="text-3xl font-black tracking-tight text-white">₹{price.toLocaleString()}</span>
+                  <div className="flex items-end gap-1.5 mt-2 text-white flex-wrap">
+                    {appliedCoupon && couponDiscountAmount > 0 ? (
+                      <>
+                        <span className="text-3xl font-black tracking-tight text-white">₹{finalPrice.toLocaleString()}</span>
+                        <span className="text-sm font-bold line-through text-white/70 mb-1">₹{originalPrice.toLocaleString()}</span>
+                      </>
+                    ) : (
+                      <span className="text-3xl font-black tracking-tight text-white">₹{originalPrice.toLocaleString()}</span>
+                    )}
                     <span className="text-xs font-medium mb-1 text-white/80">
                       {period}
                     </span>
                   </div>
+
+                  {appliedCoupon && couponDiscountAmount > 0 && (
+                    <div className="mt-1">
+                      <span className="inline-block bg-amber-400 text-slate-900 text-[10px] font-black px-2 py-0.5 rounded uppercase shadow-sm">
+                        Save ₹{couponDiscountAmount.toLocaleString()} with {appliedCoupon.code}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Content */}
@@ -537,7 +566,7 @@ export default function BillingPage() {
                           ? "bg-gradient-to-r from-[#128C7E] to-[#25D366] hover:from-[#25D366] hover:to-[#25D366] text-white shadow-sm border-none" 
                           : "bg-slate-100 hover:bg-slate-200 text-slate-900 border border-slate-200"
                       }`}
-                      onClick={() => handleCreateOrder(price, 'subscription', plan.id)}
+                      onClick={() => handleCreateOrder(finalPrice, 'subscription', plan.id)}
                       disabled={isLoading}
                     >
                       {processingPlanId === plan.id ? (

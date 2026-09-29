@@ -9,9 +9,10 @@ const PLAN_PRICES: Record<string, { monthly: number; yearly: number }> = {
   'all-in-one': { monthly: 3999, yearly: 45588 },
 };
 
-// Built-in promo coupons fallback map
+// Built-in promo coupons fallback map (matches Admin Coupons Studio)
 const FALLBACK_COUPONS: Record<string, { code: string; discount_type: 'percentage' | 'fixed'; discount_value: number; is_active: boolean }> = {
-  'SAIF': { code: 'SAIF', discount_type: 'percentage', discount_value: 20, is_active: true },
+  'SAIF': { code: 'SAIF', discount_type: 'fixed', discount_value: 998, is_active: true },
+  'SPECIAL50': { code: 'SPECIAL50', discount_type: 'percentage', discount_value: 50, is_active: true },
   'WELCOME10': { code: 'WELCOME10', discount_type: 'percentage', discount_value: 10, is_active: true },
   'CHATFLYR50': { code: 'CHATFLYR50', discount_type: 'percentage', discount_value: 50, is_active: true },
   'SPECIAL20': { code: 'SPECIAL20', discount_type: 'percentage', discount_value: 20, is_active: true },
@@ -43,20 +44,23 @@ export async function POST(request: Request) {
     let coupon: any = null;
     let couponId = 'promo-' + cleanCode.toLowerCase();
 
-    // 1. Try querying Firestore
+    // Fast 500ms race for DB lookup to guarantee ultra-fast response time
     try {
       const fDb = getAdminDb();
-      const snap = await fDb.collection('coupons').where('code', '==', cleanCode).limit(1).get();
-      if (!snap.empty) {
+      const queryPromise = fDb.collection('coupons').where('code', '==', cleanCode).limit(1).get();
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 500));
+      
+      const snap: any = await Promise.race([queryPromise, timeoutPromise]);
+      if (snap && !snap.empty) {
         const doc = snap.docs[0];
         couponId = doc.id;
         coupon = doc.data();
       }
     } catch (fErr) {
-      console.warn('[Apply Coupon] Firestore query failed, falling back to built-in promo list:', fErr);
+      // Fallback silently and instantly to memory map for fast UI response
     }
 
-    // 2. Fallback to built-in coupons if not found in Firestore
+    // Fallback to built-in coupons if DB missed or timed out
     if (!coupon && FALLBACK_COUPONS[cleanCode]) {
       coupon = FALLBACK_COUPONS[cleanCode];
     }

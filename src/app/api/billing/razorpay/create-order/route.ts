@@ -58,17 +58,40 @@ export async function POST(req: Request) {
       if (coupon_code && typeof coupon_code === 'string' && coupon_code.trim()) {
         try {
           const cleanCode = coupon_code.trim().toUpperCase();
-          const fDb = getAdminDb();
-          const snap = await fDb.collection('coupons').where('code', '==', cleanCode).limit(1).get();
+          let coupon: any = null;
+          let cDocId = 'promo-' + cleanCode.toLowerCase();
 
-          if (!snap.empty) {
-            const cDoc = snap.docs[0];
-            const coupon = cDoc.data();
+          try {
+            const fDb = getAdminDb();
+            const snap = await fDb.collection('coupons').where('code', '==', cleanCode).limit(1).get();
+            if (!snap.empty) {
+              const cDoc = snap.docs[0];
+              cDocId = cDoc.id;
+              coupon = cDoc.data();
+              // Increment count in background without blocking
+              fDb.collection('coupons').doc(cDoc.id).update({
+                used_count: FieldValue.increment(1)
+              }).catch(() => {});
+            }
+          } catch (e) {}
 
+          const FALLBACK_MAP: Record<string, { code: string; discount_type: 'percentage' | 'fixed'; discount_value: number; is_active: boolean }> = {
+            'SAIF': { code: 'SAIF', discount_type: 'fixed', discount_value: 998, is_active: true },
+            'SPECIAL50': { code: 'SPECIAL50', discount_type: 'percentage', discount_value: 50, is_active: true },
+            'WELCOME10': { code: 'WELCOME10', discount_type: 'percentage', discount_value: 10, is_active: true },
+            'CHATFLYR50': { code: 'CHATFLYR50', discount_type: 'percentage', discount_value: 50, is_active: true },
+            'FLAT500': { code: 'FLAT500', discount_type: 'fixed', discount_value: 500, is_active: true },
+          };
+
+          if (!coupon && FALLBACK_MAP[cleanCode]) {
+            coupon = FALLBACK_MAP[cleanCode];
+          }
+
+          if (coupon && coupon.is_active) {
             const isExpired = coupon.expires_at ? new Date(coupon.expires_at).getTime() < Date.now() : false;
             const isLimitReached = coupon.max_uses ? coupon.used_count >= coupon.max_uses : false;
 
-            if (coupon.is_active && !isExpired && !isLimitReached) {
+            if (!isExpired && !isLimitReached) {
               if (coupon.discount_type === 'percentage') {
                 discount_amount = Math.round(price * (Number(coupon.discount_value) / 100));
               } else {
@@ -79,17 +102,12 @@ export async function POST(req: Request) {
               price = Math.max(0, price - discount_amount);
 
               applied_coupon = {
-                id: cDoc.id,
+                id: cDocId,
                 code: coupon.code,
                 discount_type: coupon.discount_type,
                 discount_value: coupon.discount_value,
                 discount_amount_paise: discount_amount,
               };
-
-              // Increment coupon used_count in Firestore
-              await fDb.collection('coupons').doc(cDoc.id).update({
-                used_count: FieldValue.increment(1)
-              });
             }
           }
         } catch (cErr) {
