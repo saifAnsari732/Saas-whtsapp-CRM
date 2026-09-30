@@ -596,7 +596,11 @@ export default function AdminPage() {
                           <TableCell className="py-3">
                             <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
                               <span>{u.full_name || 'Business User'}</span>
-                              {isAdmin && <Crown className="h-3.5 w-3.5 text-amber-500" title="SuperAdmin User" />}
+                              {isAdmin && (
+                                <span title="SuperAdmin User">
+                                  <Crown className="h-3.5 w-3.5 text-amber-500" />
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-slate-500 font-mono mt-0.5">{u.email}</div>
                           </TableCell>
