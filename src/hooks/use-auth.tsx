@@ -10,8 +10,13 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { createClient } from "@/lib/supabase/client";
-import type { User } from "@supabase/supabase-js";
+import { getClientAuth, getClientDb } from "@/lib/firebase/client";
+import {
+  onAuthStateChanged,
+  signOut as firebaseSignOut,
+  type User as FirebaseUser,
+} from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import {
   canEditSettings as canEditSettingsFor,
@@ -21,17 +26,24 @@ import {
   type AccountRole,
 } from "@/lib/auth/roles";
 
+export interface AuthUser {
+  id: string;
+  uid: string;
+  email: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+  user_metadata?: {
+    full_name?: string;
+    avatar_url?: string;
+  };
+}
+
 interface Profile {
   id: string;
   full_name: string | null;
   email: string;
   avatar_url: string | null;
   role: string | null;
-  /**
-   * Opted-in beta feature keys for this account. No current feature
-   * reads this — Flows was the last user and went to soft-GA in PR
-   * #134 — but the column survives for future beta gates.
-   */
   beta_features: string[];
   account_id: string | null;
   account_role: AccountRole | null;
@@ -40,79 +52,32 @@ interface Profile {
 interface AccountSummary {
   id: string;
   name: string;
-  /** Default deal currency (ISO-4217). NOT NULL DEFAULT 'USD' in the
-   *  DB (migration 021); narrowed to DEFAULT_CURRENCY when absent. */
   default_currency: string;
 }
 
 interface AuthContextValue {
-  user: User | null;
+  user: AuthUser | null;
   profile: Profile | null;
-  /**
-   * Session-level loading. Flips to false as soon as we know whether
-   * a user is signed in, *without* waiting for the profile row. Use
-   * this for chrome (sidebar / header) that can render with just the
-   * user object.
-   */
   loading: boolean;
-  /**
-   * Profile-row loading. Stays true until `fetchProfile` settles
-   * (success, missing row, or error). Code that branches on
-   * `profile.beta_features` MUST gate on this — otherwise it sees the
-   * `{ loading: false, profile: null }` window during initial load
-   * and may take the "not opted in" branch incorrectly.
-   */
   profileLoading: boolean;
   signOut: () => Promise<void>;
-  /** Re-fetch the current user's profile row — call after a save from
-   *  the settings form so header/sidebar reflect the change without a
-   *  full page reload. */
   refreshProfile: () => Promise<void>;
-
-  // ----------------------------------------------------------
-  // Account-scoped context (added by the account-sharing series)
-  //
-  // All of these are nullable until `profileLoading` is false.
-  // After the profile resolves they're guaranteed to be set,
-  // because migration 017 made `account_id` / `account_role`
-  // NOT NULL on `profiles`.
-  // ----------------------------------------------------------
-
-  /** Account id the current user belongs to. Null while loading. */
   accountId: string | null;
-  /** Role within that account. Null while loading. */
   accountRole: AccountRole | null;
-  /** Lightweight account meta — id + name + default_currency. Null while loading. */
   account: AccountSummary | null;
-  /** Account default deal currency. Falls back to DEFAULT_CURRENCY
-   *  while loading or when no account is resolved, so callers can use
-   *  it unconditionally. */
   defaultCurrency: string;
-  /** True if `accountRole === 'owner'`. */
   isOwner: boolean;
-  /** True if `accountRole === 'admin'` (does NOT include owner — use canManageMembers for "admin or above"). */
   isAdmin: boolean;
-  /** True if `accountRole === 'agent'`. */
   isAgent: boolean;
-  /** True if `accountRole === 'viewer'`. */
   isViewer: boolean;
-  /** True if the caller can manage members (admin+). */
   canManageMembers: boolean;
-  /** True if the caller can edit account-wide settings (admin+). */
   canEditSettings: boolean;
-  /** True if the caller can send messages and edit operational data (agent+). */
   canSendMessages: boolean;
-  /** True if caller is Platform Super Admin / System Admin. */
   isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-/**
- * AuthProvider — wrap this around the dashboard layout.
- * Makes ONE getSession() call for the whole tree instead of one per
- * component, avoiding internal lock contention in the Supabase client.
- */
 function getAuthCache<T>(key: string): T | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -131,79 +96,50 @@ function setAuthCache(key: string, val: any) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(() => getAuthCache('wacrm_cached_profile'));
   const [account, setAccount] = useState<AccountSummary | null>(() => getAuthCache('wacrm_cached_account'));
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(() => !getAuthCache('wacrm_cached_profile'));
 
-  // Tracks the user ID we've successfully initiated/completed fetching
-  // a profile for. This prevents redundant re-fetches and toggling
-  // profileLoading back to true on window focus events/token refresh.
   const lastFetchedUserIdRef = useRef<string | null>(null);
 
-  // Shared across init, auth-state-change listener, and the exposed
-  // refreshProfile() callback. Reads the current session's user id and
-  // pulls the matching profile row along with its account summary.
   const fetchProfile = useCallback(async (userId: string) => {
-    const supabase = createClient();
     lastFetchedUserIdRef.current = userId;
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(
-          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
-        )
-        .eq("user_id", userId)
-        .maybeSingle();
+      const db = getClientDb();
+      const userDocRef = doc(db, "users", userId);
+      const userSnap = await getDoc(userDocRef);
 
-      if (error) {
-        console.error("[AuthProvider] fetchProfile error:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        });
-        lastFetchedUserIdRef.current = null;
-        return;
-      }
-
-      if (data) {
+      if (userSnap.exists()) {
+        const data = userSnap.data();
         let accountRow: AccountSummary | null = null;
-        if (data.account_id) {
-          const { data: account, error: accountErr } = await supabase
-            .from("accounts")
-            .select("id, name, default_currency")
-            .eq("id", data.account_id)
-            .maybeSingle();
-          if (accountErr) {
-            console.error("[AuthProvider] fetchAccount error:", {
-              message: accountErr.message,
-              details: accountErr.details,
-              hint: accountErr.hint,
-              code: accountErr.code,
-            });
-          } else if (account) {
+
+        const accId = data.accountId || data.account_id;
+        if (accId) {
+          const accDocRef = doc(db, "accounts", accId);
+          const accSnap = await getDoc(accDocRef);
+          if (accSnap.exists()) {
+            const accData = accSnap.data();
             accountRow = {
-              id: account.id,
-              name: account.name,
-              default_currency: account.default_currency ?? DEFAULT_CURRENCY,
+              id: accSnap.id,
+              name: accData.name || "My Account",
+              default_currency: accData.default_currency || accData.defaultCurrency || DEFAULT_CURRENCY,
             };
           }
         }
 
-        const accountRole = isAccountRole(data.account_role)
-          ? data.account_role
-          : null;
+        const rawRole = data.accountRole || data.account_role;
+        const accountRole = isAccountRole(rawRole) ? rawRole : "owner";
 
         const newProfile: Profile = {
-          id: data.id,
-          full_name: data.full_name,
-          email: data.email,
-          avatar_url: data.avatar_url,
-          role: data.role,
-          beta_features: data.beta_features ?? [],
-          account_id: data.account_id ?? null,
+          id: userSnap.id,
+          full_name: data.full_name || data.fullName || null,
+          email: data.email || "",
+          avatar_url: data.avatar_url || data.avatarUrl || null,
+          role: data.role || null,
+          beta_features: data.beta_features || [],
+          account_id: accId || null,
           account_role: accountRole,
         };
 
@@ -223,90 +159,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const supabase = createClient();
     let mounted = true;
+    const auth = getClientAuth();
 
     const safetyTimer = setTimeout(() => {
       if (mounted) {
-        console.warn("[AuthProvider] getSession() timed out after 3s");
+        console.warn("[AuthProvider] Firebase Auth state timeout after 3s");
         setLoading(false);
         setProfileLoading(false);
       }
     }, 3000);
 
-    const init = async () => {
-      try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
-
-        if (error) console.error("[AuthProvider] getSession error:", error.message);
-
-        if (!mounted) return;
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-
-        if (currentUser) {
-          // Don't block session loading on profile fetch — chrome
-          // (header, sidebar) can render from the user object alone,
-          // profile enriches async. Callers that need to branch on
-          // profile data gate on `profileLoading` instead.
-          fetchProfile(currentUser.id);
-        } else {
-          // No user → no profile to load. Flip profileLoading off so
-          // pages that gate on it don't wait forever on the logged-out
-          // path (the route guard or redirect should fire instead).
-          setProfileLoading(false);
-        }
-      } catch (err) {
-        console.error("[AuthProvider] init threw:", err);
-      } finally {
-        if (mounted) setLoading(false);
-        clearTimeout(safetyTimer);
-      }
-    };
-
-    init();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
       if (!mounted) return;
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
 
-      if (currentUser) {
-        if (currentUser.id !== lastFetchedUserIdRef.current) {
-          fetchProfile(currentUser.id);
+      if (firebaseUser) {
+        const formattedUser: AuthUser = {
+          id: firebaseUser.uid,
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+          user_metadata: {
+            full_name: firebaseUser.displayName || undefined,
+            avatar_url: firebaseUser.photoURL || undefined,
+          },
+        };
+        setUser(formattedUser);
+
+        if (firebaseUser.uid !== lastFetchedUserIdRef.current) {
+          fetchProfile(firebaseUser.uid);
         }
       } else {
         lastFetchedUserIdRef.current = null;
+        setUser(null);
         setProfile(null);
         setAccount(null);
         setProfileLoading(false);
       }
 
       setLoading(false);
+      clearTimeout(safetyTimer);
     });
 
     return () => {
       mounted = false;
       clearTimeout(safetyTimer);
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, [fetchProfile]);
 
   const signOut = useCallback(async () => {
     try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
+      const auth = getClientAuth();
+      await firebaseSignOut(auth);
     } catch {}
     setUser(null);
     setProfile(null);
     setAccount(null);
     if (typeof window !== "undefined") {
       try {
+        document.cookie = "__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
         localStorage.clear();
         sessionStorage.clear();
       } catch {}
@@ -319,10 +232,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchProfile(user.id);
   }, [user?.id, fetchProfile]);
 
-  // Derive the role booleans once per profile change rather than on
-  // every consumer render. Cheap regardless, but the memo also gives
-  // each derived value a stable identity for React.memo / useEffect
-  // dependencies downstream.
   const derived = useMemo(() => {
     const role = profile?.account_role ?? null;
     const adminEmails = [
@@ -370,17 +279,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * useAuth — read the shared auth state from context.
- * Must be used inside an <AuthProvider>.
- */
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
-    // Fallback for components rendered outside the provider (shouldn't
-    // happen in normal flow, but don't crash the page). Account state
-    // collapses to least-privileged null — every `canX` boolean is
-    // false so UI gates fail closed.
     return {
       user: null,
       profile: null,
