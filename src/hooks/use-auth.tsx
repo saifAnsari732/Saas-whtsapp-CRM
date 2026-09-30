@@ -32,6 +32,8 @@ export interface AuthUser {
   email: string | null;
   displayName?: string | null;
   photoURL?: string | null;
+  created_at?: string | null;
+  createdAt?: string | null;
   user_metadata?: {
     full_name?: string;
     avatar_url?: string;
@@ -180,6 +182,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
+          created_at: firebaseUser.metadata.creationTime || null,
+          createdAt: firebaseUser.metadata.creationTime || null,
           user_metadata: {
             full_name: firebaseUser.displayName || undefined,
             avatar_url: firebaseUser.photoURL || undefined,

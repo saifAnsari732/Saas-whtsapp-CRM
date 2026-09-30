@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bot, Sparkles, Settings2, BarChart3, Clock, Zap } from 'lucide-react';
+import { Bot, Sparkles, Settings2, BarChart3, Zap } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ChatbotStudio } from '@/components/chatbot/chatbot-studio';
 import { AiPlayground } from '@/components/agents/ai-playground';
