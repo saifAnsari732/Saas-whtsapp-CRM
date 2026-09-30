@@ -1,42 +1,40 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminDb } from '@/lib/firebase/admin';
+import { getFirebaseUser } from '@/lib/firebase/auth-helper';
+import { FieldValue } from 'firebase-admin/firestore';
 import crypto from 'crypto';
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getFirebaseUser(req as any);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .maybeSingle();
+    const db = getAdminDb();
+    const userDoc = await db.collection('users').doc(user.uid).get();
+    const accountId = userDoc.data()?.accountId;
 
-    if (!profile?.account_id) {
+    if (!accountId) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
     const body = await req.json();
-    const { 
-      razorpay_order_id, 
-      razorpay_payment_id, 
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
       razorpay_signature,
       plan_id = 'essential',
       type = 'subscription',
       billing_cycle = 'monthly',
-      amount = 999
+      amount = 999,
     } = body;
 
     const isDemo = razorpay_order_id?.startsWith('order_demo_') || razorpay_signature === 'demo_signature';
 
     if (!isDemo) {
       if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-        return NextResponse.json({ error: 'Payment credentials missing. Payment not completed.' }, { status: 400 });
+        return NextResponse.json({ error: 'Payment credentials missing.' }, { status: 400 });
       }
 
       const secret = process.env.RAZORPAY_KEY_SECRET;
@@ -48,111 +46,108 @@ export async function POST(req: Request) {
           .digest('hex');
 
         if (expectedSignature !== razorpay_signature) {
-          console.error('[Verify Payment Security] Invalid payment signature attempt', {
+          console.error('[Verify Payment Security] Invalid signature attempt', {
             razorpay_order_id,
-            razorpay_payment_id
+            razorpay_payment_id,
           });
           return NextResponse.json(
-            { error: 'Payment signature verification failed. Plan not activated.' },
+            { error: 'Payment signature verification failed.' },
             { status: 400 }
           );
         }
       }
     }
 
-    // Lookup order from DB
-    let order: any = null;
+    let orderDocRef: FirebaseFirestore.DocumentReference | null = null;
+    let orderData: any = null;
+
     if (razorpay_order_id) {
-      const { data: dbOrder } = await supabase
-        .from('billing_orders')
-        .select('*')
-        .eq('razorpay_order_id', razorpay_order_id)
-        .maybeSingle();
-      order = dbOrder;
+      const snap = await db
+        .collection('accounts')
+        .doc(accountId)
+        .collection('billing_orders')
+        .where('orderId', '==', razorpay_order_id)
+        .limit(1)
+        .get();
+
+      if (!snap.empty) {
+        orderDocRef = snap.docs[0].ref;
+        orderData = snap.docs[0].data();
+      }
     }
 
-    const targetType = order?.type || type || 'subscription';
-    const targetPlanId = order?.plan_id || plan_id || 'essential';
-    const targetBillingCycle = order?.metadata?.billing_cycle || billing_cycle || 'monthly';
+    const targetType = orderData?.type || type || 'subscription';
+    const targetPlanId = orderData?.planId || plan_id || 'essential';
+    const targetBillingCycle = orderData?.metadata?.billing_cycle || billing_cycle || 'monthly';
 
-    // 1. Update order record in DB if found
-    if (order?.id) {
-      await supabase
-        .from('billing_orders')
-        .update({ status: 'paid', updated_at: new Date().toISOString() })
-        .eq('id', order.id);
+    if (orderDocRef) {
+      await orderDocRef.update({
+        status: 'paid',
+        paymentId: razorpay_payment_id || `pay_demo_${Date.now()}`,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     } else {
-      // Create record if missing
-      try {
-        await supabase.from('billing_orders').insert({
-          account_id: profile.account_id,
-          razorpay_order_id: razorpay_order_id || `order_demo_${Date.now()}`,
+      await db
+        .collection('accounts')
+        .doc(accountId)
+        .collection('billing_orders')
+        .add({
+          orderId: razorpay_order_id || `order_demo_${Date.now()}`,
+          paymentId: razorpay_payment_id || `pay_demo_${Date.now()}`,
           amount: Math.round(Number(amount) * 100),
           currency: 'INR',
-          plan_id: targetPlanId,
+          planId: targetPlanId,
           type: targetType,
           status: 'paid',
           metadata: { billing_cycle: targetBillingCycle, is_demo: isDemo },
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         });
-      } catch (insertErr) {
-        console.warn('[Verify Payment] Order insert warning:', insertErr);
-      }
     }
 
-    // 2. Perform Account / Wallet Updates
+    const accountRef = db.collection('accounts').doc(accountId);
+
     if (targetType === 'subscription') {
       const daysToAdd = targetBillingCycle === 'yearly' ? 365 : 30;
-      const expires_at = new Date();
-      expires_at.setDate(expires_at.getDate() + daysToAdd);
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + daysToAdd);
 
-      const normalizedPlanId = (targetPlanId === 'all-in-one') ? 'allinone' : targetPlanId;
+      const normalizedPlanId = targetPlanId === 'all-in-one' ? 'allinone' : targetPlanId;
 
-      const { error: updateError } = await supabase
-        .from('accounts')
-        .update({
-          subscription_plan: normalizedPlanId,
-          subscription_status: 'active',
-          subscription_expires_at: expires_at.toISOString(),
-          subscription_started_at: new Date().toISOString()
-        })
-        .eq('id', profile.account_id);
-
-      if (updateError) {
-        console.error('[Verify Payment] Account update error:', updateError);
-        throw updateError;
-      }
+      await accountRef.update({
+        subscriptionPlan: normalizedPlanId,
+        subscriptionStatus: 'active',
+        subscriptionExpiresAt: expiresAt,
+        subscriptionStartedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     } else if (targetType === 'wallet_topup') {
       const creditRupees = Math.round(Number(amount));
+      const walletRef = accountRef.collection('wallet').doc('data');
 
-      const { data: wallet } = await supabase
-        .from('wallets')
-        .select('balance')
-        .eq('account_id', profile.account_id)
-        .maybeSingle();
+      await walletRef.set(
+        {
+          balance: FieldValue.increment(creditRupees),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
 
-      const new_balance = (wallet?.balance || 0) + creditRupees;
-
-      if (wallet) {
-        await supabase.from('wallets').update({ balance: new_balance }).eq('account_id', profile.account_id);
-      } else {
-        await supabase.from('wallets').insert({ account_id: profile.account_id, balance: new_balance });
-      }
-
-      await supabase.from('wallet_transactions').insert({
-        account_id: profile.account_id,
+      await accountRef.collection('wallet_transactions').add({
         amount: creditRupees,
         type: 'credit',
         description: 'Wallet Topup via Checkout',
-        reference_id: razorpay_payment_id || `pay_demo_${Date.now()}`
+        referenceId: razorpay_payment_id || `pay_demo_${Date.now()}`,
+        createdAt: FieldValue.serverTimestamp(),
       });
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       type: targetType,
       plan_id: targetPlanId,
       is_demo: isDemo,
-      message: 'Payment and subscription verified successfully' 
+      message: 'Payment and subscription verified successfully in Firestore.',
     });
   } catch (error: any) {
     console.error('Verify payment error:', error);
