@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminAuth } from '@/lib/firebase/admin';
 
 const PUBLIC_PATHS = [
   '/',
@@ -38,27 +37,17 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check session cookie
+  // Check session cookie existence
   const sessionCookie = req.cookies.get('__session')?.value;
   if (!sessionCookie) {
-    // API routes return 401, pages redirect to login
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
-  try {
-    await getAdminAuth().verifySessionCookie(sessionCookie, true);
-    return NextResponse.next();
-  } catch {
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Session expired' }, { status: 401 });
-    }
-    const response = NextResponse.redirect(new URL('/login', req.url));
-    response.cookies.delete('__session');
-    return response;
-  }
+  // Session cookie is present — allow request (full verification occurs in Node API context / Server Components)
+  return NextResponse.next();
 }
 
 export const config = {
