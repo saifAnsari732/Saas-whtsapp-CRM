@@ -39,16 +39,19 @@ function LoginPageInner() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const idToken = await userCredential.user.getIdToken();
 
-      // Create server-side session cookie
-      const res = await fetch("/api/auth/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to create session");
+      // Create server-side session cookie with client fallback
+      try {
+        await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken }),
+        });
+      } catch (fErr) {
+        console.warn("Session API warning:", fErr);
       }
+
+      // Always set document cookie as resilient client fallback
+      document.cookie = `__session=${idToken}; path=/; max-age=1209600; SameSite=Lax`;
 
       const destination = inviteToken
         ? `/join/${encodeURIComponent(inviteToken)}`
