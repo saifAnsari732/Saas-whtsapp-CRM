@@ -1,11 +1,13 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { getAdminDb } from "@/lib/firebase/admin";
+import { Collections } from "@/lib/firebase/db-collections";
+import { FieldValue } from "firebase-admin/firestore";
 
 export class ContactTagWriteError extends Error {
   readonly status: number;
 
   constructor(message: string, status = 500) {
     super(message);
-    this.name = 'ContactTagWriteError';
+    this.name = "ContactTagWriteError";
     this.status = status;
   }
 }
@@ -17,76 +19,68 @@ interface ContactTagWriteInput {
 }
 
 async function assertContactAndTagOwnership(
-  db: SupabaseClient,
+  db: FirebaseFirestore.Firestore,
   input: ContactTagWriteInput
-): Promise<void> {
-  const [contactResult, tagResult] = await Promise.all([
-    db
-      .from('contacts')
-      .select('id')
-      .eq('id', input.contactId)
-      .eq('account_id', input.accountId)
-      .maybeSingle(),
-    db
-      .from('tags')
-      .select('id')
-      .eq('id', input.tagId)
-      .eq('account_id', input.accountId)
-      .maybeSingle(),
+): Promise<{ tagData: any }> {
+  const contactRef = db.doc(`accounts/${input.accountId}/contacts/${input.contactId}`);
+  const tagRef = db.doc(`accounts/${input.accountId}/tags/${input.tagId}`);
+
+  const [contactSnap, tagSnap] = await Promise.all([
+    contactRef.get(),
+    tagRef.get(),
   ]);
 
-  if (contactResult.error || tagResult.error) {
-    throw new ContactTagWriteError('Could not verify contact tag ownership');
+  if (!contactSnap.exists) {
+    throw new ContactTagWriteError("Contact not found", 404);
   }
-  if (!contactResult.data) {
-    throw new ContactTagWriteError('Contact not found', 404);
+  if (!tagSnap.exists) {
+    throw new ContactTagWriteError("Tag not found", 404);
   }
-  if (!tagResult.data) {
-    throw new ContactTagWriteError('Tag not found', 404);
-  }
+
+  return { tagData: { id: tagSnap.id, ...tagSnap.data() } };
 }
 
-/**
- * Add a tag exactly once. The unique constraint on
- * (contact_id, tag_id) is the concurrency-safe source of truth: a
- * duplicate insert is a no-op and must not emit a tag_added event.
- */
 export async function addContactTagIfAbsent(
-  db: SupabaseClient,
+  _db: any,
   input: ContactTagWriteInput
 ): Promise<boolean> {
-  await assertContactAndTagOwnership(db, input);
+  const db = getAdminDb();
+  const { tagData } = await assertContactAndTagOwnership(db, input);
 
-  const { error } = await db
-    .from('contact_tags')
-    .insert({ contact_id: input.contactId, tag_id: input.tagId })
-    .select('id')
-    .maybeSingle();
+  const contactRef = db.doc(`accounts/${input.accountId}/contacts/${input.contactId}`);
+  const contactSnap = await contactRef.get();
+  const existingTags = (contactSnap.data()?.tags as any[]) || [];
 
-  if (error?.code === '23505') return false;
-  if (error) {
-    throw new ContactTagWriteError(
-      `Failed to add contact tag: ${error.message}`
-    );
-  }
+  const alreadyHasTag = existingTags.some((t: any) => t.id === input.tagId);
+  if (alreadyHasTag) return false;
+
+  await contactRef.update({
+    tags: FieldValue.arrayUnion({
+      id: tagData.id,
+      name: tagData.name,
+      color: tagData.color || "#3b82f6",
+    }),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
   return true;
 }
 
 export async function removeContactTag(
-  db: SupabaseClient,
+  _db: any,
   input: ContactTagWriteInput
 ): Promise<void> {
-  await assertContactAndTagOwnership(db, input);
+  const db = getAdminDb();
+  const { tagData } = await assertContactAndTagOwnership(db, input);
 
-  const { error } = await db
-    .from('contact_tags')
-    .delete()
-    .eq('contact_id', input.contactId)
-    .eq('tag_id', input.tagId);
+  const contactRef = db.doc(`accounts/${input.accountId}/contacts/${input.contactId}`);
+  const contactSnap = await contactRef.get();
+  const existingTags = (contactSnap.data()?.tags as any[]) || [];
 
-  if (error) {
-    throw new ContactTagWriteError(
-      `Failed to remove contact tag: ${error.message}`
-    );
-  }
+  const updatedTags = existingTags.filter((t: any) => t.id !== input.tagId);
+
+  await contactRef.update({
+    tags: updatedTags,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 }

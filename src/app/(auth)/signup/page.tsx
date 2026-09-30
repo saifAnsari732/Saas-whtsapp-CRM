@@ -4,11 +4,13 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { createClient } from "@/lib/supabase/client";
+import { getClientAuth, getClientDb } from "@/lib/firebase/client";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { doc, setDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MessageSquare, CheckCircle } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 
 export default function SignupPage() {
   return (
@@ -29,7 +31,6 @@ function SignupPageInner() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const supabase = createClient();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +40,6 @@ function SignupPageInner() {
       setError("Passwords do not match");
       return;
     }
-
     if (password.length < 6) {
       setError("Password must be at least 6 characters");
       return;
@@ -47,70 +47,95 @@ function SignupPageInner() {
 
     setLoading(true);
 
-    const emailRedirectTo = inviteToken
-      ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
-      : undefined;
+    try {
+      const auth = getClientAuth();
+      const db = getClientDb();
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-        ...(emailRedirectTo ? { emailRedirectTo } : {}),
-      },
-    });
+      // Create Firebase Auth user
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      await updateProfile(user, { displayName: fullName });
 
-    if (error) {
-      setError(error.message);
+      // Create account document
+      const accountRef = await addDoc(collection(db, 'accounts'), {
+        name: fullName || email,
+        ownerUserId: user.uid,
+        subscriptionStatus: 'trial',
+        subscriptionPlan: null,
+        trialEndsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // 5 days trial
+        subscriptionExpiresAt: null,
+        subscriptionStartedAt: null,
+        currency: 'INR',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // Create user profile document
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        fullName: fullName,
+        email: user.email,
+        accountId: accountRef.id,
+        accountRole: 'owner',
+        avatarUrl: null,
+        role: 'user',
+        betaFeatures: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // Create wallet
+      await setDoc(doc(db, 'accounts', accountRef.id, 'wallet', 'data'), {
+        balance: 0,
+        lowBalanceAlert: 100,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // Create server session
+      const idToken = await user.getIdToken();
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+
+      setSuccess(true);
       setLoading(false);
-      return;
-    }
 
-    setSuccess(true);
-    setLoading(false);
+      // If invite token, redirect to join page, else dashboard
+      const destination = inviteToken
+        ? `/join/${encodeURIComponent(inviteToken)}`
+        : '/dashboard';
+      window.location.href = destination;
+
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Signup failed";
+      if (msg.includes('auth/email-already-in-use')) {
+        setError('An account with this email already exists.');
+      } else if (msg.includes('auth/invalid-email')) {
+        setError('Invalid email address.');
+      } else if (msg.includes('auth/weak-password')) {
+        setError('Password is too weak. Use at least 6 characters.');
+      } else {
+        setError(msg);
+      }
+      setLoading(false);
+    }
   };
 
   if (success) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--color-gray-light)] px-4 font-sans">
         <Link href="/" className="mb-8 flex items-center justify-center group">
-          <Image
-            src="/chatflyr-logo.png"
-            alt="ChatFlyr"
-            width={240}
-            height={70}
-            priority
-            className="h-14 sm:h-16 w-auto object-contain hover:scale-105 transition-transform"
-          />
+          <Image src="/chatflyr-logo.png" alt="ChatFlyr" width={240} height={70} priority className="h-14 sm:h-16 w-auto object-contain hover:scale-105 transition-transform" />
         </Link>
-
         <div className="w-full max-w-[440px] rounded-[32px] border border-border/50 bg-white p-8 sm:p-12 shadow-[0_20px_60px_rgba(7,94,84,0.06)] text-center">
           <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-[20px] bg-green-50 shadow-sm border border-green-100">
             <CheckCircle className="h-8 w-8 text-green-500" />
           </div>
-          <h1 className="mb-3 text-2xl font-bold text-navy font-heading">
-            Check your email
-          </h1>
-          <p className="mb-8 text-[15px] text-gray leading-relaxed">
-            We've sent a confirmation link to <br/>
-            <strong className="text-navy">{email}</strong><br/>
-            Please check your inbox and click the link to verify your account.
-          </p>
-          <Link
-            href={
-              inviteToken
-                ? `/login?invite=${encodeURIComponent(inviteToken)}`
-                : "/login"
-            }
-          >
-            <Button
-              className="h-12 w-full rounded-xl bg-[var(--color-gray-light)] text-navy border border-border shadow-sm hover:bg-gray-100 transition-colors font-bold"
-            >
-              Back to sign in
-            </Button>
-          </Link>
+          <h1 className="mb-3 text-2xl font-bold text-navy font-heading">Account created!</h1>
+          <p className="mb-8 text-[15px] text-gray leading-relaxed">Redirecting you to dashboard...</p>
         </div>
       </div>
     );
@@ -118,18 +143,9 @@ function SignupPageInner() {
 
   return (
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2 bg-[var(--color-gray-light)] font-sans">
-      
-      {/* Form Column */}
       <div className="flex flex-col items-center justify-center px-4 py-12 lg:px-8 relative z-10">
         <Link href="/" className="mb-8 flex items-center justify-center group">
-          <Image
-            src="/chatflyr-logo.png"
-            alt="ChatFlyr"
-            width={300}
-            height={85}
-            priority
-            className="h-16 sm:h-20 w-auto object-contain hover:scale-105 transition-transform"
-          />
+          <Image src="/chatflyr-logo.png" alt="ChatFlyr" width={300} height={85} priority className="h-16 sm:h-20 w-auto object-contain hover:scale-105 transition-transform" />
         </Link>
 
         <div className="w-full max-w-[440px] rounded-[32px] border border-border/50 bg-white p-8 sm:p-12 shadow-[0_20px_60px_rgba(7,94,84,0.06)] relative">
@@ -138,9 +154,7 @@ function SignupPageInner() {
               {inviteToken ? "Create account & join" : "Create account"}
             </h1>
             <p className="text-[15px] text-gray">
-              {inviteToken
-                ? "Verify your email, then accept the invitation to join your team."
-                : "Get started with ChatFlyr in seconds"}
+              {inviteToken ? "Sign up to accept your team invitation." : "Get started with ChatFlyr in seconds"}
             </p>
           </div>
 
@@ -152,112 +166,48 @@ function SignupPageInner() {
             )}
 
             <div className="flex flex-col gap-2.5">
-              <Label htmlFor="fullName" className="text-[15px] font-semibold text-navy">
-                Full name
-              </Label>
-              <Input
-                id="fullName"
-                type="text"
-                placeholder="John Doe"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20"
-              />
+              <Label htmlFor="fullName" className="text-[15px] font-semibold text-navy">Full name</Label>
+              <Input id="fullName" type="text" placeholder="John Doe" value={fullName} onChange={(e) => setFullName(e.target.value)} required className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20" />
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <Label htmlFor="email" className="text-[15px] font-semibold text-navy">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20"
-              />
+              <Label htmlFor="email" className="text-[15px] font-semibold text-navy">Email</Label>
+              <Input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20" />
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <Label htmlFor="password" className="text-[15px] font-semibold text-navy">
-                Password
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20"
-              />
+              <Label htmlFor="password" className="text-[15px] font-semibold text-navy">Password</Label>
+              <Input id="password" type="password" placeholder="At least 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} required className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20" />
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <Label htmlFor="confirmPassword" className="text-[15px] font-semibold text-navy">
-                Confirm password
-              </Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Repeat your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20"
-              />
+              <Label htmlFor="confirmPassword" className="text-[15px] font-semibold text-navy">Confirm password</Label>
+              <Input id="confirmPassword" type="password" placeholder="Repeat your password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="h-12 rounded-xl border-border bg-white text-navy px-4 placeholder:text-gray-400 focus-visible:border-[var(--color-green-vivid)] focus-visible:ring-[var(--color-green-vivid)]/20" />
             </div>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="mt-4 h-12 w-full rounded-xl bg-gradient-to-r from-[var(--color-green-deep)] to-[var(--color-green-vivid)] text-white text-[15px] font-bold shadow-md hover:opacity-90 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0"
-            >
+            <Button type="submit" disabled={loading} className="mt-4 h-12 w-full rounded-xl bg-gradient-to-r from-[var(--color-green-deep)] to-[var(--color-green-vivid)] text-white text-[15px] font-bold shadow-md hover:opacity-90 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0">
               {loading ? "Creating account..." : "Create account"}
             </Button>
           </form>
 
           <p className="mt-8 text-center text-[15px] font-medium text-gray">
             Already have an account?{" "}
-            <Link
-              href={
-                inviteToken
-                  ? `/login?invite=${encodeURIComponent(inviteToken)}`
-                  : "/login"
-              }
-              className="font-bold text-[var(--color-green-deep)] hover:text-[var(--color-green-vivid)] transition-colors"
-            >
+            <Link href={inviteToken ? `/login?invite=${encodeURIComponent(inviteToken)}` : "/login"} className="font-bold text-[var(--color-green-deep)] hover:text-[var(--color-green-vivid)] transition-colors">
               Sign in
             </Link>
           </p>
         </div>
       </div>
 
-      {/* Image Column */}
       <div className="hidden lg:block relative bg-[var(--color-navy)] overflow-hidden">
-        <Image
-          src="/auth-signup-bg.jpg"
-          alt="ChatFlyr Authentication"
-          fill
-          className="object-cover object-center opacity-90"
-          priority
-        />
+        <Image src="/auth-signup-bg.jpg" alt="ChatFlyr Authentication" fill className="object-cover object-center opacity-90" priority />
         <div className="absolute inset-0 bg-gradient-to-t from-[var(--color-green-deep)]/90 via-transparent to-transparent mix-blend-multiply"></div>
         <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-transparent to-transparent mix-blend-overlay"></div>
-        
         <div className="absolute bottom-20 left-16 right-16 text-white z-10 max-w-lg">
-          <h2 className="text-[40px] font-bold font-heading leading-[1.1] mb-5">
-            Everything you need to automate conversations
-          </h2>
-          <p className="text-[17px] text-white/85 font-medium leading-relaxed">
-            Create an account to access advanced WhatsApp AI replies, bulk broadcasting, and team inbox completely free.
-          </p>
+          <h2 className="text-[40px] font-bold font-heading leading-[1.1] mb-5">Everything you need to automate conversations</h2>
+          <p className="text-[17px] text-white/85 font-medium leading-relaxed">Create an account to access advanced WhatsApp AI replies, bulk broadcasting, and team inbox completely free.</p>
         </div>
       </div>
-
     </div>
   );
 }

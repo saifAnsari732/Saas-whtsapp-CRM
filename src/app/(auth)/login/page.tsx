@@ -5,11 +5,11 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { createClient } from "@/lib/supabase/client";
+import { getClientAuth } from "@/lib/firebase/client";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MessageSquare, UsersRound } from "lucide-react";
 
 export default function LoginPage() {
   return (
@@ -28,37 +28,50 @@ function LoginPageInner() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const supabase = createClient();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const auth = getClientAuth();
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const idToken = await userCredential.user.getIdToken();
 
-    if (error) {
-      if (error.message.includes("Failed to fetch")) {
+      // Create server-side session cookie
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to create session");
+      }
+
+      const destination = inviteToken
+        ? `/join/${encodeURIComponent(inviteToken)}`
+        : "/dashboard";
+      window.location.href = destination;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Login failed";
+      if (msg.includes("auth/invalid-credential") || msg.includes("auth/wrong-password") || msg.includes("auth/user-not-found")) {
+        setError("Invalid email or password.");
+      } else if (msg.includes("auth/too-many-requests")) {
+        setError("Too many attempts. Please try again later.");
+      } else if (msg.includes("Failed to fetch") || msg.includes("network")) {
         setError("Network error. Please check your internet connection.");
       } else {
-        setError(error.message);
+        setError(msg);
       }
       setLoading(false);
-      return;
     }
-
-    const destination = inviteToken
-      ? `/join/${encodeURIComponent(inviteToken)}`
-      : "/dashboard";
-    window.location.href = destination;
   };
 
   return (
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2 bg-slate-50 font-sans">
-      
+
       {/* Form Column */}
       <div className="flex flex-col items-center justify-center px-4 py-12 lg:px-8 relative z-10">
         <Link href="/" className="mb-8 flex items-center justify-center group">
@@ -163,13 +176,13 @@ function LoginPageInner() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[var(--color-green-deep)]/90 via-transparent to-transparent mix-blend-multiply"></div>
         <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-transparent to-transparent mix-blend-overlay"></div>
-        
+
         <div className="absolute bottom-20 left-16 right-16 text-white z-10 max-w-lg">
           <h2 className="text-[40px] font-bold font-heading leading-[1.1] mb-5">
             Scale your business with intelligent WhatsApp CRM
           </h2>
           <p className="text-[17px] text-white/85 font-medium leading-relaxed">
-            Join thousands of companies automating their support, sales, and marketing on the world's most popular messaging app.
+            Join thousands of companies automating their support, sales, and marketing on the world&apos;s most popular messaging app.
           </p>
         </div>
       </div>

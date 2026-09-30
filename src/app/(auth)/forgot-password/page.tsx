@@ -3,43 +3,39 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { createClient } from "@/lib/supabase/client";
+import { getClientAuth } from "@/lib/firebase/client";
+import { sendPasswordResetEmail } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { MessageSquare, CheckCircle, ArrowLeft } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CheckCircle, ArrowLeft } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const supabase = createClient();
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
-    });
-
-    if (error) {
-      setError(error.message);
+    try {
+      const auth = getClientAuth();
+      await sendPasswordResetEmail(auth, email);
+      setSuccess(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send reset email";
+      if (msg.includes('auth/user-not-found') || msg.includes('auth/invalid-email')) {
+        setError("No account found with this email address.");
+      } else {
+        setError(msg);
+      }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setSuccess(true);
-    setLoading(false);
   };
 
   if (success) {
@@ -50,21 +46,15 @@ export default function ForgotPasswordPage() {
             <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
               <CheckCircle className="h-6 w-6 text-primary" />
             </div>
-            <CardTitle className="text-xl text-foreground">
-              Check your email
-            </CardTitle>
+            <CardTitle className="text-xl text-foreground">Check your email</CardTitle>
             <CardDescription className="text-muted-foreground">
               We&apos;ve sent a password reset link to{" "}
-              <span className="text-foreground">{email}</span>. Please check your
-              inbox.
+              <span className="text-foreground">{email}</span>. Please check your inbox.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Link href="/login">
-              <Button
-                variant="outline"
-                className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
+              <Button variant="outline" className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground">
                 Back to sign in
               </Button>
             </Link>
@@ -79,14 +69,7 @@ export default function ForgotPasswordPage() {
       <Card className="w-full max-w-md border-border bg-card">
         <CardHeader className="items-center text-center">
           <Link href="/" className="mb-4 flex items-center justify-center">
-            <Image
-              src="/chatflyr-logo.png"
-              alt="ChatFlyr"
-              width={280}
-              height={80}
-              priority
-              className="h-16 sm:h-18 w-auto object-contain hover:scale-105 transition-transform"
-            />
+            <Image src="/chatflyr-logo.png" alt="ChatFlyr" width={280} height={80} priority className="h-16 sm:h-18 w-auto object-contain hover:scale-105 transition-transform" />
           </Link>
           <CardTitle className="text-xl text-foreground">Reset password</CardTitle>
           <CardDescription className="text-muted-foreground">
@@ -100,35 +83,15 @@ export default function ForgotPasswordPage() {
                 {error}
               </div>
             )}
-
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email" className="text-muted-foreground">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
+              <Label htmlFor="email" className="text-muted-foreground">Email</Label>
+              <Input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20" />
             </div>
-
-            <Button
-              type="submit"
-              disabled={loading}
-              className="mt-2 h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
+            <Button type="submit" disabled={loading} className="mt-2 h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
               {loading ? "Sending..." : "Send reset link"}
             </Button>
           </form>
-
-          <Link
-            href="/login"
-            className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
+          <Link href="/login" className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" />
             Back to sign in
           </Link>

@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     try {
       const fDb = getAdminDb();
       const snap = await fDb.collection('coupons').orderBy('created_at', 'desc').get();
-      snap.forEach((doc) => {
+      snap.forEach((doc: any) => {
         coupons.push({ id: doc.id, ...doc.data() });
       });
     } catch (dbErr) {
