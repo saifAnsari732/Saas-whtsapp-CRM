@@ -24,6 +24,6 @@ jobs:
             git pull origin main
             npm install
             NODE_OPTIONS="--max-old-space-size=2048" npm run build
-            pm2 restart chatflyr || pm2 start npm --name "chatflyr" -- start
+            pm2 startOrReload ecosystem.config.js
             pm2 save
             sudo systemctl restart nginx
