@@ -51,13 +51,13 @@ export async function GET(request: Request) {
     ]);
 
     // Async background update for expired trial status (non-blocking)
-    adminDb
-      .from('accounts')
-      .update({ subscription_status: 'expired' })
-      .eq('subscription_status', 'trial')
-      .lt('trial_ends_at', new Date().toISOString())
-      .then(() => {})
-      .catch(() => {});
+    Promise.resolve(
+      adminDb
+        .from('accounts')
+        .update({ subscription_status: 'expired' })
+        .eq('subscription_status', 'trial')
+        .lt('trial_ends_at', new Date().toISOString())
+    ).catch(() => {});
 
     const totalRevenue = (txs || []).reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
