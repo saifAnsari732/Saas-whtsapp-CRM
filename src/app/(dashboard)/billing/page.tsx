@@ -214,6 +214,35 @@ export default function BillingPage() {
       const data = await res.json();
       
       const targetOrderId = data.order_id;
+
+      if (data.is_demo || targetOrderId?.startsWith('order_demo_')) {
+        toast.info("Activating plan via instant verification...");
+        const verifyRes = await fetch('/api/billing/razorpay/verify-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            razorpay_order_id: targetOrderId,
+            razorpay_payment_id: `pay_demo_${Date.now()}`,
+            razorpay_signature: 'demo_signature',
+            type,
+            plan_id: planId,
+            billing_cycle: isYearly ? 'yearly' : 'monthly',
+            amount: data.amount / 100,
+          }),
+        });
+
+        const vData = await verifyRes.json();
+        if (verifyRes.ok && vData.success) {
+          toast.success("Plan activated successfully!");
+          if (type === 'wallet_topup') {
+            setWalletBalance(prev => prev + (data.amount / 100));
+          } else if (type === 'subscription' && planId) {
+            setCurrentPlan(planId);
+            setTrialStatus("none");
+          }
+          return;
+        }
+      }
       
       setCheckoutData({
         orderId: targetOrderId,

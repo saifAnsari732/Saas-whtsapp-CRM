@@ -24,8 +24,8 @@ export async function GET(request: Request) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('account_id, role, email')
-      .eq('user_id', user.id)
-      .single();
+      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+      .maybeSingle();
 
     if (!checkIsAdmin(user.email || profile?.email, profile?.role)) {
       return NextResponse.json({ error: 'Forbidden: Platform Admin access required' }, { status: 403 });
@@ -33,57 +33,45 @@ export async function GET(request: Request) {
 
     const adminDb = createAdminClient();
 
-    // Get total profiles in system
-    const { count: totalUsers } = await adminDb
-      .from('profiles')
-      .select('*', { count: 'exact', head: true });
+    // Fire ALL count, revenue and transaction queries in parallel Promise.all batch for ultra-fast performance
+    const [
+      { count: totalUsers },
+      { count: activeSubscriptions },
+      { count: trialUsers },
+      { count: expiredUsers },
+      { data: txs },
+      { data: rawTxs }
+    ] = await Promise.all([
+      adminDb.from('profiles').select('*', { count: 'exact', head: true }),
+      adminDb.from('accounts').select('*', { count: 'exact', head: true }).eq('subscription_status', 'active'),
+      adminDb.from('accounts').select('*', { count: 'exact', head: true }).eq('subscription_status', 'trial'),
+      adminDb.from('accounts').select('*', { count: 'exact', head: true }).eq('subscription_status', 'expired'),
+      adminDb.from('wallet_transactions').select('amount').eq('type', 'credit'),
+      adminDb.from('wallet_transactions').select('*').order('created_at', { ascending: false }).limit(30)
+    ]);
 
-    // Auto-mark any trial accounts whose trial_ends_at has passed as expired
-    await adminDb
+    // Async background update for expired trial status (non-blocking)
+    adminDb
       .from('accounts')
       .update({ subscription_status: 'expired' })
       .eq('subscription_status', 'trial')
-      .lt('trial_ends_at', new Date().toISOString());
+      .lt('trial_ends_at', new Date().toISOString())
+      .then(() => {})
+      .catch(() => {});
 
-    // Account subscription counts
-    const { count: activeSubscriptions } = await adminDb
-      .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('subscription_status', 'active');
+    const totalRevenue = (txs || []).reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
-    const { count: trialUsers } = await adminDb
-      .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('subscription_status', 'trial');
-
-    const { count: expiredUsers } = await adminDb
-      .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('subscription_status', 'expired');
-
-    const { data: txs } = await adminDb
-      .from('wallet_transactions')
-      .select('amount')
-      .eq('type', 'credit');
-
-    const totalRevenue = txs?.reduce((sum, tx) => sum + (tx.amount || 0), 0) || 0;
-
-    const { data: rawTxs } = await adminDb
-      .from('wallet_transactions')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(30);
-
-    const accountIds = Array.from(new Set((rawTxs || []).map(t => t.account_id)));
-    const { data: accounts } = await adminDb
-      .from('accounts')
-      .select('id, name, subscription_plan, subscription_status')
-      .in('id', accountIds);
-
-    const { data: profiles } = await adminDb
-      .from('profiles')
-      .select('user_id, full_name, email, account_id')
-      .in('account_id', accountIds);
+    const accountIds = Array.from(new Set((rawTxs || []).map(t => t.account_id).filter(Boolean)));
+    
+    // Batch fetch account names & profiles in parallel
+    const [{ data: accounts }, { data: profiles }] = await Promise.all([
+      accountIds.length > 0 
+        ? adminDb.from('accounts').select('id, name, subscription_plan, subscription_status').in('id', accountIds)
+        : Promise.resolve({ data: [] }),
+      accountIds.length > 0 
+        ? adminDb.from('profiles').select('user_id, full_name, email, account_id').in('account_id', accountIds)
+        : Promise.resolve({ data: [] })
+    ]);
 
     const accountsMap = new Map((accounts || []).map(a => [a.id, a]));
     const profilesMap = new Map((profiles || []).map(p => [p.account_id, p]));

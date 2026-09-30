@@ -27,8 +27,8 @@ export async function GET(request: Request) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('account_id, role, email')
-      .eq('user_id', user.id)
-      .single();
+      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+      .maybeSingle();
 
     if (!checkIsAdmin(user.email || profile?.email, profile?.role)) {
       return NextResponse.json({ error: 'Forbidden: Platform Admin access required' }, { status: 403 });
@@ -48,9 +48,11 @@ export async function GET(request: Request) {
         account_id,
         created_at,
         accounts!profiles_account_id_fkey (
+          id,
           subscription_status,
           subscription_plan,
-          trial_ends_at
+          trial_ends_at,
+          created_at
         )
       `)
       .order('created_at', { ascending: false });
@@ -59,6 +61,27 @@ export async function GET(request: Request) {
 
     // Map to user-friendly format with clear User vs Admin role
     const now = new Date();
+
+    // Fetch wallets for each account to display current credit balance
+    const accountIds = (users || []).map((u: any) => {
+      const acc = Array.isArray(u.accounts) ? u.accounts[0] : u.accounts;
+      return acc?.id;
+    }).filter(Boolean);
+
+    let walletMap: Record<string, number> = {};
+    if (accountIds.length > 0) {
+      const { data: wallets } = await adminDb
+        .from('wallets')
+        .select('account_id, balance')
+        .in('account_id', accountIds);
+      
+      if (wallets) {
+        wallets.forEach((w: any) => {
+          walletMap[w.account_id] = Number(w.balance) || 0;
+        });
+      }
+    }
+
     const formattedUsers = (users || []).map((u: any) => {
       const acc = Array.isArray(u.accounts) ? u.accounts[0] : u.accounts;
       const isAdmin = checkIsAdmin(u.email, u.role);
@@ -70,15 +93,22 @@ export async function GET(request: Request) {
       ) {
         status = 'expired';
       }
+
+      const walletBalance = acc?.id ? (walletMap[acc.id] || 0) : 0;
+
       return {
         id: u.id,
         user_id: u.user_id,
         full_name: u.full_name,
         email: u.email,
-        role: isAdmin ? 'Admin' : 'User',
+        role: u.role || (isAdmin ? 'admin' : 'user'),
+        is_admin: isAdmin,
+        account_id: u.account_id || acc?.id,
         status,
         plan: acc?.subscription_plan || 'None',
-        trial_ends_at: acc?.trial_ends_at
+        trial_ends_at: acc?.trial_ends_at,
+        created_at: u.created_at,
+        wallet_balance: walletBalance
       };
     });
 
@@ -98,14 +128,14 @@ export async function PATCH(request: Request) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('account_id, role, email')
-      .eq('user_id', user.id)
-      .single();
+      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+      .maybeSingle();
 
     if (!checkIsAdmin(user.email || profile?.email, profile?.role)) {
       return NextResponse.json({ error: 'Forbidden: Platform Admin access required' }, { status: 403 });
     }
 
-    const { user_id, action, plan_id } = await request.json();
+    const { user_id, action, plan_id, days } = await request.json();
     if (!user_id || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
@@ -113,8 +143,8 @@ export async function PATCH(request: Request) {
     const adminDb = createAdminClient();
     const { data: targetProfile } = await adminDb
       .from('profiles')
-      .select('account_id')
-      .eq('user_id', user_id)
+      .select('id, user_id, account_id, role')
+      .or(`user_id.eq.${user_id},id.eq.${user_id}`)
       .single();
       
     if (!targetProfile?.account_id) {
@@ -128,10 +158,11 @@ export async function PATCH(request: Request) {
     } else if (action === 'unblock') {
       await adminDb.from('accounts').update({ subscription_status: 'active' }).eq('id', account_id);
     } else if (action === 'extend_trial') {
+      const daysToAdd = Number(days) || 5;
       const { data: acc } = await adminDb.from('accounts').select('trial_ends_at').eq('id', account_id).single();
       const currentExpiry = acc?.trial_ends_at ? new Date(acc.trial_ends_at) : new Date();
       const baseDate = currentExpiry.getTime() > Date.now() ? currentExpiry : new Date();
-      baseDate.setDate(baseDate.getDate() + 5);
+      baseDate.setDate(baseDate.getDate() + daysToAdd);
       await adminDb.from('accounts').update({ 
         trial_ends_at: baseDate.toISOString(),
         subscription_status: 'trial'
@@ -143,6 +174,15 @@ export async function PATCH(request: Request) {
           subscription_status: 'active'
         }).eq('id', account_id);
       }
+    } else if (action === 'force_bypass') {
+      // Direct lifetime / active bypass
+      await adminDb.from('accounts').update({ 
+        subscription_plan: plan_id || 'allinone',
+        subscription_status: 'active'
+      }).eq('id', account_id);
+    } else if (action === 'toggle_role') {
+      const newRole = targetProfile.role === 'admin' ? 'user' : 'admin';
+      await adminDb.from('profiles').update({ role: newRole }).eq('id', targetProfile.id);
     } else if (action === 'grant_wallet_credit') {
       const creditAmount = Number(plan_id) || 500;
       const { data: wallet } = await adminDb.from('wallets').select('id, balance').eq('account_id', account_id).maybeSingle();
