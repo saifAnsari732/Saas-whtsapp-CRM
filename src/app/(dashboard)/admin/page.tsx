@@ -35,14 +35,11 @@ import {
   RefreshCw,
   Bell,
   Crown,
-  Filter,
   CheckCircle2,
   Wallet,
   Lock,
   Unlock,
-  UserCheck,
-  UserX,
-  ExternalLink
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -265,13 +262,13 @@ export default function AdminPage() {
     toast.success('Exported user database to CSV');
   };
 
-  if (authLoading) {
+  if (authLoading || loading) {
     return (
       <div className="flex flex-col h-[65vh] items-center justify-center space-y-4">
         <div className="p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20">
           <Cpu className="h-10 w-10 text-emerald-600 dark:text-emerald-400 animate-spin" />
         </div>
-        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Verifying Platform SuperAdmin Authorization...</p>
+        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Verifying Platform SuperAdmin Authorization & Telemetry...</p>
       </div>
     );
   }
