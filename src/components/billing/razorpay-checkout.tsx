@@ -36,13 +36,7 @@ export function RazorpayCheckout({
 
   useEffect(() => {
     if (isLoaded && orderId) {
-      // If it's a demo order ID (order_demo_...), handle instantly without opening external modal
-      if (orderId.startsWith('order_demo_')) {
-        onSuccess(`pay_demo_${Date.now()}`, 'demo_signature');
-        return;
-      }
-
-      const activeKey = keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_live_TWLWfA0Ba2tiwG";
+      const activeKey = keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
 
       const options = {
         key: activeKey,
@@ -52,10 +46,15 @@ export function RazorpayCheckout({
         description: "WhatsApp CRM Subscription & Messaging",
         order_id: orderId,
         handler: function (response: any) {
-          onSuccess(
-            response.razorpay_payment_id || `pay_demo_${Date.now()}`,
-            response.razorpay_signature || 'demo_signature'
-          );
+          if (response.razorpay_payment_id && response.razorpay_signature) {
+            onSuccess(
+              response.razorpay_payment_id,
+              response.razorpay_signature
+            );
+          } else {
+            console.error("Incomplete response from Razorpay checkout", response);
+            onClose();
+          }
         },
         modal: {
           ondismiss: function () {
@@ -75,8 +74,8 @@ export function RazorpayCheckout({
         });
         rzp.open();
       } catch (err) {
-        console.error("Error opening Razorpay modal:", err);
-        onSuccess(`pay_demo_${Date.now()}`, 'demo_signature');
+        console.error("Error opening Razorpay checkout modal:", err);
+        onClose();
       }
     }
   }, [isLoaded, orderId, amount, currency, onSuccess, onClose, keyId]);

@@ -32,18 +32,30 @@ export async function POST(req: Request) {
       amount = 999
     } = body;
 
-    const isDemoOrder = !razorpay_order_id || razorpay_order_id.startsWith('order_demo_') || razorpay_signature === 'demo_signature';
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return NextResponse.json({ error: 'Payment credentials missing. Payment not completed.' }, { status: 400 });
+    }
 
-    if (!isDemoOrder) {
-      const text = `${razorpay_order_id}|${razorpay_payment_id}`;
-      const expectedSignature = crypto
-        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'secret')
-        .update(text)
-        .digest('hex');
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) {
+      return NextResponse.json({ error: 'Razorpay secret key not configured in environment' }, { status: 500 });
+    }
 
-      if (expectedSignature !== razorpay_signature) {
-        console.warn('[Verify Payment] Signature mismatch, allowing fallback verification for user convenience');
-      }
+    const text = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(text)
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      console.error('[Verify Payment Security] Invalid payment signature attempt', {
+        razorpay_order_id,
+        razorpay_payment_id
+      });
+      return NextResponse.json(
+        { error: 'Payment signature verification failed. Plan not activated.' },
+        { status: 400 }
+      );
     }
 
     // Lookup order from DB
@@ -78,7 +90,7 @@ export async function POST(req: Request) {
           plan_id: targetPlanId,
           type: targetType,
           status: 'paid',
-          metadata: { billing_cycle: targetBillingCycle, is_demo: isDemoOrder },
+          metadata: { billing_cycle: targetBillingCycle },
         });
       } catch (insertErr) {
         console.warn('[Verify Payment] Order insert warning:', insertErr);

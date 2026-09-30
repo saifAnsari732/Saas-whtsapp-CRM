@@ -119,10 +119,18 @@ export async function POST(req: Request) {
       total_amount = price + gst_amount;
     }
 
-    // Create Razorpay order
-    const auth = Buffer.from(
-      `${process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`
-    ).toString('base64');
+    // Create Razorpay order via Razorpay REST API
+    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (!keyId || !keySecret) {
+      return NextResponse.json(
+        { error: 'Razorpay Payment Gateway credentials not configured in environment' },
+        { status: 500 }
+      );
+    }
+
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
 
     const rzpResponse = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
@@ -140,57 +148,10 @@ export async function POST(req: Request) {
     if (!rzpResponse.ok) {
       const errorData = await rzpResponse.json();
       console.error('[Razorpay Order Creation Failed]', errorData);
-
-      // If Razorpay API Key ID / Secret are invalid or mismatched
-      if (
-        errorData.error?.description === 'Authentication failed' ||
-        rzpResponse.status === 401
-      ) {
-        // Create demo order ID so payment/plan activation can still be tested or completed
-        const demoOrderId = `order_demo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-        
-        try {
-          await supabase.from('billing_orders').insert({
-            account_id: profile.account_id,
-            razorpay_order_id: demoOrderId,
-            amount: total_amount,
-            currency: 'INR',
-            plan_id: plan_id || 'essential',
-            type,
-            status: 'pending',
-            metadata: { 
-              billing_cycle, 
-              gst_amount, 
-              original_price, 
-              discount_amount, 
-              final_price: price,
-              coupon: applied_coupon,
-              is_demo: true 
-            },
-          });
-        } catch (dbErr) {
-          console.warn('[Razorpay Order] Demo fallback save warning:', dbErr);
-        }
-
-        return NextResponse.json({
-          order_id: demoOrderId,
-          amount: total_amount,
-          currency: 'INR',
-          gst_amount,
-          discount_amount,
-          applied_coupon,
-          is_demo: true,
-          plan: {
-            id: planData.id,
-            name: planData.name,
-            price,
-            original_price,
-            billing_cycle
-          }
-        });
-      }
-
-      throw new Error(errorData.error?.description || 'Failed to create Razorpay order');
+      return NextResponse.json(
+        { error: errorData.error?.description || 'Failed to create order on Razorpay gateway' },
+        { status: rzpResponse.status || 400 }
+      );
     }
 
     const order = await rzpResponse.json();
