@@ -123,7 +123,7 @@ import { useTranslations } from "next-intl";
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
-  const { profile, profileLoading, account, accountRole, isSuperAdmin, signOut } = useAuth();
+  const { user, profile, profileLoading, account, accountRole, isSuperAdmin, signOut } = useAuth();
   const { isActive: isSubscriptionActive, loading: subscriptionLoading } = useSubscription();
   const isAccountLocked = !isSuperAdmin && !subscriptionLoading && !isSubscriptionActive;
   const totalUnread = useTotalUnread();
@@ -415,27 +415,35 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted focus:bg-muted focus:outline-none">
-              <Avatar className="size-8 shrink-0">
-                {profile?.avatar_url ? (
-                  <AvatarImage
-                    src={profile.avatar_url}
-                    alt={profile.full_name ?? t("defaultAvatar")}
-                  />
-                ) : null}
-                <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                  {profile?.full_name?.charAt(0)?.toUpperCase() ??
-                    profile?.email?.charAt(0)?.toUpperCase() ??
-                    "U"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {profile?.full_name ?? t("defaultUser")}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {profile?.email ?? ""}
-                </p>
-              </div>
+              {(() => {
+                const activeEmail = profile?.email || user?.email || "";
+                const activeName = profile?.full_name || user?.displayName || (activeEmail ? activeEmail.split('@')[0] : t("defaultUser"));
+                const activeAvatar = profile?.avatar_url || user?.photoURL || null;
+                const userInitial = activeName.charAt(0).toUpperCase();
+                return (
+                  <>
+                    <Avatar className="size-8 shrink-0">
+                      {activeAvatar ? (
+                        <AvatarImage
+                          src={activeAvatar}
+                          alt={activeName}
+                        />
+                      ) : null}
+                      <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                        {userInitial}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {activeName}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {activeEmail}
+                      </p>
+                    </div>
+                  </>
+                );
+              })()}
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"

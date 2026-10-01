@@ -12,10 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { UserCog, Shield, User as UserIcon, Settings, Edit3 } from 'lucide-react';
 import Link from 'next/link';
-import { toast } from 'sonner';
 
 export default function ProfilePage() {
-  const { profile, isSuperAdmin } = useAuth();
+  const { user, profile, loading, profileLoading, isSuperAdmin } = useAuth();
   const { status, plan, isActive, daysRemaining, trialEndsAt, subscriptionExpiresAt, currentPlanLimits, trialUsage } = useSubscription();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,32 +26,47 @@ export default function ProfilePage() {
 
   useEffect(() => {
     async function fetchTransactions() {
-      if (!profile?.account_id) return;
+      const accId = profile?.account_id;
+      if (!accId) return;
       try {
         const supabase = createClient();
         const { data, error } = await supabase
           .from('wallet_transactions')
           .select('*')
-          .eq('account_id', profile.account_id)
+          .eq('account_id', accId)
           .order('created_at', { ascending: false })
           .limit(10);
         
         if (error) throw error;
         setTransactions(data || []);
       } catch (err) {
-        // Handle missing or empty table gracefully
         setTransactions([]);
       } finally {
         setIsLoading(false);
       }
     }
 
-    if (profile) {
+    if (profile?.account_id) {
       fetchTransactions();
+    } else {
+      setIsLoading(false);
     }
-  }, [profile]);
+  }, [profile?.account_id]);
 
-  if (!profile) return null;
+  if (loading || profileLoading) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6 pb-12 animate-pulse">
+        <div className="h-8 w-48 bg-slate-200 dark:bg-zinc-800 rounded" />
+        <div className="h-32 bg-slate-100 dark:bg-zinc-900 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (!user && !profile) return null;
+
+  const activeEmail = profile?.email || user?.email || '';
+  const activeName = profile?.full_name || user?.displayName || (activeEmail ? activeEmail.split('@')[0] : 'User');
+  const activeAvatar = profile?.avatar_url || user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${activeEmail}`;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
@@ -75,9 +89,9 @@ export default function ProfilePage() {
           <div className="relative group">
             <Avatar className="h-24 w-24 border-4 border-background shadow-xl">
               <AvatarImage 
-                src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.email}`} 
+                src={activeAvatar} 
               />
-              <AvatarFallback className="text-2xl">{profile.full_name?.charAt(0) || 'U'}</AvatarFallback>
+              <AvatarFallback className="text-2xl">{activeName.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
             <Link 
               href="/settings?tab=profile"
@@ -89,13 +103,13 @@ export default function ProfilePage() {
           
           <div className="text-center sm:text-left flex-1 space-y-2">
             <div className="flex flex-col sm:flex-row items-center gap-3">
-              <h2 className="text-2xl font-bold">{profile.full_name || 'Anonymous User'}</h2>
+              <h2 className="text-2xl font-bold">{activeName}</h2>
               <Badge variant="secondary" className="flex items-center gap-1.5 capitalize font-semibold">
                 {isSuperAdmin ? <Shield className="h-3.5 w-3.5 text-purple-600" /> : <UserIcon className="h-3.5 w-3.5 text-emerald-600" />}
-                {isSuperAdmin ? 'Admin' : 'User'}
+                {isSuperAdmin ? 'Admin (SuperAdmin)' : 'User'}
               </Badge>
             </div>
-            <p className="text-muted-foreground">{profile.email}</p>
+            <p className="text-muted-foreground">{activeEmail}</p>
           </div>
         </CardContent>
       </Card>

@@ -16,7 +16,7 @@ import {
   signOut as firebaseSignOut,
   type User as FirebaseUser,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import {
   canEditSettings as canEditSettingsFor,
@@ -109,9 +109,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = useCallback(async (userId: string) => {
     lastFetchedUserIdRef.current = userId;
     try {
+      const auth = getClientAuth();
+      const currentUser = auth.currentUser;
       const db = getClientDb();
       const userDocRef = doc(db, "users", userId);
       const userSnap = await getDoc(userDocRef);
+
+      const adminEmails = [
+        'ansarisaifuddin732@gmail.com',
+        'kisandeveloper2@gmail.com',
+        ...(process.env.NEXT_PUBLIC_ADMIN_EMAILS ? process.env.NEXT_PUBLIC_ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()) : [])
+      ];
 
       if (userSnap.exists()) {
         const data = userSnap.data();
@@ -133,13 +141,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const rawRole = data.accountRole || data.account_role;
         const accountRole = isAccountRole(rawRole) ? rawRole : "owner";
+        const email = data.email || currentUser?.email || "";
+        const isSuperAdminEmail = Boolean(email && adminEmails.includes(email.toLowerCase()));
 
         const newProfile: Profile = {
           id: userSnap.id,
-          full_name: data.full_name || data.fullName || null,
-          email: data.email || "",
-          avatar_url: data.avatar_url || data.avatarUrl || null,
-          role: data.role || null,
+          full_name: data.full_name || data.fullName || currentUser?.displayName || null,
+          email,
+          avatar_url: data.avatar_url || data.avatarUrl || currentUser?.photoURL || null,
+          role: data.role || (isSuperAdminEmail ? "admin" : "user"),
           beta_features: data.beta_features || [],
           account_id: accId || null,
           account_role: accountRole,
@@ -150,7 +160,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthCache('wacrm_cached_profile', newProfile);
         if (accountRow) setAuthCache('wacrm_cached_account', accountRow);
       } else {
-        lastFetchedUserIdRef.current = null;
+        const fallbackEmail = currentUser?.email || "";
+        const isSuperAdminEmail = Boolean(fallbackEmail && adminEmails.includes(fallbackEmail.toLowerCase()));
+
+        const fallbackProfile: Profile = {
+          id: userId,
+          full_name: currentUser?.displayName || (fallbackEmail ? fallbackEmail.split('@')[0] : "User"),
+          email: fallbackEmail,
+          avatar_url: currentUser?.photoURL || null,
+          role: isSuperAdminEmail ? "admin" : "user",
+          beta_features: [],
+          account_id: null,
+          account_role: "owner",
+        };
+
+        setProfile(fallbackProfile);
+        setAuthCache('wacrm_cached_profile', fallbackProfile);
+
+        // Auto-create basic user doc in Firestore
+        setDoc(userDocRef, {
+          email: fallbackEmail,
+          full_name: fallbackProfile.full_name,
+          role: fallbackProfile.role,
+          accountRole: "owner",
+          createdAt: new Date().toISOString(),
+        }, { merge: true }).catch(e => console.error("Auto-create user doc failed:", e));
       }
     } catch (err) {
       console.error("[AuthProvider] fetchProfile threw:", err);

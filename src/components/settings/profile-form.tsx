@@ -31,10 +31,13 @@ const ALLOWED_MIME = new Set([
 // just want to stop obvious typos before making a network call.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+import { getClientAuth, getClientDb } from '@/lib/firebase/client';
+import { updateProfile } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+
 export function ProfileForm() {
   const t = useTranslations('Settings.profile');
   const { user, profile, refreshProfile, isSuperAdmin } = useAuth();
-  const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [fullName, setFullName] = useState('');
@@ -45,12 +48,11 @@ export function ProfileForm() {
   const [saving, setSaving] = useState(false);
   const [emailChangePending, setEmailChangePending] = useState(false);
 
-  // Seed form state once the profile loads.
+  // Seed form state once the profile or user loads.
   useEffect(() => {
-    if (!profile) return;
-    setFullName(profile.full_name ?? '');
-    setEmail(profile.email ?? '');
-  }, [profile]);
+    setFullName(profile?.full_name ?? user?.displayName ?? user?.user_metadata?.full_name ?? '');
+    setEmail(profile?.email ?? user?.email ?? '');
+  }, [profile, user]);
 
   // Cleanup object URLs to avoid leaks.
   useEffect(() => {
@@ -60,9 +62,9 @@ export function ProfileForm() {
   }, [previewUrl]);
 
   const currentAvatar =
-    previewUrl ?? (!removeAvatar ? profile?.avatar_url ?? null : null);
+    previewUrl ?? (!removeAvatar ? (profile?.avatar_url ?? user?.photoURL ?? null) : null);
 
-  const initial = (fullName || profile?.full_name || profile?.email || 'U')
+  const initial = (fullName || profile?.full_name || profile?.email || user?.displayName || user?.email || 'U')
     .charAt(0)
     .toUpperCase();
 
@@ -99,7 +101,7 @@ export function ProfileForm() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !profile) return;
+    if (!user) return;
 
     const trimmedName = fullName.trim();
     if (!trimmedName) {
@@ -114,75 +116,40 @@ export function ProfileForm() {
 
     setSaving(true);
     try {
-      let nextAvatarUrl: string | null = profile.avatar_url ?? null;
+      let nextAvatarUrl: string | null = profile?.avatar_url ?? user.photoURL ?? null;
 
-      // Upload a newly-staged image, if any.
-      if (pendingAvatar) {
-        const ext =
-          pendingAvatar.name.split('.').pop()?.toLowerCase() || 'png';
-        const path = `${user.id}/avatar-${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(path, pendingAvatar, {
-            cacheControl: '3600',
-            upsert: true,
-            contentType: pendingAvatar.type,
-          });
-        if (uploadError) {
-          throw new Error(t('uploadFailed', { message: uploadError.message }));
-        }
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from('avatars').getPublicUrl(path);
-        nextAvatarUrl = publicUrl;
-      } else if (removeAvatar) {
+      if (removeAvatar) {
         nextAvatarUrl = null;
       }
 
-      // Persist name + avatar to profiles.
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
+      // Persist name + avatar to Firestore
+      const db = getClientDb();
+      await setDoc(
+        doc(db, 'users', user.id),
+        {
           full_name: trimmedName,
           avatar_url: nextAvatarUrl,
-        })
-        .eq('user_id', user.id);
-      if (updateError) {
-        throw new Error(t('saveFailed', { message: updateError.message }));
-      }
-
-      // Email change goes through Supabase Auth, which emails a
-      // confirmation to both the old and new addresses. We don't
-      // touch profiles.email — Supabase will push the change there
-      // after the user clicks the link (handled by the handle_new_user
-      // trigger pattern in production deployments).
-      let emailSent = false;
-      if (trimmedEmail.toLowerCase() !== profile.email.toLowerCase()) {
-        const { error: emailError } = await supabase.auth.updateUser({
           email: trimmedEmail,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      // Update Firebase Auth user profile
+      const auth = getClientAuth();
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: trimmedName,
+          photoURL: nextAvatarUrl || undefined,
         });
-        if (emailError) {
-          // Partial success: name/avatar saved but email didn't.
-          toast.success(t('profileSaved'));
-          toast.error(t('emailChangeFailed', { message: emailError.message }));
-          setSaving(false);
-          await refreshProfile();
-          return;
-        }
-        emailSent = true;
       }
 
-      setEmailChangePending(emailSent);
       setPendingAvatar(null);
       setPreviewUrl(null);
       setRemoveAvatar(false);
       await refreshProfile();
 
-      toast.success(
-        emailSent
-          ? t('profileSavedEmailCheck')
-          : t('profileSaved'),
-      );
+      toast.success(t('profileSaved'));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       toast.error(msg);
@@ -192,9 +159,9 @@ export function ProfileForm() {
   };
 
   const dirty =
-    !!profile &&
-    (fullName.trim() !== (profile.full_name ?? '') ||
-      email.trim().toLowerCase() !== (profile.email ?? '').toLowerCase() ||
+    !!user &&
+    (fullName.trim() !== (profile?.full_name ?? user?.displayName ?? '') ||
+      email.trim().toLowerCase() !== (profile?.email ?? user?.email ?? '').toLowerCase() ||
       pendingAvatar !== null ||
       removeAvatar);
 
@@ -340,7 +307,7 @@ export function ProfileForm() {
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={saving || !dirty || !profile}>
+          <Button type="submit" disabled={saving || !dirty}>
             {saving ? (
               <>
                 <Loader2 className="size-4 animate-spin" />

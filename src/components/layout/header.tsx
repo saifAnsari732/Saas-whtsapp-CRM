@@ -48,13 +48,13 @@ import { useTranslations } from "next-intl";
 export function Header({ onOpenSidebar }: HeaderProps) {
   const t = useTranslations("Header");
   const pathname = usePathname();
-  const { profile, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const titleKey = getPageTitleKey(pathname);
 
-  const initial =
-    profile?.full_name?.charAt(0)?.toUpperCase() ??
-    profile?.email?.charAt(0)?.toUpperCase() ??
-    "U";
+  const activeEmail = profile?.email || user?.email || "";
+  const activeName = profile?.full_name || user?.displayName || (activeEmail ? activeEmail.split('@')[0] : t("defaultUser"));
+  const activeAvatar = profile?.avatar_url || user?.photoURL || null;
+  const initial = activeName.charAt(0).toUpperCase();
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-6">
@@ -92,10 +92,10 @@ export function Header({ onOpenSidebar }: HeaderProps) {
           aria-label={t("openAccountMenu")}
         >
           <Avatar className="size-8">
-            {profile?.avatar_url ? (
+            {activeAvatar ? (
               <AvatarImage
-                src={profile.avatar_url}
-                alt={profile.full_name ?? t("defaultAvatar")}
+                src={activeAvatar}
+                alt={activeName}
               />
             ) : null}
             <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
@@ -103,7 +103,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
             </AvatarFallback>
           </Avatar>
           <span className="hidden text-sm font-medium text-foreground sm:inline">
-            {profile?.full_name ?? t("defaultUser")}
+            {activeName}
           </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -113,10 +113,10 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         >
           <div className="px-2 py-1.5">
             <p className="truncate text-sm font-medium text-foreground">
-              {profile?.full_name ?? t("defaultUser")}
+              {activeName}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {profile?.email ?? ""}
+              {activeEmail}
             </p>
           </div>
           <DropdownMenuSeparator className="bg-border" />
