@@ -95,9 +95,9 @@ export function phonesMatch(phone1: string, phone2: string): boolean {
   const n2 = normalizePhone(phone2);
   if (!n1 || !n2) return false;
   if (n1 === n2) return true;
-  // Match last 10 digits if both are at least 10 digits
-  if (n1.length >= 10 && n2.length >= 10) {
-    return n1.slice(-10) === n2.slice(-10);
+  // Match last 8 digits if both are at least 8 digits
+  if (n1.length >= 8 && n2.length >= 8) {
+    return n1.slice(-8) === n2.slice(-8);
   }
   return false;
 }

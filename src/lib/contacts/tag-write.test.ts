@@ -1,55 +1,48 @@
-import { describe, expect, it } from 'vitest';
-import type { SupabaseClient } from '@supabase/supabase-js';
-
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { addContactTagIfAbsent } from './tag-write';
 
-interface FakeOptions {
-  contact?: { id: string } | null;
-  tag?: { id: string } | null;
-  insertData?: { id: string } | null;
-  insertError?: { code?: string; message: string } | null;
-}
+const h = vi.hoisted(() => ({
+  contactExists: true,
+  tagExists: true,
+  contactTags: [] as any[],
+  updateFn: vi.fn(),
+}));
 
-function fakeDb(options: FakeOptions = {}): SupabaseClient {
-  const contact =
-    options.contact === undefined ? { id: 'contact-1' } : options.contact;
-  const tag = options.tag === undefined ? { id: 'tag-1' } : options.tag;
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    arrayUnion: (...args: any[]) => ({ type: 'arrayUnion', args }),
+    serverTimestamp: () => 'SERVER_TIMESTAMP',
+  },
+}));
 
-  return {
-    from(table: string) {
-      const state = { operation: 'select' };
-      const builder = {
-        select() {
-          return builder;
-        },
-        insert() {
-          state.operation = 'insert';
-          return builder;
-        },
-        eq() {
-          return builder;
-        },
-        maybeSingle() {
-          if (table === 'contacts')
-            return Promise.resolve({ data: contact, error: null });
-          if (table === 'tags')
-            return Promise.resolve({ data: tag, error: null });
-          if (table === 'contact_tags' && state.operation === 'insert') {
-            return Promise.resolve({
-              data:
-                options.insertData === undefined
-                  ? { id: 'join-1' }
-                  : options.insertData,
-              error: options.insertError ?? null,
-            });
+vi.mock('@/lib/firebase/admin', () => ({
+  getAdminDb: () => ({
+    doc: (path: string) => {
+      const isContact = path.includes('/contacts/');
+      const isTag = path.includes('/tags/');
+      return {
+        get: async () => {
+          if (isContact) {
+            return {
+              exists: h.contactExists,
+              id: path.split('/').pop(),
+              data: () => ({ tags: h.contactTags }),
+            };
           }
-          return Promise.resolve({ data: null, error: null });
+          if (isTag) {
+            return {
+              exists: h.tagExists,
+              id: path.split('/').pop(),
+              data: () => ({ name: 'VIP', color: '#ff0000' }),
+            };
+          }
+          return { exists: false, data: () => null };
         },
+        update: h.updateFn,
       };
-      return builder;
     },
-  } as unknown as SupabaseClient;
-}
+  }),
+}));
 
 const input = {
   accountId: 'account-1',
@@ -58,40 +51,38 @@ const input = {
 };
 
 describe('addContactTagIfAbsent', () => {
-  it('returns true only when the join row was inserted', async () => {
-    await expect(addContactTagIfAbsent(fakeDb(), input)).resolves.toBe(true);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.contactExists = true;
+    h.tagExists = true;
+    h.contactTags = [];
+    h.updateFn.mockResolvedValue(undefined);
   });
 
-  it('treats an error-free insert as successful even without a returned row', async () => {
-    await expect(
-      addContactTagIfAbsent(fakeDb({ insertData: null }), input)
-    ).resolves.toBe(true);
+  it('returns true and updates contact when tag is absent', async () => {
+    const res = await addContactTagIfAbsent(null, input);
+    expect(res).toBe(true);
+    expect(h.updateFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tags: expect.anything(),
+        updatedAt: 'SERVER_TIMESTAMP',
+      })
+    );
   });
 
-  it('treats a unique violation as an idempotent duplicate', async () => {
-    const db = fakeDb({
-      insertData: null,
-      insertError: { code: '23505', message: 'duplicate key' },
-    });
-    await expect(addContactTagIfAbsent(db, input)).resolves.toBe(false);
+  it('returns false when contact already has tag', async () => {
+    h.contactTags = [{ id: 'tag-1', name: 'VIP' }];
+    const res = await addContactTagIfAbsent(null, input);
+    expect(res).toBe(false);
+    expect(h.updateFn).not.toHaveBeenCalled();
   });
 
   it('refuses contacts and tags outside the account', async () => {
-    await expect(
-      addContactTagIfAbsent(fakeDb({ contact: null }), input)
-    ).rejects.toMatchObject({ status: 404 });
-    await expect(
-      addContactTagIfAbsent(fakeDb({ tag: null }), input)
-    ).rejects.toMatchObject({ status: 404 });
-  });
+    h.contactExists = false;
+    await expect(addContactTagIfAbsent(null, input)).rejects.toMatchObject({ status: 404 });
 
-  it('surfaces non-duplicate insert failures', async () => {
-    const db = fakeDb({
-      insertData: null,
-      insertError: { code: '42501', message: 'permission denied' },
-    });
-    await expect(addContactTagIfAbsent(db, input)).rejects.toThrow(
-      'Failed to add contact tag: permission denied'
-    );
+    h.contactExists = true;
+    h.tagExists = false;
+    await expect(addContactTagIfAbsent(null, input)).rejects.toMatchObject({ status: 404 });
   });
 });

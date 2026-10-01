@@ -68,16 +68,16 @@ export function isAccountRole(value: unknown): value is AccountRole {
 
 /** Owner only: invite, remove, change roles (Requested by user: only owner ko All permission access do). */
 export function canManageMembers(role: AccountRole): boolean {
-  return role === "owner";
+  return hasMinRole(role, "admin");
 }
 
 /**
- * Owner only: edit account-wide settings (WhatsApp config,
+ * Owner / admin: edit account-wide settings (WhatsApp config,
  * message templates, pipelines, tags, custom fields, account
  * name). Excludes per-user settings like avatar or own password.
  */
 export function canEditSettings(role: AccountRole): boolean {
-  return role === "owner";
+  return hasMinRole(role, "admin");
 }
 
 /**
