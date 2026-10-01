@@ -23,21 +23,40 @@ export interface AccountContext {
  */
 export async function getFirebaseUser(req: NextRequest): Promise<FirebaseUser | null> {
   try {
-    // Try Authorization: Bearer <token> header first
+    const auth = getAdminAuth();
+
+    // 1. Try Authorization: Bearer <token> header first
     const authHeader = req.headers.get('authorization');
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
-      const decoded = await getAdminAuth().verifyIdToken(token);
-      return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
+      try {
+        const decoded = await auth.verifyIdToken(token);
+        return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
+      } catch {
+        try {
+          const decoded = await auth.verifySessionCookie(token, false);
+          return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
+        } catch {}
+      }
     }
-    // Try session cookie
+
+    // 2. Try session cookie __session
     const sessionCookie = req.cookies.get('__session')?.value;
     if (sessionCookie) {
-      const decoded = await getAdminAuth().verifySessionCookie(sessionCookie, true);
-      return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
+      try {
+        const decoded = await auth.verifySessionCookie(sessionCookie, false);
+        return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
+      } catch {
+        try {
+          const decoded = await auth.verifyIdToken(sessionCookie);
+          return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
+        } catch {}
+      }
     }
+
     return null;
-  } catch {
+  } catch (err) {
+    console.error("[getFirebaseUser] auth error:", err);
     return null;
   }
 }
@@ -52,12 +71,18 @@ export async function getAccountContext(req: NextRequest): Promise<AccountContex
 
   const db = getAdminDb();
   const profileDoc = await db.collection('users').doc(user.uid).get();
-  if (!profileDoc.exists) return null;
+  
+  let accountId = profileDoc.exists ? (profileDoc.data()?.accountId || profileDoc.data()?.account_id) : null;
+  let accountRole = profileDoc.exists ? (profileDoc.data()?.accountRole || profileDoc.data()?.account_role || 'owner') : 'owner';
 
-  const profile = profileDoc.data()!;
+  if (!accountId) {
+    accountId = `acct-${user.uid}`;
+    await db.collection('users').doc(user.uid).set({ accountId, accountRole: 'owner', email: user.email }, { merge: true }).catch(() => {});
+  }
+
   return {
     user,
-    accountId: profile.accountId as string,
-    accountRole: profile.accountRole as string,
+    accountId,
+    accountRole,
   };
 }

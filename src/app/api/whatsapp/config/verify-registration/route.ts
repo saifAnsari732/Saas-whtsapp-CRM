@@ -5,48 +5,42 @@ import {
   getSubscribedApps,
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
+import { getAdminDb } from '@/lib/firebase/admin'
+import { getAccountContext } from '@/lib/firebase/auth-helper'
 
 /**
  * GET /api/whatsapp/config/verify-registration
  *
  * Diagnostic endpoint — confirms the user's saved phone number is
- * actually reachable on Meta's side. Solves the failure mode that
- * surfaced the multi-number bug originally: "UI says Connected but
- * Meta isn't delivering events."
- *
- * Three checks run independently so the UI can show which step
- * passes and which fails:
- *
- *   1. phone_info  — GET /{phone_number_id} succeeds
- *   2. waba_subscription — our app appears in
- *                    GET /{waba_id}/subscribed_apps
- *   3. registered_at — local timestamp set by POST /config when
- *                    /register last succeeded; NULL means the
- *                    number was saved but never actually subscribed
- *
- * Returns 200 in every case so the UI can render diagnostic detail
- * rather than a generic error toast. The combined `live` flag is
- * what the UI badges on.
+ * actually reachable on Meta's side.
  */
-export async function GET() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
+export async function GET(request: Request) {
+  const accCtx = await getAccountContext(request as any)
+  let user = accCtx?.user
+  let accountId = accCtx?.accountId
+
+  if (!user) {
+    try {
+      const supabase = await createClient()
+      const { data: { user: sbUser } } = await supabase.auth.getUser()
+      if (sbUser) {
+        user = { uid: sbUser.id, email: sbUser.email || undefined }
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('account_id')
+          .eq('user_id', sbUser.id)
+          .maybeSingle()
+        accountId = profile?.account_id || `acct-${sbUser.id}`
+      }
+    } catch (sbAuthErr) {
+      console.warn('[verify-registration GET] Supabase auth fallback error:', sbAuthErr)
+    }
+  }
+
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // whatsapp_config is one-row-per-account post-017. Resolve the
-  // caller's account_id so a teammate who joined an existing account
-  // sees the same registration state as the admin who set it up.
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('account_id')
-    .eq('user_id', user.id)
-    .maybeSingle()
-  const accountId = profile?.account_id as string | undefined
   if (!accountId) {
     return NextResponse.json({
       live: false,
@@ -55,11 +49,38 @@ export async function GET() {
     })
   }
 
-  const { data: config } = await supabase
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .maybeSingle()
+  let config: any = null
+  const db = getAdminDb()
+
+  try {
+    const fsDoc = await db.collection('whatsapp_configs').doc(accountId).get()
+    if (fsDoc.exists) {
+      config = fsDoc.data()
+    } else {
+      const nestedFsDoc = await db.doc(`accounts/${accountId}/whatsapp_config/config`).get()
+      if (nestedFsDoc.exists) {
+        config = nestedFsDoc.data()
+      }
+    }
+  } catch (fsErr) {
+    console.warn('[verify-registration GET] Firestore read warning:', fsErr)
+  }
+
+  if (!config) {
+    try {
+      const supabase = await createClient()
+      const { data: sbConfig } = await supabase
+        .from('whatsapp_config')
+        .select('*')
+        .eq('account_id', accountId)
+        .maybeSingle()
+      if (sbConfig) {
+        config = sbConfig
+      }
+    } catch (sbErr) {
+      console.warn('[verify-registration GET] Supabase read warning:', sbErr)
+    }
+  }
 
   if (!config) {
     return NextResponse.json({
@@ -71,7 +92,12 @@ export async function GET() {
 
   let accessToken: string
   try {
-    accessToken = decrypt(config.access_token)
+    const rawToken = config.access_token || config.accessToken || config.system_user_token || ''
+    if (rawToken.startsWith('EAAG') || rawToken.startsWith('EAA')) {
+      accessToken = rawToken
+    } else {
+      accessToken = decrypt(rawToken)
+    }
   } catch {
     return NextResponse.json({
       live: false,
@@ -84,6 +110,12 @@ export async function GET() {
     })
   }
 
+  const phoneNumberId = config.phone_number_id || config.phoneNumberId || ''
+  const wabaId = config.waba_id || config.wabaId || ''
+  const registeredAt = config.registered_at || config.registeredAt || null
+  const lastRegistrationError = config.last_registration_error || config.lastRegistrationError || null
+  const subscribedAppsAt = config.subscribed_apps_at || config.subscribedAppsAt || null
+
   const checks: {
     config_exists: boolean
     token_decryptable: boolean
@@ -95,14 +127,14 @@ export async function GET() {
     token_decryptable: true,
     phone_metadata_ok: false,
     waba_subscribed_to_app: null,
-    locally_marked_registered: config.registered_at != null,
+    locally_marked_registered: registeredAt != null,
   }
   const errors: string[] = []
 
   // 1. Phone metadata
   try {
     await verifyPhoneNumber({
-      phoneNumberId: config.phone_number_id,
+      phoneNumberId,
       accessToken,
     })
     checks.phone_metadata_ok = true
@@ -112,17 +144,13 @@ export async function GET() {
     )
   }
 
-  // 2. WABA subscription — only meaningful if we have a waba_id
-  if (config.waba_id) {
+  // 2. WABA subscription
+  if (wabaId) {
     try {
       const subs = await getSubscribedApps({
-        wabaId: config.waba_id,
+        wabaId,
         accessToken,
       })
-      // Meta returns the apps subscribed to this WABA. If the list
-      // is non-empty, OUR app is in there (the access_token we used
-      // belongs to our app — Meta wouldn't return data for an app
-      // the token can't see). Treat any entry as success.
       checks.waba_subscribed_to_app = subs.length > 0
       if (!checks.waba_subscribed_to_app) {
         errors.push(
@@ -149,8 +177,8 @@ export async function GET() {
     live,
     checks,
     errors,
-    last_registration_error: config.last_registration_error ?? null,
-    registered_at: config.registered_at ?? null,
-    subscribed_apps_at: config.subscribed_apps_at ?? null,
+    last_registration_error: lastRegistrationError,
+    registered_at: registeredAt,
+    subscribed_apps_at: subscribedAppsAt,
   })
 }

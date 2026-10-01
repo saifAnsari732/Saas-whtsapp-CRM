@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { getAdminDb } from '@/lib/firebase/admin';
+import { getFirebaseUser } from '@/lib/firebase/auth-helper';
 
 const ADMIN_EMAILS = [
   'ansarisaifuddin732@gmail.com',
@@ -17,23 +17,19 @@ function checkIsAdmin(userEmail: string | undefined | null, profileRole: string 
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getFirebaseUser(request as any);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, email')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .maybeSingle();
+    const fDb = getAdminDb();
+    const userDoc = await fDb.collection('users').doc(user.uid).get();
+    const profileRole = userDoc.exists ? userDoc.data()?.role : null;
 
-    if (!checkIsAdmin(user.email || profile?.email, profile?.role)) {
+    if (!checkIsAdmin(user.email, profileRole)) {
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
     const coupons: any[] = [];
     try {
-      const fDb = getAdminDb();
       const snap = await fDb.collection('coupons').orderBy('created_at', 'desc').get();
       snap.forEach((doc: any) => {
         coupons.push({ id: doc.id, ...doc.data() });
@@ -60,17 +56,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getFirebaseUser(request as any);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, email')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .maybeSingle();
+    const fDb = getAdminDb();
+    const userDoc = await fDb.collection('users').doc(user.uid).get();
+    const profileRole = userDoc.exists ? userDoc.data()?.role : null;
 
-    if (!checkIsAdmin(user.email || profile?.email, profile?.role)) {
+    if (!checkIsAdmin(user.email, profileRole)) {
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
@@ -86,8 +79,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Coupon code must be at least 2 characters long' }, { status: 400 });
     }
 
-    const fDb = getAdminDb();
-    
     // Check if code already exists
     const existingSnap = await fDb.collection('coupons').where('code', '==', cleanCode).limit(1).get();
     if (!existingSnap.empty) {
@@ -103,7 +94,7 @@ export async function POST(request: Request) {
       is_active: true,
       expires_at: expires_at || null,
       created_at: new Date().toISOString(),
-      created_by: user.email || user.id
+      created_by: user.email || user.uid
     };
 
     const docRef = await fDb.collection('coupons').add(newCoupon);
@@ -120,17 +111,14 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getFirebaseUser(request as any);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, email')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .maybeSingle();
+    const fDb = getAdminDb();
+    const userDoc = await fDb.collection('users').doc(user.uid).get();
+    const profileRole = userDoc.exists ? userDoc.data()?.role : null;
 
-    if (!checkIsAdmin(user.email || profile?.email, profile?.role)) {
+    if (!checkIsAdmin(user.email, profileRole)) {
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
@@ -141,7 +129,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'coupon_id is required' }, { status: 400 });
     }
 
-    const fDb = getAdminDb();
     await fDb.collection('coupons').doc(coupon_id).update({
       is_active: Boolean(is_active),
       updated_at: new Date().toISOString()
@@ -156,17 +143,14 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getFirebaseUser(request as any);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, email')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .maybeSingle();
+    const fDb = getAdminDb();
+    const userDoc = await fDb.collection('users').doc(user.uid).get();
+    const profileRole = userDoc.exists ? userDoc.data()?.role : null;
 
-    if (!checkIsAdmin(user.email || profile?.email, profile?.role)) {
+    if (!checkIsAdmin(user.email, profileRole)) {
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
@@ -177,7 +161,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Coupon ID parameter is required' }, { status: 400 });
     }
 
-    const fDb = getAdminDb();
     await fDb.collection('coupons').doc(coupon_id).delete();
 
     return NextResponse.json({ success: true });

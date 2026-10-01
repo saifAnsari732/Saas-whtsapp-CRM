@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getFirebaseUser } from '@/lib/firebase/auth-helper';
+import { getAdminDb } from '@/lib/firebase/admin';
 
 const ADMIN_EMAILS = [
   'ansarisaifuddin732@gmail.com',
@@ -17,17 +18,14 @@ function checkIsAdmin(userEmail: string | undefined | null, profileRole: string 
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getFirebaseUser(request as any);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id, role, email')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .maybeSingle();
+    const fDb = getAdminDb();
+    const userDoc = await fDb.collection('users').doc(user.uid).get();
+    const profileRole = userDoc.exists ? userDoc.data()?.role : null;
 
-    if (!checkIsAdmin(user.email || profile?.email, profile?.role)) {
+    if (!checkIsAdmin(user.email, profileRole)) {
       return NextResponse.json({ error: 'Forbidden: Platform Admin access required' }, { status: 403 });
     }
 
