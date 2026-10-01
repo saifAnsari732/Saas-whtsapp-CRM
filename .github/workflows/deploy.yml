@@ -26,9 +26,8 @@ jobs:
               cd /home/ubuntu/Saas-whtsapp-CRM
             fi
             git pull origin main
-            npm install
+            npm install --legacy-peer-deps
             NODE_OPTIONS="--max-old-space-size=2048" npm run build
-            pm2 delete chatflyr || true
-            pm2 start ecosystem.config.js
+            pm2 restart chatflyr || pm2 start ecosystem.config.js
             pm2 save
-            sudo systemctl restart nginx
+            sudo systemctl reload nginx
