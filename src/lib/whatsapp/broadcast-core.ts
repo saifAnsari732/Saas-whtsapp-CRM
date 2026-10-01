@@ -20,6 +20,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
 import { decrypt } from '@/lib/whatsapp/encryption';
+import { getWhatsAppConfigForAccount } from '@/lib/whatsapp/get-config';
 import {
   sanitizePhoneForMeta,
   isValidE164,
@@ -111,19 +112,32 @@ export async function createBroadcast(
 
   // Config (fail fast + provides the audit trail owner already resolved
   // by the caller). Meta send needs phone_number_id + decrypted token.
-  const { data: config, error: configError } = await db
+  let config: any = null;
+  const { data: sbConfig } = await db
     .from('whatsapp_config')
     .select('*')
     .eq('account_id', accountId)
-    .single();
-  if (configError || !config) {
+    .maybeSingle();
+
+  if (sbConfig) {
+    config = {
+      phone_number_id: sbConfig.phone_number_id,
+      waba_id: sbConfig.waba_id,
+      access_token: sbConfig.access_token,
+      decrypted_access_token: decrypt(sbConfig.access_token),
+    };
+  } else {
+    config = await getWhatsAppConfigForAccount(accountId);
+  }
+
+  if (!config || !config.decrypted_access_token) {
     throw new BroadcastError(
       'whatsapp_not_configured',
       'WhatsApp not configured. Please set up your WhatsApp integration first.',
       400
     );
   }
-  const accessToken = decrypt(config.access_token);
+  const accessToken = config.decrypted_access_token;
 
   // Template row (once) for header/button components; guard a
   // malformed local row rather than N identical opaque failures.

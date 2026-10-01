@@ -36,6 +36,7 @@ import {
 } from '@/lib/whatsapp/interactive';
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
+import { getWhatsAppConfigForAccount } from '@/lib/whatsapp/get-config';
 import {
   sanitizePhoneForMeta,
   isValidE164,
@@ -248,13 +249,25 @@ export async function sendMessageToConversation(
   }
 
   // WhatsApp config, account-scoped.
-  const { data: config, error: configError } = await db
+  let config: any = null;
+  const { data: sbConfig } = await db
     .from('whatsapp_config')
     .select('*')
     .eq('account_id', accountId)
-    .single();
+    .maybeSingle();
 
-  if (configError || !config) {
+  if (sbConfig) {
+    config = {
+      phone_number_id: sbConfig.phone_number_id,
+      waba_id: sbConfig.waba_id,
+      access_token: sbConfig.access_token,
+      decrypted_access_token: decrypt(sbConfig.access_token),
+    };
+  } else {
+    config = await getWhatsAppConfigForAccount(accountId);
+  }
+
+  if (!config || !config.decrypted_access_token) {
     throw new SendMessageError(
       'whatsapp_not_configured',
       'WhatsApp not configured. Please set up your WhatsApp integration first.',
@@ -262,14 +275,14 @@ export async function sendMessageToConversation(
     );
   }
 
-  const accessToken = decrypt(config.access_token);
+  const accessToken = config.decrypted_access_token;
 
   // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
   if (isLegacyFormat(config.access_token)) {
     void db
       .from('whatsapp_config')
       .update({ access_token: encrypt(accessToken) })
-      .eq('id', config.id)
+      .eq('account_id', accountId)
       .then(({ error }: { error: { message: string } | null }) => {
         if (error) {
           console.warn(
