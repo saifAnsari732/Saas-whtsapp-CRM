@@ -125,7 +125,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { profile, profileLoading, account, accountRole, isSuperAdmin, signOut } = useAuth();
   const { isActive: isSubscriptionActive, loading: subscriptionLoading } = useSubscription();
-  const isAccountLocked = !subscriptionLoading && !isSubscriptionActive;
+  const isAccountLocked = !isSuperAdmin && !subscriptionLoading && !isSubscriptionActive;
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
   // Only surface the account-name strip when it actually carries

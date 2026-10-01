@@ -250,17 +250,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (profile?.email && adminEmails.includes(profile.email.toLowerCase()))
     );
 
+    const effectiveRole: AccountRole = isSuperAdmin ? "owner" : (role ?? "owner");
+
     return {
-      accountRole: role,
+      accountRole: effectiveRole,
       accountId: profile?.account_id ?? null,
       isSuperAdmin,
-      isOwner: role === "owner",
-      isAdmin: role === "admin",
-      isAgent: role === "agent",
-      isViewer: role === "viewer",
-      canManageMembers: role ? canManageMembersFor(role) : false,
-      canEditSettings: role ? canEditSettingsFor(role) : false,
-      canSendMessages: role ? canSendMessagesFor(role) : false,
+      isOwner: isSuperAdmin || effectiveRole === "owner",
+      isAdmin: isSuperAdmin || effectiveRole === "admin",
+      isAgent: effectiveRole === "agent",
+      isViewer: effectiveRole === "viewer",
+      canManageMembers: isSuperAdmin || canManageMembersFor(effectiveRole),
+      canEditSettings: isSuperAdmin || canEditSettingsFor(effectiveRole),
+      canSendMessages: isSuperAdmin || canSendMessagesFor(effectiveRole),
     };
   }, [profile?.account_role, profile?.account_id, profile?.role, profile?.email, user?.email]);
 
