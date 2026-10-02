@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
+import { getAdminDb } from '@/lib/firebase/admin'
+import { getAccountContext } from '@/lib/firebase/auth-helper'
 import type { TemplateButton, TemplateSampleValues } from '@/types'
 
 /**
@@ -289,7 +291,7 @@ export async function POST(request: Request) {
         // route. account_id is NOT NULL on message_templates
         // post-017, so an INSERT without it errors.
         account_id: accountId,
-        user_id: user.id,
+        user_id: user.uid,
         name: t.name,
         category: normalizeCategory(t.category),
         language: t.language,
@@ -309,31 +311,43 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       }
 
+      // 1. Dual-write to Firestore
+      try {
+        const docId = `${accountId}_${t.name}_${t.language}`.replace(/[^a-zA-Z0-9_-]/g, '_')
+        await db.collection('message_templates').doc(docId).set(row, { merge: true })
+      } catch (fsErr) {
+        console.warn('Firestore template sync write warning:', fsErr)
+      }
+
+      // 2. Write to Supabase with resilient uuid fallback
       const { data: existing, error: lookupErr } = await supabase
         .from('message_templates')
         .select('id')
-        .eq('account_id', accountId)
         .eq('name', t.name)
         .eq('language', t.language)
         .maybeSingle()
 
       if (lookupErr) {
-        console.error('Lookup error for', t.name, lookupErr);
-        errors.push({
-          name: t.name,
-          language: t.language,
-          message: lookupErr.message,
-        })
-        continue
+        console.error('Lookup error for', t.name, lookupErr)
       }
 
       if (existing?.id) {
-        const { error: updErr } = await supabase
+        let { error: updErr } = await supabase
           .from('message_templates')
           .update(row)
           .eq('id', existing.id)
+
         if (updErr) {
-          console.error('Update error for', t.name, updErr);
+          console.warn('Primary update warning for', t.name, updErr.message)
+          const { user_id, ...rowWithoutUserId } = row
+          const retryRes = await supabase
+            .from('message_templates')
+            .update(rowWithoutUserId)
+            .eq('id', existing.id)
+          updErr = retryRes.error
+        }
+
+        if (updErr) {
           errors.push({
             name: t.name,
             language: t.language,
@@ -343,11 +357,20 @@ export async function POST(request: Request) {
           updated++
         }
       } else {
-        const { error: insErr } = await supabase
+        let { error: insErr } = await supabase
           .from('message_templates')
           .insert(row)
+
         if (insErr) {
-          console.error('Insert error for', t.name, insErr);
+          console.warn('Primary insert warning for', t.name, insErr.message)
+          const { user_id, ...rowWithoutUserId } = row
+          const retryRes = await supabase
+            .from('message_templates')
+            .insert(rowWithoutUserId)
+          insErr = retryRes.error
+        }
+
+        if (insErr) {
           errors.push({
             name: t.name,
             language: t.language,

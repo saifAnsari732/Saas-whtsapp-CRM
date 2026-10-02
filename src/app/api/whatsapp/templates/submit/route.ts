@@ -119,6 +119,8 @@ export async function POST(request: Request) {
       accountId = `acct-${user.uid}`
     }
 
+    const supabase = await createClient()
+
     let payload: TemplatePayload
     try {
       payload = (await request.json()) as TemplatePayload
@@ -198,7 +200,7 @@ export async function POST(request: Request) {
         // until they fix and re-submit.
         await upsertTemplateRow(
           supabase,
-          buildUpsertRow(accountId, user.id, payload, {
+          buildUpsertRow(accountId, user.uid, payload, {
             status: 'DRAFT',
             metaTemplateId: null,
             submissionError: message,
@@ -219,7 +221,7 @@ export async function POST(request: Request) {
 
     const { data: row, error: upsertErr } = await upsertTemplateRow(
       supabase,
-      buildUpsertRow(accountId, user.id, payload, {
+      buildUpsertRow(accountId, user.uid, payload, {
         status: normalizeStatus(metaStatus),
         metaTemplateId,
         submissionError: null,
