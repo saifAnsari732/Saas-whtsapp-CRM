@@ -70,9 +70,13 @@ export async function GET(request: Request) {
     const db = getAdminDb()
     let config: any = null
 
-    // 1. Check Firestore top-level whatsapp_configs doc
+    // 1. Check Firestore top-level whatsapp_configs doc (by accountId, user.uid, or nested account path)
     try {
-      const fsDoc = await db.collection('whatsapp_configs').doc(accountId).get()
+      let fsDoc = await db.collection('whatsapp_configs').doc(accountId).get()
+      if (!fsDoc.exists && user.uid) {
+        fsDoc = await db.collection('whatsapp_configs').doc(user.uid).get()
+      }
+
       if (fsDoc.exists) {
         config = fsDoc.data()
       } else {

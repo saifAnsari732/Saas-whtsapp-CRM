@@ -15,15 +15,18 @@ export function TemplatePerformance({ data }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        ".template-anim",
-        { opacity: 0, y: 10 },
-        { opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: "power2.out" }
-      );
-    }, containerRef);
-    return () => ctx.revert();
-  }, []);
+    const targets = containerRef.current?.querySelectorAll(".template-anim");
+    if (targets && targets.length > 0) {
+      const ctx = gsap.context(() => {
+        gsap.fromTo(
+          targets,
+          { opacity: 0, y: 10 },
+          { opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: "power2.out" }
+        );
+      }, containerRef);
+      return () => ctx.revert();
+    }
+  }, [data]);
 
   const approvedPercent = data.total ? (data.approved / data.total) * 100 : 0;
   const pendingPercent = data.total ? (data.pending / data.total) * 100 : 0;

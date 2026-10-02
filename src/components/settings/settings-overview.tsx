@@ -53,91 +53,116 @@ export function SettingsOverview({
   const [whatsappLoading, setWhatsappLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !accountId) return;
+    if (!user) return;
     let cancelled = false;
     const supabase = createClient();
     const userId = user.id;
-    const acctId = accountId;
+
+    // Safety timeout — guarantees loading states clear within 4s max
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) {
+        setCountsLoading(false);
+        setWhatsappLoading(false);
+      }
+    }, 4000);
 
     // Cheap counts — resolve fast, render immediately.
     (async () => {
       setCountsLoading(true);
-      const [membersRes, invitesRes, templatesTotal, templatesPending, tagsRes, fieldsRes] =
-        await Promise.allSettled([
-          fetch('/api/account/members', { cache: 'no-store' }).then((r) => r.json()),
-          canManageMembers
-            ? fetch('/api/account/invitations', { cache: 'no-store' }).then((r) =>
-                r.json(),
-              )
-            : Promise.resolve(null),
-          supabase
-            .from('message_templates')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', userId),
-          supabase
-            .from('message_templates')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', userId)
-            .eq('status', 'PENDING'),
-          supabase
-            .from('tags')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', userId),
-          supabase.from('custom_fields').select('id', { count: 'exact', head: true }),
-        ]);
+      try {
+        const [membersRes, invitesRes, templatesTotal, templatesPending, tagsRes, fieldsRes] =
+          await Promise.allSettled([
+            fetch('/api/account/members', { cache: 'no-store' }).then((r) => r.json()),
+            canManageMembers
+              ? fetch('/api/account/invitations', { cache: 'no-store' }).then((r) =>
+                  r.json(),
+                )
+              : Promise.resolve(null),
+            supabase
+              .from('message_templates')
+              .select('id', { count: 'exact', head: true })
+              .eq('user_id', userId),
+            supabase
+              .from('message_templates')
+              .select('id', { count: 'exact', head: true })
+              .eq('user_id', userId)
+              .eq('status', 'PENDING'),
+            supabase
+              .from('tags')
+              .select('id', { count: 'exact', head: true })
+              .eq('user_id', userId),
+            supabase.from('custom_fields').select('id', { count: 'exact', head: true }),
+          ]);
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      const members =
-        membersRes.status === 'fulfilled' && Array.isArray(membersRes.value?.members)
-          ? membersRes.value.members.length
-          : null;
-      const pendingInvites =
-        invitesRes.status === 'fulfilled' &&
-        invitesRes.value &&
-        Array.isArray(invitesRes.value.invitations)
-          ? invitesRes.value.invitations.length
-          : null;
+        const members =
+          membersRes.status === 'fulfilled' && Array.isArray(membersRes.value?.members)
+            ? membersRes.value.members.length
+            : null;
+        const pendingInvites =
+          invitesRes.status === 'fulfilled' &&
+          invitesRes.value &&
+          Array.isArray(invitesRes.value.invitations)
+            ? invitesRes.value.invitations.length
+            : null;
 
-      setCounts({
-        members,
-        pendingInvites,
-        templates:
-          templatesTotal.status === 'fulfilled'
-            ? templatesTotal.value.count ?? null
-            : null,
-        templatesPending:
-          templatesPending.status === 'fulfilled'
-            ? templatesPending.value.count ?? null
-            : null,
-        tags: tagsRes.status === 'fulfilled' ? tagsRes.value.count ?? null : null,
-        customFields:
-          fieldsRes.status === 'fulfilled' ? fieldsRes.value.count ?? null : null,
-      });
-      setCountsLoading(false);
+        setCounts({
+          members,
+          pendingInvites,
+          templates:
+            templatesTotal.status === 'fulfilled'
+              ? templatesTotal.value.count ?? 0
+              : 0,
+          templatesPending:
+            templatesPending.status === 'fulfilled'
+              ? templatesPending.value.count ?? 0
+              : 0,
+          tags: tagsRes.status === 'fulfilled' ? tagsRes.value.count ?? 0 : 0,
+          customFields:
+            fieldsRes.status === 'fulfilled' ? fieldsRes.value.count ?? 0 : 0,
+        });
+      } catch (_err) {
+        if (!cancelled) {
+          setCounts({
+            members: null,
+            pendingInvites: null,
+            templates: 0,
+            templatesPending: 0,
+            tags: 0,
+            customFields: 0,
+          });
+        }
+      } finally {
+        if (!cancelled) setCountsLoading(false);
+      }
     })();
 
-    // WhatsApp connection status — slower, independent.
+    // WhatsApp connection status — direct API check
     (async () => {
       setWhatsappLoading(true);
-      const [row, health] = await Promise.allSettled([
-        supabase
-          .from('whatsapp_config')
-          .select('phone_number_id')
-          .eq('account_id', acctId)
-          .maybeSingle(),
-        fetch('/api/whatsapp/config', { cache: 'no-store' }).then((r) => r.json()),
-      ]);
-      if (cancelled) return;
-      setWhatsapp({
-        configured: row.status === 'fulfilled' && !!row.value.data?.phone_number_id,
-        connected: health.status === 'fulfilled' && !!health.value?.connected,
-      });
-      setWhatsappLoading(false);
+      try {
+        const res = await fetch('/api/whatsapp/config', { cache: 'no-store' });
+        const health = await res.json();
+        if (cancelled) return;
+        const isConnected = Boolean(health?.connected);
+        const hasConfig = Boolean(health?.config?.phone_number_id || health?.phone_info?.id || isConnected);
+        setWhatsapp({
+          configured: hasConfig,
+          connected: isConnected,
+        });
+      } catch (_err) {
+        if (!cancelled) {
+          setWhatsapp({ configured: false, connected: false });
+        }
+      } finally {
+        if (!cancelled) setWhatsappLoading(false);
+      }
     })();
 
     return () => {
       cancelled = true;
+      clearTimeout(safetyTimer);
     };
   }, [user?.id, accountId, canManageMembers]);
 

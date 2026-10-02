@@ -72,36 +72,36 @@ export function WhatsAppLiveGuide({ waConfig, onDisconnectSuccess }: WhatsAppLiv
   return (
     <div className="space-y-4">
       {/* Main Connected Hero Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 border border-emerald-500/30 p-6 sm:p-7 text-white shadow-xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-card border border-emerald-500/25 dark:from-emerald-950/70 dark:via-teal-950/50 dark:to-slate-900/90 p-6 sm:p-7 text-foreground shadow-md backdrop-blur-xs">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-3">
             {/* Live Badge & Actions */}
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 px-3 py-1 text-xs font-bold text-emerald-400 backdrop-blur-md">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400 backdrop-blur-md">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 Meta WhatsApp Cloud API Active & Verified
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-slate-300">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted border border-border px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 Official API v21.0
               </span>
             </div>
 
             {/* Title & Account Name */}
             <div>
-              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+              <h2 className="text-xl sm:text-2xl font-black text-foreground tracking-tight flex items-center gap-2">
                 <span>{verifiedName}</span>
-                <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               </h2>
-              <p className="mt-1 text-xs sm:text-sm text-slate-300 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>Phone: <strong className="text-white font-mono">{displayNumber}</strong></span>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>Phone: <strong className="text-foreground font-mono">{displayNumber}</strong></span>
                 <span>•</span>
-                <span>Quality: <strong className="text-emerald-400 font-semibold">{quality}</strong></span>
+                <span>Quality: <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">{quality}</strong></span>
                 <span>•</span>
-                <span>Webhook: <strong className="text-emerald-400 font-semibold">Synced (200 OK)</strong></span>
+                <span>Webhook: <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">Synced (200 OK)</strong></span>
               </p>
             </div>
 
@@ -109,36 +109,36 @@ export function WhatsAppLiveGuide({ waConfig, onDisconnectSuccess }: WhatsAppLiv
             <div className="pt-2 flex flex-wrap items-center gap-2.5">
               <Link
                 href="/inbox"
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 shadow-md transition-all active:scale-95"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs sm:text-sm font-bold text-white shadow-sm transition-all active:scale-95"
               >
                 <MessageSquare className="h-4 w-4" />
                 Open Live Inbox
               </Link>
               <Link
                 href="/broadcasts/new"
-                className="inline-flex items-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 px-4 py-2 text-xs sm:text-sm font-bold text-white shadow-sm transition-all active:scale-95"
+                className="inline-flex items-center gap-2 rounded-xl bg-card hover:bg-accent border border-border px-4 py-2 text-xs sm:text-sm font-bold text-foreground shadow-xs transition-all active:scale-95"
               >
-                <Radio className="h-4 w-4 text-emerald-400" />
+                <Radio className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 Send Campaign
               </Link>
               <Link
                 href="/dashboard/coexistence"
-                className="inline-flex items-center gap-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 px-4 py-2 text-xs sm:text-sm font-bold text-purple-200 shadow-sm transition-all active:scale-95"
+                className="inline-flex items-center gap-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 px-4 py-2 text-xs sm:text-sm font-bold text-purple-700 dark:text-purple-300 shadow-xs transition-all active:scale-95"
               >
-                <Smartphone className="h-4 w-4 text-purple-400" />
+                <Smartphone className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                 AI Auto-Reply & Flows
               </Link>
               <button
                 onClick={() => setShowFullGuide(!showFullGuide)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/40 text-slate-200 px-3.5 py-2 text-xs font-semibold transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-muted hover:bg-muted/80 border border-border text-foreground px-3.5 py-2 text-xs font-semibold transition-colors"
               >
-                <HelpCircle className="h-3.5 w-3.5 text-amber-400" />
+                <HelpCircle className="h-3.5 w-3.5 text-amber-500" />
                 {showFullGuide ? "Hide Limits & Tier Details" : "View Limits & Increase Guide"}
                 {showFullGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </button>
               <button
                 onClick={() => setShowDisconnectModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl text-rose-300 hover:text-rose-100 hover:bg-rose-500/20 px-3 py-2 text-xs font-semibold transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-xl text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 dark:text-rose-400 dark:hover:text-rose-200 px-3 py-2 text-xs font-semibold transition-colors"
                 title="Disconnect WhatsApp API"
               >
                 <LogOut className="h-3.5 w-3.5" />
@@ -149,27 +149,27 @@ export function WhatsAppLiveGuide({ waConfig, onDisconnectSuccess }: WhatsAppLiv
 
           {/* Quick Status KPI Cards */}
           <div className="grid grid-cols-2 gap-2.5 sm:gap-3 shrink-0 lg:w-72">
-            <div className="p-3 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-              <div className="text-[11px] text-slate-400 font-medium">Inbound Messages</div>
-              <div className="text-sm font-bold text-emerald-400 flex items-center gap-1.5 mt-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="p-3 rounded-xl bg-card/80 border border-border/70 shadow-2xs backdrop-blur-xs">
+              <div className="text-[11px] text-muted-foreground font-medium">Inbound Messages</div>
+              <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Unlimited Free
               </div>
             </div>
-            <div className="p-3 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-              <div className="text-[11px] text-slate-400 font-medium">Daily Outbound Tier</div>
-              <div className="text-sm font-bold text-emerald-400 flex items-center gap-1.5 mt-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <div className="p-3 rounded-xl bg-card/80 border border-border/70 shadow-2xs backdrop-blur-xs">
+              <div className="text-[11px] text-muted-foreground font-medium">Daily Outbound Tier</div>
+              <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 Tier 1 (1k/day)
               </div>
             </div>
-            <div className="p-3 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-              <div className="text-[11px] text-slate-400 font-medium">Security Standard</div>
-              <div className="text-sm font-bold text-slate-200 mt-0.5">256-bit AES GCM</div>
+            <div className="p-3 rounded-xl bg-card/80 border border-border/70 shadow-2xs backdrop-blur-xs">
+              <div className="text-[11px] text-muted-foreground font-medium">Security Standard</div>
+              <div className="text-sm font-bold text-foreground mt-0.5">256-bit AES GCM</div>
             </div>
-            <div className="p-3 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-              <div className="text-[11px] text-slate-400 font-medium">Official Green Tick</div>
-              <div className="text-sm font-bold text-emerald-300 mt-0.5">Eligible</div>
+            <div className="p-3 rounded-xl bg-card/80 border border-border/70 shadow-2xs backdrop-blur-xs">
+              <div className="text-[11px] text-muted-foreground font-medium">Official Green Tick</div>
+              <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">Eligible</div>
             </div>
           </div>
         </div>

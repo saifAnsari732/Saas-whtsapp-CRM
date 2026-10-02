@@ -15,15 +15,18 @@ export function BroadcastAnalytics({ data }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        ".broadcast-anim",
-        { opacity: 0, x: -10 },
-        { opacity: 1, x: 0, duration: 0.5, stagger: 0.1, ease: "power2.out" }
-      );
-    }, containerRef);
-    return () => ctx.revert();
-  }, []);
+    const targets = containerRef.current?.querySelectorAll(".broadcast-anim");
+    if (targets && targets.length > 0) {
+      const ctx = gsap.context(() => {
+        gsap.fromTo(
+          targets,
+          { opacity: 0, x: -10 },
+          { opacity: 1, x: 0, duration: 0.5, stagger: 0.1, ease: "power2.out" }
+        );
+      }, containerRef);
+      return () => ctx.revert();
+    }
+  }, [data]);
 
   return (
     <Card ref={containerRef} className="p-6 flex flex-col h-full bg-gradient-to-bl from-card to-card/50 border-border/50 overflow-hidden relative">

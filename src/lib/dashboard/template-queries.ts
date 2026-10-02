@@ -2,12 +2,29 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { TemplatePerformanceData, BroadcastAnalyticsData } from './types'
 
 export async function loadTemplatePerformance(db: SupabaseClient): Promise<TemplatePerformanceData> {
-  const { data: templates, error } = await db
-    .from('whatsapp_templates')
-    .select('id, name, status, send_count')
-    .order('send_count', { ascending: false })
-  
-  if (error || !templates) {
+  let templates: any[] | null = null
+  let error: any = null
+
+  // 1. Primary: message_templates table (standard table)
+  const res1 = await db
+    .from('message_templates')
+    .select('id, name, status, usage_count, send_count')
+    .order('created_at', { ascending: false })
+
+  if (!res1.error && res1.data && res1.data.length > 0) {
+    templates = res1.data
+  } else {
+    // 2. Fallback: whatsapp_templates
+    const res2 = await db
+      .from('whatsapp_templates')
+      .select('id, name, status, send_count')
+      .order('created_at', { ascending: false })
+    if (!res2.error && res2.data) {
+      templates = res2.data
+    }
+  }
+
+  if (!templates || templates.length === 0) {
     return {
       total: 0,
       approved: 0,
@@ -17,15 +34,15 @@ export async function loadTemplatePerformance(db: SupabaseClient): Promise<Templ
     }
   }
 
-  const approved = templates.filter(t => t.status === 'APPROVED' || t.status === 'approved').length
-  const pending = templates.filter(t => t.status === 'PENDING' || t.status === 'pending').length
-  const rejected = templates.filter(t => t.status === 'REJECTED' || t.status === 'rejected').length
+  const approved = templates.filter(t => (t.status || '').toUpperCase() === 'APPROVED').length
+  const pending = templates.filter(t => (t.status || '').toUpperCase() === 'PENDING').length
+  const rejected = templates.filter(t => (t.status || '').toUpperCase() === 'REJECTED').length
 
   const topTemplates = templates.slice(0, 5).map(t => ({
     id: t.id,
     name: t.name,
     status: t.status,
-    sendCount: t.send_count || 0
+    sendCount: t.usage_count || t.send_count || 0
   }))
 
   return {

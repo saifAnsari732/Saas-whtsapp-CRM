@@ -74,7 +74,7 @@ function setCache(key: string, val: any, userId?: string | null) {
 
 export default function DashboardPage() {
   const t = useTranslations('Dashboard.page')
-  const { user, defaultCurrency } = useAuth()
+  const { user, profile, defaultCurrency } = useAuth()
   const userId = user?.id
 
   // 1. Instant Cache Hydration: Read previous metrics instantly (0ms latency)
@@ -288,12 +288,22 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-black text-foreground">{t('title')}</h1>
-        <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-          {t('description')}
-        </p>
+      {/* Welcome Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
+            Welcome back{user?.displayName || profile?.full_name ? `, ${user?.displayName || profile?.full_name}` : ''}
+          </h1>
+          <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
+            {t('description')}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live System Active
+          </span>
+        </div>
       </div>
 
       {/* First-visit Skeleton when zero cache is available */}

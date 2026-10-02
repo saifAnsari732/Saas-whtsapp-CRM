@@ -114,7 +114,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const currentUser = auth.currentUser;
       const db = getClientDb();
       const userDocRef = doc(db, "users", userId);
-      const userSnap = await getDoc(userDocRef);
+      
+      let userSnap: any = null;
+      try {
+        userSnap = await getDoc(userDocRef);
+      } catch (firestoreErr: any) {
+        console.warn("[AuthProvider] Client Firestore permission fallback active:", firestoreErr?.message || firestoreErr);
+      }
 
       const adminEmails = [
         'ansarisaifuddin732@gmail.com',
@@ -122,22 +128,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...(process.env.NEXT_PUBLIC_ADMIN_EMAILS ? process.env.NEXT_PUBLIC_ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()) : [])
       ];
 
-      if (userSnap.exists()) {
+      if (userSnap && userSnap.exists && userSnap.exists()) {
         const data = userSnap.data();
         let accountRow: AccountSummary | null = null;
 
         const accId = data.accountId || data.account_id;
         if (accId) {
-          const accDocRef = doc(db, "accounts", accId);
-          const accSnap = await getDoc(accDocRef);
-          if (accSnap.exists()) {
-            const accData = accSnap.data();
-            accountRow = {
-              id: accSnap.id,
-              name: accData.name || "My Account",
-              default_currency: accData.default_currency || accData.defaultCurrency || DEFAULT_CURRENCY,
-            };
-          }
+          try {
+            const accDocRef = doc(db, "accounts", accId);
+            const accSnap = await getDoc(accDocRef);
+            if (accSnap && accSnap.exists && accSnap.exists()) {
+              const accData = accSnap.data();
+              accountRow = {
+                id: accSnap.id,
+                name: accData.name || "My Account",
+                default_currency: accData.default_currency || accData.defaultCurrency || DEFAULT_CURRENCY,
+              };
+            }
+          } catch (_accErr) {}
         }
 
         const rawRole = data.accountRole || data.account_role;
@@ -178,17 +186,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(fallbackProfile);
         setAuthCache('wacrm_cached_profile', fallbackProfile);
 
-        // Auto-create basic user doc in Firestore
+        // Auto-create basic user doc in Firestore (ignore permission errors quietly)
         setDoc(userDocRef, {
           email: fallbackEmail,
           full_name: fallbackProfile.full_name,
           role: fallbackProfile.role,
           accountRole: "owner",
           createdAt: new Date().toISOString(),
-        }, { merge: true }).catch(e => console.error("Auto-create user doc failed:", e));
+        }, { merge: true }).catch(() => {});
       }
-    } catch (err) {
-      console.error("[AuthProvider] fetchProfile threw:", err);
+    } catch (err: any) {
+      console.warn("[AuthProvider] fetchProfile resilient warning:", err?.message || err);
       lastFetchedUserIdRef.current = null;
     } finally {
       setProfileLoading(false);

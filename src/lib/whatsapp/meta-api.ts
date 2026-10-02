@@ -21,6 +21,10 @@ export interface MetaPhoneInfo {
   display_phone_number: string
   verified_name?: string
   quality_rating?: string
+  messaging_limit_tier?: string
+  code_verification_status?: string
+  is_official_business_account?: boolean
+  account_mode?: string
 }
 
 interface MetaErrorResponse {
@@ -49,13 +53,13 @@ export interface VerifyPhoneNumberArgs {
 
 /**
  * Verify a Meta phone number ID by fetching its public metadata
- * (display_phone_number, verified_name, quality_rating).
+ * (display_phone_number, verified_name, quality_rating, messaging_limit_tier, etc.).
  */
 export async function verifyPhoneNumber(
   args: VerifyPhoneNumberArgs
 ): Promise<MetaPhoneInfo> {
   const { phoneNumberId, accessToken } = args
-  const url = `${META_API_BASE}/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`
+  const url = `${META_API_BASE}/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating,messaging_limit_tier,code_verification_status,is_official_business_account,account_mode`
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })

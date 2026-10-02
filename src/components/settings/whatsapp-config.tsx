@@ -112,34 +112,38 @@ export function WhatsAppConfig() {
         setPhoneNumberId(payload.config.phone_number_id || '');
         setWabaId(payload.config.waba_id || '');
         setAccessToken(MASKED_TOKEN);
+        setVerifyToken(payload.config.verify_token || '');
+        setPin('');
+        setTokenEdited(false);
+      } else if (payload.connected && payload.phone_info) {
+        const fallbackConfig: any = {
+          id: payload.phone_info.id || 'wa-config',
+          account_id: acctId,
+          phone_number_id: payload.phone_info.id || '',
+          waba_id: payload.phone_info.waba_id || '',
+          access_token: MASKED_TOKEN,
+          verify_token: '',
+          status: 'connected',
+          verified_name: payload.phone_info.verified_name || null,
+          display_phone_number: payload.phone_info.display_phone_number || null,
+          quality_rating: payload.phone_info.quality_rating || null,
+          registered_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setConfig(fallbackConfig);
+        setPhoneNumberId(fallbackConfig.phone_number_id);
+        setWabaId(fallbackConfig.waba_id);
+        setAccessToken(MASKED_TOKEN);
+        setTokenEdited(false);
+      } else {
+        setConfig(null);
+        setPhoneNumberId('');
+        setWabaId('');
+        setAccessToken('');
         setVerifyToken('');
         setPin('');
         setTokenEdited(false);
-      } else {
-        // Fallback check Supabase directly if payload didn't include config
-        const { data } = await supabase
-          .from('whatsapp_config')
-          .select('*')
-          .eq('account_id', acctId)
-          .maybeSingle();
-
-        if (data) {
-          setConfig(data);
-          setPhoneNumberId(data.phone_number_id || '');
-          setWabaId(data.waba_id || '');
-          setAccessToken(MASKED_TOKEN);
-          setVerifyToken('');
-          setPin('');
-          setTokenEdited(false);
-        } else {
-          setConfig(null);
-          setPhoneNumberId('');
-          setWabaId('');
-          setAccessToken('');
-          setVerifyToken('');
-          setPin('');
-          setTokenEdited(false);
-        }
       }
 
       setRegistrationProbe(null);
@@ -159,23 +163,19 @@ export function WhatsAppConfig() {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
-    // Need both the auth session (`!authLoading`) AND the profile
-    // (`!profileLoading`, which carries `accountId`). Without the
-    // second guard, the effect would fire with `accountId === null`
-    // for the first render window and bail without ever retrying
-    // once the profile arrives.
-    if (authLoading || profileLoading) return;
-    if (!user || !accountId) {
+    if (authLoading) return;
+    if (!user) {
       loadedAccountIdRef.current = null;
       setLoading(false);
       return;
     }
-    if (loadedAccountIdRef.current === accountId) return;
-    loadedAccountIdRef.current = accountId;
-    fetchConfig(accountId);
+    const targetAccountId = accountId || `acct-${user.id}`;
+    if (loadedAccountIdRef.current === targetAccountId) return;
+    loadedAccountIdRef.current = targetAccountId;
+    fetchConfig(targetAccountId);
   }, [authLoading, profileLoading, user?.id, accountId, fetchConfig]);
 
   useEffect(() => {

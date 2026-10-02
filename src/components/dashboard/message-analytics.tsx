@@ -19,15 +19,18 @@ export function MessageAnalytics({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        ".stat-card",
-        { opacity: 0, y: 20 },
-        { opacity: 1, y: 0, duration: 0.6, stagger: 0.1, ease: "power2.out" }
-      );
-    }, containerRef);
-    return () => ctx.revert();
-  }, []);
+    const targets = containerRef.current?.querySelectorAll(".stat-card");
+    if (targets && targets.length > 0) {
+      const ctx = gsap.context(() => {
+        gsap.fromTo(
+          targets,
+          { opacity: 0, y: 20 },
+          { opacity: 1, y: 0, duration: 0.6, stagger: 0.1, ease: "power2.out" }
+        );
+      }, containerRef);
+      return () => ctx.revert();
+    }
+  }, [stats]);
 
   return (
     <div ref={containerRef} className="mb-8">
