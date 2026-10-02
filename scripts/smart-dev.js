@@ -56,17 +56,24 @@ let child = null;
 let restartAttempts = 0;
 const MAX_RESTARTS = 3;
 
+function getNextCliPath() {
+  try {
+    return require.resolve('next/dist/bin/next');
+  } catch (_) {
+    return path.join(process.cwd(), 'node_modules', 'next', 'dist', 'bin', 'next');
+  }
+}
+
 function startNextDev() {
   logInfo(`Starting Next.js dev server... (Attempt ${restartAttempts + 1})`);
 
-  const args = ['dev', ...process.argv.slice(2).filter(a => a !== '--clean')];
-  
-  const nextBin = path.join(process.cwd(), 'node_modules', '.bin', process.platform === 'win32' ? 'next.cmd' : 'next');
-  const command = fs.existsSync(nextBin) ? nextBin : 'next';
+  const nextCli = getNextCliPath();
+  const rawArgs = process.argv.slice(2).filter(a => a !== '--clean');
+  const nextArgs = [nextCli, 'dev', ...rawArgs];
 
-  child = spawn(command, args, {
+  child = spawn(process.execPath, nextArgs, {
     stdio: ['inherit', 'pipe', 'pipe'],
-    shell: true,
+    shell: false,
     env: { ...process.env }
   });
 
