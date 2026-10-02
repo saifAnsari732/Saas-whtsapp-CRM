@@ -70,7 +70,7 @@ export default function CustomCursor() {
         animate={{
           scale: isPointer ? 1.6 : 1,
           borderColor: isPointer ? "#00A884" : "rgba(37, 211, 102, 0.4)",
-          backgroundColor: isPointer ? "rgba(0, 168, 132, 0.08)" : "transparent",
+          backgroundColor: isPointer ? "rgba(0, 168, 132, 0.08)" : "rgba(0, 168, 132, 0)",
         }}
         transition={{ duration: 0.15 }}
         className="w-8 h-8 rounded-full border-2 border-[#00A884]/40 fixed top-0 left-0 backdrop-blur-[0.5px]"

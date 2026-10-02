@@ -10,6 +10,7 @@ import EmbeddedSignup from "@/components/landing/EmbeddedSignup";
 import PricingSection from "@/components/landing/PricingSection";
 import Testimonials from "@/components/landing/Testimonials";
 import FAQSection from "@/components/landing/FAQSection";
+import ContactSection from "@/components/landing/ContactSection";
 import FinalCTA from "@/components/landing/FinalCTA";
 import Footer from "@/components/landing/Footer";
 import CustomCursor from "@/components/landing/CustomCursor";
@@ -39,6 +40,7 @@ export default async function LandingPage() {
         <PricingSection />
         <Testimonials />
         <FAQSection />
+        <ContactSection />
         <FinalCTA />
       </main>
       <Footer />

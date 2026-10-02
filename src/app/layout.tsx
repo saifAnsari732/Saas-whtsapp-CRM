@@ -28,6 +28,7 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://chatflyr.kisandigital.org"),
   title: {
     default: "ChatFlyr — Official WhatsApp Business API Platform | CRM, Automation & Bulk Messaging",
     template: "%s | ChatFlyr",
