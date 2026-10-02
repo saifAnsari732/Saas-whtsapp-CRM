@@ -1,9 +1,12 @@
+const path = require("path");
+
 module.exports = {
   apps: [
     {
       name: "chatflyr",
-      script: "node_modules/next/dist/bin/next",
-      args: "start -p 3000",
+      script: "npm",
+      args: "start",
+      cwd: path.resolve(__dirname),
       env: {
         NODE_ENV: "production",
         PORT: "3000",

@@ -20,6 +20,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            rm -f /home/ubuntu/package-lock.json /home/ubuntu/Saas-whtsapp-CRM/package-lock.json
             if [ -d "/home/ubuntu/Saas-whtsapp-CRM/wacrm" ]; then
               cd /home/ubuntu/Saas-whtsapp-CRM/wacrm
             elif [ -d "/home/ubuntu/Saas-whtsapp-CRM" ]; then
@@ -28,6 +29,7 @@ jobs:
             git pull origin main
             npm install --legacy-peer-deps
             NODE_OPTIONS="--max-old-space-size=2048" npm run build
-            pm2 restart chatflyr || pm2 start ecosystem.config.js
+            pm2 delete chatflyr || true
+            pm2 start ecosystem.config.js
             pm2 save
-            sudo systemctl reload nginx
+            sudo systemctl restart nginx
