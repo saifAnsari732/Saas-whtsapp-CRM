@@ -123,66 +123,110 @@ function extractSampleValues(
   return sv
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
+    const accCtx = await getAccountContext(request as any)
+    let user = accCtx?.user
+    let accountId = accCtx?.accountId
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    if (!user) {
+      try {
+        const supabase = await createClient()
+        const { data: { user: sbUser } } = await supabase.auth.getUser()
+        if (sbUser) {
+          user = { uid: sbUser.id, email: sbUser.email || undefined }
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('account_id')
+            .eq('user_id', sbUser.id)
+            .maybeSingle()
+          accountId = profile?.account_id || `acct-${sbUser.id}`
+        }
+      } catch (sbAuthErr) {
+        console.warn('[whatsapp/templates/sync] Supabase auth fallback error:', sbAuthErr)
+      }
+    }
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Resolve the caller's account_id — both whatsapp_config and
-    // the message_templates we sync into are account-scoped.
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    const accountId = profile?.account_id as string | undefined
     if (!accountId) {
-      return NextResponse.json(
-        { error: 'Your profile is not linked to an account.' },
-        { status: 403 },
-      )
+      accountId = `acct-${user.uid}`
     }
 
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .single()
+    const db = getAdminDb()
+    let config: any = null
 
-    if (configError || !config) {
+    // 1. Read from Firestore
+    try {
+      let fsDoc = await db.collection('whatsapp_configs').doc(accountId).get()
+      if (!fsDoc.exists && user.uid) {
+        fsDoc = await db.collection('whatsapp_configs').doc(user.uid).get()
+      }
+      if (fsDoc.exists) {
+        config = fsDoc.data()
+      } else {
+        const nestedFsDoc = await db.doc(`accounts/${accountId}/whatsapp_config/config`).get()
+        if (nestedFsDoc.exists) {
+          config = nestedFsDoc.data()
+        }
+      }
+    } catch (fsErr) {
+      console.warn('[whatsapp/templates/sync] Firestore read warning:', fsErr)
+    }
+
+    // 2. Read from Supabase
+    if (!config) {
+      try {
+        const supabase = await createClient()
+        const { data: sbConfig } = await supabase
+          .from('whatsapp_config')
+          .select('*')
+          .eq('account_id', accountId)
+          .maybeSingle()
+        if (sbConfig) {
+          config = sbConfig
+        } else {
+          const { data: sbUserConfig } = await supabase
+            .from('whatsapp_config')
+            .select('*')
+            .eq('user_id', user.uid)
+            .maybeSingle()
+          if (sbUserConfig) config = sbUserConfig
+        }
+      } catch (sbErr) {
+        console.warn('[whatsapp/templates/sync] Supabase read warning:', sbErr)
+      }
+    }
+
+    const wabaId = config?.waba_id || config?.wabaId || process.env.WHATSAPP_WABA_ID
+    const rawToken = config?.access_token || config?.accessToken || config?.system_user_token || process.env.PERMANENT_TOKEN || process.env.permanent_token || process.env.WHATSAPP_ACCESS_TOKEN
+
+    if (!rawToken || !wabaId) {
       return NextResponse.json(
         {
           error:
-            'WhatsApp not configured. Connect your WhatsApp Business account in Settings first.',
+            'WhatsApp Cloud API credentials or WABA ID not found. Please connect your Meta WhatsApp Business account in Settings first.',
         },
         { status: 400 },
       )
     }
 
-    if (!config.waba_id) {
-      return NextResponse.json(
-        {
-          error:
-            'WABA (WhatsApp Business Account) ID missing. Re-connect your account in Settings.',
-        },
-        { status: 400 },
-      )
+    let accessToken = rawToken
+    try {
+      accessToken = decrypt(rawToken)
+    } catch (_err) {
+      if (rawToken.startsWith('EAAG') || rawToken.startsWith('EAA')) {
+        accessToken = rawToken
+      }
     }
 
-    const accessToken = decrypt(config.access_token)
-
+    const supabase = await createClient()
     const metaTemplates: MetaTemplate[] = []
     let nextUrl:
       | string
-      | null = `${META_API_BASE}/${config.waba_id}/message_templates?limit=100&fields=id,name,language,status,category,components,quality_score`
+      | null = `${META_API_BASE}/${wabaId}/message_templates?limit=100&fields=id,name,language,status,category,components,quality_score`
     const PAGE_CAP = 20
     let pageCount = 0
 

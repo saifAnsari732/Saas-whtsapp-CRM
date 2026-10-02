@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { submitMessageTemplate } from '@/lib/whatsapp/meta-api'
+import { getAccountContext } from '@/lib/firebase/auth-helper'
 import {
   validateTemplatePayload,
   type TemplatePayload,
@@ -88,28 +89,34 @@ async function upsertTemplateRow(
  */
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-    if (authError || !user) {
+    const accCtx = await getAccountContext(request as any)
+    let user = accCtx?.user
+    let accountId = accCtx?.accountId
+
+    if (!user) {
+      try {
+        const supabase = await createClient()
+        const { data: { user: sbUser } } = await supabase.auth.getUser()
+        if (sbUser) {
+          user = { uid: sbUser.id, email: sbUser.email || undefined }
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('account_id')
+            .eq('user_id', sbUser.id)
+            .maybeSingle()
+          accountId = profile?.account_id || `acct-${sbUser.id}`
+        }
+      } catch (sbAuthErr) {
+        console.warn('[whatsapp/templates/submit] Supabase auth fallback error:', sbAuthErr)
+      }
+    }
+
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Resolve the caller's account_id — whatsapp_config + the
-    // message_templates row are account-scoped post-multi-user.
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    const accountId = profile?.account_id as string | undefined
     if (!accountId) {
-      return NextResponse.json(
-        { error: 'Your profile is not linked to an account.' },
-        { status: 403 },
-      )
+      accountId = `acct-${user.uid}`
     }
 
     let payload: TemplatePayload
