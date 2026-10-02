@@ -29,7 +29,11 @@
   },
   "scripts": {
     "build": "next build",
-    "dev": "next dev",
+    "dev": "node scripts/smart-dev.js",
+    "dev:clean": "node scripts/smart-dev.js --clean",
+    "dev:turbo": "next dev",
+    "dev:webpack": "next dev --webpack",
+    "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true }); console.log('✓ .next cache purged!');\"",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

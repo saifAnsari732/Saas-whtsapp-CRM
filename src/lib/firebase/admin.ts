@@ -13,6 +13,40 @@ import { getAuth, type Auth } from 'firebase-admin/auth';
 function getAdminApp(): App {
   if (getApps().length > 0) return getApps()[0];
 
+  // 1. Try FIREBASE_SERVICE_ACCOUNT JSON string env variable
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      const sa = typeof process.env.FIREBASE_SERVICE_ACCOUNT === 'string'
+        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+        : process.env.FIREBASE_SERVICE_ACCOUNT;
+      if (sa && (sa.private_key || sa.privateKey)) {
+        return initializeApp({
+          credential: cert(sa),
+        });
+      }
+    } catch (saErr) {
+      console.warn('[Firebase Admin] FIREBASE_SERVICE_ACCOUNT JSON parse warning:', saErr);
+    }
+  }
+
+  // 2. Try service-account.json file from disk (located in root directory)
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const saPath = path.resolve(process.cwd(), 'service-account.json');
+    if (fs.existsSync(saPath)) {
+      const sa = JSON.parse(fs.readFileSync(saPath, 'utf8'));
+      if (sa && (sa.private_key || sa.privateKey)) {
+        return initializeApp({
+          credential: cert(sa),
+        });
+      }
+    }
+  } catch (fileErr) {
+    console.warn('[Firebase Admin] service-account.json file read warning:', fileErr);
+  }
+
+  // 3. Fallback: Parse individual environment variables with robust key formatting
   const projectId = 
     process.env.FIREBASE_ADMIN_PROJECT_ID || 
     process.env.FIREBASE_PROJECT_ID || 
@@ -25,25 +59,26 @@ function getAdminApp(): App {
 
   let privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
   if (privateKey) {
-    privateKey = privateKey.replace(/\\n/g, '\n');
+    privateKey = privateKey.replace(/\\n/g, '\n').replace(/\\n/g, '\n');
     if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
       privateKey = privateKey.slice(1, -1);
     }
-  }
+    privateKey = privateKey.replace(/\\n/g, '\n');
 
-  try {
-    if (privateKey && privateKey.includes('BEGIN PRIVATE KEY')) {
-      return initializeApp({
-        credential: cert({
+    try {
+      if (privateKey.includes('BEGIN PRIVATE KEY')) {
+        return initializeApp({
+          credential: cert({
+            projectId: projectId,
+            clientEmail: clientEmail,
+            privateKey: privateKey,
+          }),
           projectId: projectId,
-          clientEmail: clientEmail,
-          privateKey: privateKey,
-        }),
-        projectId: projectId,
-      });
+        });
+      }
+    } catch (certErr) {
+      console.warn('[Firebase Admin] Cert init failed with env private key:', certErr);
     }
-  } catch (err) {
-    console.warn('[Firebase Admin] Cert init failed, falling back to basic config:', err);
   }
 
   return initializeApp({

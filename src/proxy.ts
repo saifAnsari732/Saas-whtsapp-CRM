@@ -14,7 +14,7 @@ const PUBLIC_API_PATHS = [
   '/api/invitations',
 ];
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Allow static files and Next.js internals
@@ -46,9 +46,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
-  // Session cookie is present — allow request (full verification occurs in Node API context / Server Components)
+  // Session cookie is present — allow request
   return NextResponse.next();
 }
+
+export const middleware = proxy;
 
 export const config = {
   matcher: [
