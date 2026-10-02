@@ -12,6 +12,7 @@ import {
 } from "react";
 import { getClientAuth, getClientDb } from "@/lib/firebase/client";
 import {
+  onIdTokenChanged,
   onAuthStateChanged,
   signOut as firebaseSignOut,
   type User as FirebaseUser,
@@ -206,10 +207,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 3000);
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (!mounted) return;
 
       if (firebaseUser) {
+        try {
+          const freshToken = await firebaseUser.getIdToken();
+          document.cookie = `__session=${freshToken}; path=/; max-age=86400; SameSite=Lax`;
+        } catch (cookieErr) {
+          console.warn("[AuthProvider] session cookie update warning:", cookieErr);
+        }
+
         const formattedUser: AuthUser = {
           id: firebaseUser.uid,
           uid: firebaseUser.uid,
