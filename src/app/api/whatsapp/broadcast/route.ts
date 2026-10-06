@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendTemplateMessage } from '@/lib/whatsapp/meta-api'
-import { decrypt } from '@/lib/whatsapp/encryption'
+import { getWhatsAppConfigForAccount } from '@/lib/whatsapp/get-config'
 import type { SendTimeParams } from '@/lib/whatsapp/template-send-builder'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
 import {
@@ -58,16 +58,33 @@ interface NewRecipient {
   messageParams?: SendTimeParams
 }
 
+import { getAccountContext } from '@/lib/firebase/auth-helper'
+
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
+    const accCtx = await getAccountContext(request as any)
+    let user = accCtx?.user ? { id: accCtx.user.uid, email: accCtx.user.email } : null
+    let accountId = accCtx?.accountId
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    if (!user) {
+      try {
+        const supabase = await createClient()
+        const { data: { user: sbUser } } = await supabase.auth.getUser()
+        if (sbUser) {
+          user = { id: sbUser.id, email: sbUser.email }
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('account_id')
+            .eq('user_id', sbUser.id)
+            .maybeSingle()
+          accountId = profile?.account_id || `acct-${sbUser.id}`
+        }
+      } catch (sbAuthErr) {
+        console.warn('[whatsapp/broadcast] Supabase auth fallback error:', sbAuthErr)
+      }
+    }
 
-    if (authError || !user) {
+    if (!user || !accountId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -77,23 +94,6 @@ export async function POST(request: Request) {
     const limit = checkRateLimit(`broadcast:${user.id}`, RATE_LIMITS.broadcast)
     if (!limit.success) {
       return rateLimitResponse(limit)
-    }
-
-    // Resolve the caller's account_id. whatsapp_config + templates
-    // + broadcasts are all account-scoped post-multi-user, so the
-    // old `.eq('user_id', user.id)` filters miss every row created
-    // by a teammate.
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    const accountId = profile?.account_id as string | undefined
-    if (!accountId) {
-      return NextResponse.json(
-        { error: 'Your profile is not linked to an account.' },
-        { status: 403 },
-      )
     }
 
     const body = await request.json()
@@ -134,13 +134,9 @@ export async function POST(request: Request) {
       )
     }
 
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .single()
+    const config = await getWhatsAppConfigForAccount(accountId)
 
-    if (configError || !config) {
+    if (!config || !config.phone_number_id || !config.decrypted_access_token) {
       return NextResponse.json(
         {
           error:
@@ -150,13 +146,9 @@ export async function POST(request: Request) {
       )
     }
 
-    const accessToken = decrypt(config.access_token)
+    const accessToken = config.decrypted_access_token
 
-    // Load the template row once so sendTemplateMessage can build
-    // header + button components on each iteration. Loading inside
-    // the loop would N+1 against Supabase for every recipient.
-    // Guard against a malformed local row crashing every send in
-    // the loop with the same opaque TypeError — fail loudly once.
+    const supabase = await createClient()
     const { data: rawTemplateRow } = await supabase
       .from('message_templates')
       .select('*')

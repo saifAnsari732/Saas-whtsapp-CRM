@@ -199,21 +199,23 @@ export function TemplateManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id, accountId]);
 
-  async function fetchTemplates(userId: string, accId?: string) {
+  async function fetchTemplates(_userId?: string, accId?: string) {
     try {
       setLoading(true);
+      const res = await fetch('/api/whatsapp/templates');
+      const result = await res.json();
+      if (res.ok && Array.isArray(result.templates) && result.templates.length > 0) {
+        setTemplates(result.templates);
+        return;
+      }
       let query = supabase.from('message_templates').select('*');
       if (accId) {
         query = query.eq('account_id', accId);
-      } else {
-        query = query.eq('user_id', userId);
       }
-      const { data, error } = await query.order('created_at', { ascending: false });
-      if (error) throw error;
+      const { data } = await query.order('created_at', { ascending: false });
       setTemplates(data || []);
     } catch (err) {
       console.error('Failed to fetch templates:', err);
-      toast.error(t('toastLoadFailed'));
     } finally {
       setLoading(false);
     }

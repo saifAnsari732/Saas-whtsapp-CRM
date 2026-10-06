@@ -79,42 +79,41 @@ export interface UploadAccountMediaResult {
 export async function uploadAccountMedia(
   bucket: string,
   file: File,
+  templateId?: string
 ): Promise<UploadAccountMediaResult> {
-  const supabase = createClient();
-
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
-  if (userErr || !user) {
-    throw new Error("Not signed in.");
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('bucket', bucket);
+  if (templateId) {
+    formData.append('templateId', templateId);
   }
 
-  // Resolve account_id so the path is account-scoped (matches the
-  // bucket's RLS write policy from migration 020/023). User-scoped
-  // paths would be rejected.
-  const { data: profile, error: profileErr } = await supabase
-    .from("profiles")
-    .select("account_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (profileErr || !profile?.account_id) {
-    throw new Error("Could not resolve your account.");
+  const headers: Record<string, string> = {};
+  try {
+    const { getAuth } = await import('firebase/auth');
+    const auth = getAuth();
+    if (auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+  } catch (e) {
+    console.warn('[uploadAccountMedia] Auth token fetch notice:', e);
   }
 
-  const path = buildMediaPath(profile.account_id as string, file.name);
-  const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, {
-    cacheControl: "3600",
-    upsert: false,
-    contentType: file.type,
+  const res = await fetch('/api/storage/upload', {
+    method: 'POST',
+    headers,
+    body: formData,
   });
-  if (upErr) throw new Error(upErr.message);
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(bucket).getPublicUrl(path);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to upload media file.');
+  }
 
-  return { publicUrl, path };
+  return { publicUrl: data.publicUrl, path: data.path };
 }
 
 /**
@@ -131,7 +130,19 @@ export async function deleteAccountMedia(
   bucket: string,
   path: string,
 ): Promise<void> {
-  const supabase = createClient();
-  const { error } = await supabase.storage.from(bucket).remove([path]);
-  if (error) throw new Error(error.message);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { getAuth } = await import('firebase/auth');
+    const auth = getAuth();
+    if (auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
+  } catch {}
+
+  await fetch('/api/storage/upload', {
+    method: 'DELETE',
+    headers,
+    body: JSON.stringify({ bucket, path }),
+  });
 }

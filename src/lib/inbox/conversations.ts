@@ -7,26 +7,60 @@ import type { Conversation, Contact, Tag } from "@/types";
  * flattens them onto `contact.tags`.
  */
 export const CONVERSATION_SELECT =
-  "*, contact:contacts(*, contact_tags(tags(*)))";
+  "*, contact:contacts(*, contact_tags(tags(*))), messages:messages(id, sender_type, content_text, created_at)";
 
 /** Raw shape returned by {@link CONVERSATION_SELECT} before flattening. */
 type RawContact = Contact & { contact_tags?: { tags: Tag | null }[] };
 type RawConversation = Omit<Conversation, "contact"> & {
   contact?: RawContact | null;
+  messages?: Array<{
+    id: string;
+    sender_type: "customer" | "agent" | "bot";
+    content_text?: string | null;
+    created_at: string;
+  }> | null;
 };
 
 /**
- * Flatten the embedded `contact_tags(tags(*))` join into `contact.tags`.
- * Safe to call on rows fetched with {@link CONVERSATION_SELECT}; a row with
- * no contact (e.g. a freshly-inserted conversation) passes through untouched.
+ * Flatten the embedded `contact_tags(tags(*))` join into `contact.tags`
+ * and compute customer reply status.
  */
 export function normalizeConversation(raw: RawConversation): Conversation {
+  const { messages, ...rest } = raw;
   const rawContact = raw.contact;
-  if (!rawContact) return raw as Conversation;
+
+  let has_customer_reply = false;
+  let last_sender_type: "customer" | "agent" | "bot" | undefined;
+  let last_customer_message_text: string | undefined;
+
+  if (Array.isArray(messages) && messages.length > 0) {
+    const sorted = [...messages].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    last_sender_type = sorted[0]?.sender_type;
+
+    const customerMsgs = sorted.filter((m) => m.sender_type === "customer");
+    if (customerMsgs.length > 0) {
+      has_customer_reply = true;
+      last_customer_message_text = customerMsgs[0]?.content_text || undefined;
+    }
+  }
+
+  if (!rawContact) {
+    return {
+      ...(rest as Conversation),
+      has_customer_reply,
+      last_sender_type,
+      last_customer_message_text,
+    };
+  }
 
   const { contact_tags, ...contact } = rawContact;
   return {
-    ...raw,
+    ...(rest as Conversation),
+    has_customer_reply,
+    last_sender_type,
+    last_customer_message_text,
     contact: {
       ...contact,
       tags: (contact_tags ?? [])

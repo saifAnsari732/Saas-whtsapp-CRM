@@ -179,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           avatar_url: currentUser?.photoURL || null,
           role: isSuperAdminEmail ? "admin" : "user",
           beta_features: [],
-          account_id: null,
+          account_id: userId,
           account_role: "owner",
         };
 
@@ -304,7 +304,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return {
       accountRole: effectiveRole,
-      accountId: profile?.account_id ?? null,
+      accountId: profile?.account_id ?? (user?.uid ? user.uid : null),
       isSuperAdmin,
       isOwner: isSuperAdmin || effectiveRole === "owner",
       isAdmin: isSuperAdmin || effectiveRole === "admin",

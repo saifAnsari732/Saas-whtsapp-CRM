@@ -9,6 +9,7 @@ import * as admin from 'firebase-admin';
 import { getApps, initializeApp, cert, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { getAuth, type Auth } from 'firebase-admin/auth';
+import { getStorage, type Storage } from 'firebase-admin/storage';
 
 function getAdminApp(): App {
   if (getApps().length > 0) return getApps()[0];
@@ -88,6 +89,7 @@ function getAdminApp(): App {
 
 let _adminDb: Firestore | null = null;
 let _adminAuth: Auth | null = null;
+let _adminStorage: Storage | null = null;
 
 /**
  * Returns the Firebase Admin Firestore instance.
@@ -112,6 +114,17 @@ export function getAdminAuth(): Auth {
     _adminAuth = getAuth(app);
   }
   return _adminAuth;
+}
+
+/**
+ * Returns the Firebase Admin Storage instance.
+ */
+export function getAdminStorage(): Storage {
+  if (!_adminStorage) {
+    const app = getAdminApp();
+    _adminStorage = getStorage(app);
+  }
+  return _adminStorage;
 }
 
 /**

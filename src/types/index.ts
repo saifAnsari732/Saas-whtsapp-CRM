@@ -181,6 +181,9 @@ export interface Conversation {
   ai_autoreply_disabled?: boolean;
   ai_reply_count?: number;
   ai_handoff_summary?: string | null;
+  has_customer_reply?: boolean;
+  last_sender_type?: "customer" | "agent" | "bot";
+  last_customer_message_text?: string;
 }
 
 // ============================================================

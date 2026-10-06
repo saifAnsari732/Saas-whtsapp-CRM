@@ -168,28 +168,15 @@ export default function BroadcastDetailPage() {
 
     async function fetchData() {
       try {
-        const supabase = createClient();
+        const res = await fetch(`/api/whatsapp/broadcasts/${broadcastId}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || t('notFound'));
 
-        const { data: bc, error: bcError } = await supabase
-          .from('broadcasts')
-          .select('*')
-          .eq('id', broadcastId)
-          .single();
+        setBroadcast(data.broadcast);
+        setRecipients(data.recipients ?? []);
 
-        if (bcError) throw bcError;
-        setBroadcast(bc);
-
-        const { data: recs, error: recsError } = await supabase
-          .from('broadcast_recipients')
-          .select('*, contact:contacts(*)')
-          .eq('broadcast_id', broadcastId)
-          .order('created_at', { ascending: false });
-
-        if (recsError) throw recsError;
-        setRecipients(recs ?? []);
-
-        if (bc.status === 'sending' || bc.status === 'scheduled') {
-          timeoutId = setTimeout(fetchData, 5000);
+        if (data.broadcast?.status === 'sending' || data.broadcast?.status === 'scheduled') {
+          timeoutId = setTimeout(fetchData, 2000);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : t('notFound'));
@@ -238,22 +225,22 @@ export default function BroadcastDetailPage() {
 
   async function handleDelete() {
     setDeleting(true);
-    const supabase = createClient();
-    // broadcast_recipients cascades on broadcasts.id (migration 001), so a
-    // single delete is sufficient — the aggregate trigger in migration 003
-    // is defined on broadcast_recipients but fires only on its own row
-    // changes, not on a cascaded drop of the parent row.
-    const { error: delErr } = await supabase
-      .from('broadcasts')
-      .delete()
-      .eq('id', broadcastId);
-    setDeleting(false);
-    if (delErr) {
-      toast.error(t('toastFailedDelete', { error: delErr.message }));
-      return;
+    try {
+      const res = await fetch(`/api/whatsapp/broadcasts/${broadcastId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(t('toastFailedDelete', { error: data.error || 'Failed to delete' }));
+        return;
+      }
+      toast.success(t('toastDeleted'));
+      router.push('/broadcasts');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete broadcast');
+    } finally {
+      setDeleting(false);
     }
-    toast.success(t('toastDeleted'));
-    router.push('/broadcasts');
   }
 
   async function handleResend() {
@@ -291,8 +278,30 @@ export default function BroadcastDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="h-9 w-9 bg-muted animate-pulse rounded-lg" />
+            <div className="space-y-2">
+              <div className="h-6 w-48 bg-muted animate-pulse rounded" />
+              <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="h-9 w-20 bg-muted animate-pulse rounded-lg" />
+            <div className="h-9 w-20 bg-muted animate-pulse rounded-lg" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="h-24 bg-card border border-border rounded-xl p-4 animate-pulse space-y-3">
+              <div className="h-4 w-12 bg-muted rounded" />
+              <div className="h-7 w-16 bg-muted rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="h-36 bg-card border border-border rounded-xl p-4 animate-pulse" />
+        <div className="h-64 bg-card border border-border rounded-xl p-4 animate-pulse" />
       </div>
     );
   }

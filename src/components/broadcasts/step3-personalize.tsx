@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, ArrowRight, Eye, ImageIcon, Loader2, Upload } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, ImageIcon, Loader2, Upload, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { uploadAccountMedia } from '@/lib/storage/upload-media';
 import { toast } from 'sonner';
@@ -274,19 +274,38 @@ export function Step3Personalize({
               placeholder={t('personalize.imageUrlPlaceholder')}
               className="border-border bg-muted text-foreground placeholder:text-muted-foreground flex-1"
             />
-            {mediaHeaderType === 'image' && (
+            {headerMediaUrl && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => onHeaderMediaUrlChange('')}
+                title="Clear media URL"
+                className="border-red-500/30 text-red-400 hover:bg-red-500/10 shrink-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+            {mediaHeaderType && (
               <>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png"
+                  accept={
+                    mediaHeaderType === 'image'
+                      ? 'image/jpeg,image/png,image/webp,image/gif'
+                      : mediaHeaderType === 'video'
+                      ? 'video/mp4,video/3gpp'
+                      : 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain'
+                  }
                   className="hidden"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
                     try {
-                      const { publicUrl } = await uploadAccountMedia('chat-media', file);
+                      toast.info('Uploading media attachment...');
+                      const { publicUrl } = await uploadAccountMedia('chat-media', file, template?.id);
                       onHeaderMediaUrlChange(publicUrl);
-                      toast.success('Image uploaded successfully');
+                      toast.success('Media uploaded successfully!');
                     } catch (err) {
                       toast.error(err instanceof Error ? err.message : 'Upload failed');
                     }
@@ -301,7 +320,7 @@ export function Step3Personalize({
                   }}
                 >
                   <Upload className="mr-2 h-4 w-4" />
-                  Upload
+                  Upload File
                 </Button>
               </>
             )}

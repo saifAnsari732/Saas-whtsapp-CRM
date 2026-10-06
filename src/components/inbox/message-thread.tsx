@@ -153,6 +153,9 @@ const STATUS_OPTIONS: { label: string; value: ConversationStatus; color: string 
 const DOODLE_BG_CLASSES =
   "bg-background bg-[url('/inbox-doodle.svg')] bg-repeat";
 
+// Module-level cache for team profiles across thread switches
+let cachedTeamProfiles: Profile[] | null = null;
+
 export function MessageThread({
   conversation,
   contact,
@@ -177,7 +180,7 @@ export function MessageThread({
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>(() => cachedTeamProfiles ?? []);
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
   // Purely visual spin state for the manual-refresh button. The actual
   // refetch is fire-and-forget through `onRefresh` (which bumps the
@@ -207,19 +210,18 @@ export function MessageThread({
   // see — today that's just the current user, but the dropdown keeps the
   // shape ready for shared-team workspaces without a refactor.
   useEffect(() => {
+    if (cachedTeamProfiles) return;
     let cancelled = false;
-    const supabase = createClient();
-    supabase
-      .from("profiles")
-      .select("*")
-      .order("full_name")
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          console.error("Failed to fetch profiles:", error);
-          return;
+    fetch("/api/inbox/team")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled && Array.isArray(data.profiles)) {
+          cachedTeamProfiles = data.profiles as Profile[];
+          setProfiles(data.profiles as Profile[]);
         }
-        setProfiles((data as Profile[]) ?? []);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch profiles:", err);
       });
     return () => {
       cancelled = true;
@@ -275,27 +277,28 @@ export function MessageThread({
   useEffect(() => {
     if (!conversationId) return;
 
-    const supabase = createClient();
     let cancelled = false;
 
     (async () => {
-      setLoading(true);
-
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
-
-      if (cancelled) return;
-
-      if (error) {
-        console.error("Failed to fetch messages:", error);
-      } else {
-        onMessagesLoadedRef.current(data ?? []);
+      // If messages are already present from cache, don't show full loading spinner
+      if (messages.length === 0) {
+        setLoading(true);
       }
 
-      if (!cancelled) setLoading(false);
+      try {
+        const res = await fetch(`/api/inbox/messages?conversationId=${encodeURIComponent(conversationId)}`);
+        if (!res.ok) throw new Error("Failed to fetch messages");
+        const json = await res.json();
+        if (cancelled) return;
+        const list = json.messages || json.data || [];
+        onMessagesLoadedRef.current(list);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch messages:", error);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
 
     return () => {
@@ -316,20 +319,20 @@ export function MessageThread({
       setReactions([]);
       return;
     }
-    const supabase = createClient();
     let cancelled = false;
 
     (async () => {
-      const { data, error } = await supabase
-        .from("message_reactions")
-        .select("*")
-        .eq("conversation_id", conversationId);
-      if (cancelled) return;
-      if (error) {
-        console.error("Failed to fetch reactions:", error);
-        return;
+      try {
+        const res = await fetch(`/api/inbox/reactions?conversationId=${encodeURIComponent(conversationId)}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        setReactions((json.reactions as MessageReaction[]) ?? []);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch reactions:", error);
+        }
       }
-      setReactions((data as MessageReaction[]) ?? []);
     })();
 
     return () => {
@@ -427,14 +430,13 @@ export function MessageThread({
   // is 0 the condition is false, so no further UPDATE is issued.
   useEffect(() => {
     if (!conversationId || !hasUnread) return;
-    const supabase = createClient();
-    supabase
-      .from("conversations")
-      .update({ unread_count: 0 })
-      .eq("id", conversationId)
-      .then(({ error }) => {
-        if (error) console.error("Failed to reset unread_count:", error);
-      });
+    fetch(`/api/inbox/conversations/${conversationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unread_count: 0 }),
+    }).catch((err) => {
+      console.error("Failed to reset unread_count:", err);
+    });
   }, [conversationId, hasUnread]);
 
   // Auto-scroll to bottom on new messages
@@ -625,11 +627,15 @@ export function MessageThread({
     async (status: ConversationStatus) => {
       if (!conversation) return;
 
-      const supabase = createClient();
-      await supabase
-        .from("conversations")
-        .update({ status })
-        .eq("id", conversation.id);
+      try {
+        await fetch(`/api/inbox/conversations/${conversation.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+      } catch (err) {
+        console.error("Failed to update status:", err);
+      }
 
       onStatusChange(conversation.id, status);
     },
@@ -821,13 +827,14 @@ export function MessageThread({
     async (agentId: string | null) => {
       if (!conversation) return;
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("conversations")
-        .update({ assigned_agent_id: agentId })
-        .eq("id", conversation.id);
-
-      if (error) {
+      try {
+        const res = await fetch(`/api/inbox/conversations/${conversation.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assigned_agent_id: agentId }),
+        });
+        if (!res.ok) throw new Error("Failed to update assignment");
+      } catch (error) {
         console.error("Failed to update assignment:", error);
         toast.error("Failed to update assignment");
         return;
@@ -857,8 +864,15 @@ export function MessageThread({
     );
   }
 
-  const displayName = contact.name || contact.phone;
-  const messageGroups = groupMessagesByDate(messages);
+  const rawName = contact.name?.trim();
+  const rawPhone = contact.phone?.trim();
+  const hasRealName = Boolean(rawName && rawName !== "" && rawName !== rawPhone);
+  const displayName = hasRealName
+    ? rawName!
+    : (rawPhone ? (rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`) : t("unknown"));
+  const displayPhone = rawPhone ? (rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`) : null;
+
+  const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
   const currentStatus = STATUS_OPTIONS.find(
     (s) => s.value === conversation.status
   );
@@ -894,12 +908,17 @@ export function MessageThread({
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
             {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
-            <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
+            {displayPhone && hasRealName && (
+              <p className="truncate text-xs text-muted-foreground font-mono">{displayPhone}</p>
+            )}
+            {!hasRealName && contact.company && (
+              <p className="truncate text-xs text-muted-foreground">{contact.company}</p>
+            )}
           </div>
           {/* Session timer badge — hidden on the narrowest phones so
               the name + back arrow keep their room. */}
@@ -1059,7 +1078,7 @@ export function MessageThread({
 
       {/* Messages Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
-        {loading ? (
+        {loading && messages.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>

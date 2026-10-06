@@ -313,7 +313,7 @@ export default function CoexistenceSetupPage() {
     }).sort((a, b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0));
   }, [chats, chatFilter, searchChat]);
 
-  // Single One-Time Connection Verification on Mount
+  // Persistent Connection Verification: Once connected, NEVER accidentally drop or wipe session
   useEffect(() => {
     if (!user?.id) return;
     const currentUserId = user.id;
@@ -328,6 +328,7 @@ export default function CoexistenceSetupPage() {
 
         const data = await res.json();
         const currentStatus = data.state || data.status || "disconnected";
+        const wasConnected = typeof window !== "undefined" && localStorage.getItem(`wacrm_coex_status_${currentUserId}`) === "connected";
         
         if (currentStatus === "connected" || currentStatus === "open" || currentStatus === "PAIRED") {
           disconnectCounterRef.current = 0;
@@ -343,28 +344,54 @@ export default function CoexistenceSetupPage() {
           }
           setQrCodeBase64(null);
         } else if (currentStatus === "scan_qr" && data.qr) {
-          setStatus("scan_qr");
-          setQrCodeBase64(data.qr);
-          setConnectedUser(null);
-          if (typeof window !== "undefined") {
-            localStorage.removeItem(`wacrm_coex_user_${currentUserId}`);
+          if (!wasConnected) {
+            setStatus("scan_qr");
+            setQrCodeBase64(data.qr);
+            setConnectedUser(null);
+            pollTimeout = setTimeout(verifyStatusOnce, 3000);
+          } else {
+            // Already connected previously — do NOT drop to QR screen unless explicitly logged out
+            setStatus("open");
+            pollTimeout = setTimeout(verifyStatusOnce, 5000);
           }
-          // Only poll temporarily while waiting for the user to scan the QR code
-          pollTimeout = setTimeout(verifyStatusOnce, 3000);
+        } else if (currentStatus === "connecting" || currentStatus === "reconnecting") {
+          // Socket is reconnecting — maintain connected UI, do NOT wipe session
+          setStatus("open");
+          pollTimeout = setTimeout(verifyStatusOnce, 5000);
         } else {
-          setStatus("disconnected");
-          setQrCodeBase64(null);
-          setConnectedUser(null);
-          if (typeof window !== "undefined") {
-            localStorage.removeItem(`wacrm_coex_status_${currentUserId}`);
-            localStorage.removeItem(`wacrm_coex_user_${currentUserId}`);
+          // Status is disconnected/closed:
+          if (wasConnected) {
+            disconnectCounterRef.current++;
+            // Only disconnect if explicitly confirmed logged_out or multiple consecutive failures
+            if (data.logged_out === true || disconnectCounterRef.current > 8) {
+              setStatus("disconnected");
+              setQrCodeBase64(null);
+              setConnectedUser(null);
+              if (typeof window !== "undefined") {
+                localStorage.removeItem(`wacrm_coex_status_${currentUserId}`);
+                localStorage.removeItem(`wacrm_coex_user_${currentUserId}`);
+              }
+            } else {
+              // Maintain active connection state in UI
+              setStatus("open");
+              pollTimeout = setTimeout(verifyStatusOnce, 6000);
+            }
+          } else {
+            setStatus("disconnected");
+            setQrCodeBase64(null);
+            setConnectedUser(null);
           }
         }
       } catch (error) { 
-        console.error("Status verification note:", error); 
+        console.warn("Status check note (temporary network latency):", error); 
+        // Never wipe session on network glitches
         if (isMounted) {
-          setStatus("disconnected");
-          setConnectedUser(null);
+          const wasConnected = typeof window !== "undefined" && localStorage.getItem(`wacrm_coex_status_${currentUserId}`) === "connected";
+          if (wasConnected) {
+            setStatus("open");
+          } else {
+            setStatus("disconnected");
+          }
         }
       }
     };
@@ -1109,41 +1136,42 @@ export default function CoexistenceSetupPage() {
 
         {/* VIEW 1: DISCONNECTED (NO QR YET & NOT CHECKING) */}
         {!isEffectivelyConnected && !isChecking && !qrCodeBase64 && chats.length === 0 && (
-          <Card className="border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-3xl shadow-xs overflow-hidden">
-            <CardHeader className="p-6 sm:p-8">
+          <Card className="relative overflow-hidden border border-border/80 bg-gradient-to-br from-card via-card to-emerald-500/[0.03] rounded-3xl shadow-sm">
+            <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+            <CardHeader className="p-6 sm:p-8 relative z-10">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="space-y-3 max-w-2xl">
-                  <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 font-bold px-3 py-1 text-xs flex items-center gap-1.5 w-fit">
-                    <Zap className="h-3 w-3 text-emerald-600" />
+                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 font-bold px-3.5 py-1 text-xs flex items-center gap-1.5 w-fit rounded-full shadow-2xs">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>Instant WhatsApp Coexistence</span>
                   </Badge>
-                  <CardTitle className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                  <CardTitle className="text-2xl sm:text-3xl lg:text-4xl font-black text-foreground tracking-tight">
                     Connect Your Phone QR Code
                   </CardTitle>
                   <CardDescription className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                    Link your active WhatsApp phone number in seconds. Use your existing phone app alongside ChatFlyr CRM for automated replies, contact group broadcasts, and scheduled messages.
+                    Pair your active WhatsApp phone number in under 10 seconds. Use your existing phone app alongside ChatFlyr CRM for 24/7 AI replies, WhatsApp group broadcasts, and automated scheduled messages at zero extra cost.
                   </CardDescription>
                 </div>
                 
-                <div className="flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs">
+                <div className="flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-2xs">
                   <QrCode className="h-10 w-10 sm:h-12 sm:w-12" />
                 </div>
               </div>
             </CardHeader>
             
-            <CardContent className="p-6 sm:p-8 pt-0 space-y-6">
+            <CardContent className="p-6 sm:p-8 pt-0 space-y-6 relative z-10">
               {/* PRIMARY ACTION BUTTON AT TOP */}
-              <div className="pt-2">
+              <div className="pt-1">
                 <Button 
                   onClick={handleCreateInstance} 
                   disabled={loading} 
                   size="lg" 
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-4 text-sm sm:text-base rounded-2xl shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.99] gap-2.5 cursor-pointer h-14"
+                  className="w-full bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-4 text-sm sm:text-base rounded-2xl shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.99] gap-3 cursor-pointer h-14"
                 >
                   {loading ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      Generating WhatsApp QR Code...
+                      Generating Secure QR Code...
                     </>
                   ) : (
                     <>
@@ -1154,40 +1182,40 @@ export default function CoexistenceSetupPage() {
                 </Button>
               </div>
 
-              {/* AWARENESS & BENEFITS CARDS SHIFTED BELOW BUTTON */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-t border-slate-100 dark:border-zinc-800">
-                <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-zinc-950/60 border border-slate-200/70 dark:border-zinc-800 shadow-2xs hover:border-emerald-500/30 transition-colors">
-                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 shrink-0">
+              {/* VALUE CARDS SHIFTED BELOW BUTTON */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-t border-border/80">
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-muted/20 border border-border/80 shadow-2xs hover:border-emerald-500/30 hover:bg-card transition-all">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0 border border-emerald-500/20">
                     <CheckCircle2 className="h-5 w-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">Simultaneous Usage</h4>
+                    <h4 className="text-xs sm:text-sm font-bold text-foreground">Simultaneous Dual Usage</h4>
                     <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      Keep using WhatsApp on your phone while CRM automations run in background.
+                      Keep using WhatsApp on your physical phone normally while CRM automations run in the background.
                     </p>
                   </div>
                 </div>
                 
-                <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-zinc-950/60 border border-slate-200/70 dark:border-zinc-800 shadow-2xs hover:border-emerald-500/30 transition-colors">
-                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 shrink-0">
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-muted/20 border border-border/80 shadow-2xs hover:border-emerald-500/30 hover:bg-card transition-all">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0 border border-emerald-500/20">
                     <ShieldCheck className="h-5 w-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">No Account Loss</h4>
+                    <h4 className="text-xs sm:text-sm font-bold text-foreground">Zero Disconnect Risk</h4>
                     <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      Maintains regular mobile session without disrupting existing contacts or chats.
+                      Maintains your active mobile session without disrupting existing personal contacts or chat history.
                     </p>
                   </div>
                 </div>
                 
-                <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-zinc-950/60 border border-slate-200/70 dark:border-zinc-800 shadow-2xs hover:border-emerald-500/30 transition-colors">
-                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 shrink-0">
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-muted/20 border border-border/80 shadow-2xs hover:border-emerald-500/30 hover:bg-card transition-all">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0 border border-emerald-500/20">
                     <Zap className="h-5 w-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">Instant Setup</h4>
+                    <h4 className="text-xs sm:text-sm font-bold text-foreground">Instant 10-Second Setup</h4>
                     <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      Scan QR code using WhatsApp Link a Device feature for 1-click connection.
+                      Scan the QR code using WhatsApp &quot;Linked Devices&quot; for instant pairing without complex API tokens.
                     </p>
                   </div>
                 </div>
@@ -2574,10 +2602,34 @@ export default function CoexistenceSetupPage() {
                     <div className="p-5 rounded-2xl bg-card border border-border/80 space-y-4 shadow-xs">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-bold text-sm text-foreground">Auto-Reply Configuration</p>
-                          <p className="text-xs text-muted-foreground">Automatically reply to incoming messages received on this Coexistence WhatsApp line.</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-sm text-foreground">Basic Static Auto-Reply</p>
+                            <Badge variant="outline" className="text-[10px] font-semibold">Legacy</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Quick static text response for incoming messages on this paired phone.</p>
                         </div>
                         <Switch checked={autoReplyEnabled} onCheckedChange={handleToggleAutoReply} />
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <Bot className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                            Looking for Smart AI Auto-Reply & Follow-ups?
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Configure AI personas, keyword matching rules, welcome greetings, and multi-step follow-ups in the dedicated AI Studio.
+                          </p>
+                        </div>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setActiveTab("chatbot")}
+                          className="shrink-0 h-8 text-xs font-bold border-purple-500/30 hover:bg-purple-500/10 text-purple-700 dark:text-purple-300 rounded-lg"
+                        >
+                          Open AI Studio →
+                        </Button>
                       </div>
                       
                       {autoReplyEnabled && (

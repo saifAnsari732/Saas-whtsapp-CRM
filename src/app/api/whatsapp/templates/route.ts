@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { getAdminDb } from '@/lib/firebase/admin';
+import { getAccountContext } from '@/lib/firebase/auth-helper';
 
 export interface InteractiveButton {
   type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
@@ -88,40 +91,92 @@ export const DEMO_TEMPLATES = [
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const accCtx = await getAccountContext(request as any)
+    let user = accCtx?.user
+    let accountId = accCtx?.accountId
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) {
+      try {
+        const supabase = await createClient()
+        const { data: { user: sbUser } } = await supabase.auth.getUser()
+        if (sbUser) {
+          user = { uid: sbUser.id, email: sbUser.email || undefined }
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('account_id')
+            .eq('user_id', sbUser.id)
+            .maybeSingle()
+          accountId = profile?.account_id || `acct-${sbUser.id}`
+        }
+      } catch (_err) {}
     }
 
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .maybeSingle();
-
-    const accountId = profile?.account_id || user.id;
-
-    let query = supabase
-      .from('message_templates')
-      .select('*')
-      .or(`account_id.eq.${accountId},user_id.eq.${user.id}`)
-      .order('created_at', { ascending: false });
-
-    if (status && status !== 'all') {
-      query = query.eq('status', status);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: templates } = await query;
+    if (!accountId) {
+      accountId = `acct-${user.uid}`
+    }
 
-    return NextResponse.json({ success: true, templates: templates || [] });
+    const { searchParams } = new URL(request.url)
+    const statusFilter = searchParams.get('status')
+
+    const mergedMap = new Map<string, any>()
+
+    // 1. Fetch from Firestore
+    try {
+      const db = getAdminDb()
+      const fsSnap = await db
+        .collection('message_templates')
+        .where('account_id', '==', accountId)
+        .get()
+
+      fsSnap.forEach((doc) => {
+        const data = doc.data()
+        const key = `${data.name}_${data.language || 'en_US'}`.toLowerCase()
+        mergedMap.set(key, { id: doc.id, ...data })
+      })
+    } catch (fsErr) {
+      console.warn('[templates GET] Firestore read warning:', fsErr)
+    }
+
+    // 2. Fetch from Supabase
+    try {
+      const supabase = createAdminClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+      const { data: sbTemplates } = await supabase
+        .from('message_templates')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false })
+
+      if (sbTemplates) {
+        sbTemplates.forEach((t) => {
+          const key = `${t.name}_${t.language || 'en_US'}`.toLowerCase()
+          if (!mergedMap.has(key)) {
+            mergedMap.set(key, t)
+          }
+        })
+      }
+    } catch (sbErr) {
+      console.warn('[templates GET] Supabase read warning:', sbErr)
+    }
+
+    let templates = Array.from(mergedMap.values())
+
+    if (statusFilter && statusFilter !== 'all') {
+      templates = templates.filter(
+        (t) => (t.status || '').toLowerCase() === statusFilter.toLowerCase()
+      )
+    }
+
+    return NextResponse.json({ success: true, templates })
   } catch (error: any) {
-    console.error('Failed to fetch templates:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Failed to fetch templates:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 

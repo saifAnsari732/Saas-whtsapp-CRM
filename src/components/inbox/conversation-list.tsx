@@ -3,9 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  CONVERSATION_SELECT,
   matchesContactFilters,
-  normalizeConversations,
 } from "@/lib/inbox/conversations";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus, Tag } from "@/types";
@@ -50,7 +48,10 @@ const STATUS_COLORS: Record<ConversationStatus, string> = {
 
 
 
-type InboxFilter = ConversationStatus | "all" | "unread";
+type InboxFilter = ConversationStatus | "all" | "unread" | "replies";
+
+// Module-level cache for tags
+let cachedTags: Tag[] | null = null;
 
 export function ConversationList({
   activeConversationId,
@@ -63,6 +64,7 @@ export function ConversationList({
   
   const FILTER_OPTIONS: { label: string; value: InboxFilter }[] = useMemo(() => [
     { label: t("filterAll"), value: "all" },
+    { label: "💬 Customer Replies", value: "replies" },
     { label: t("filterUnread"), value: "unread" },
     { label: t("filterOpen"), value: "open" },
     { label: t("filterPending"), value: "pending" },
@@ -71,11 +73,11 @@ export function ConversationList({
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => conversations.length === 0);
   // Contact-based filters (issue #272). Tags use OR logic (a conversation
   // matches if its contact carries any selected tag), consistent with
   // Broadcast audience filtering. Company is an exact match on the field.
-  const [tags, setTags] = useState<Tag[]>([]);
+  const [tags, setTags] = useState<Tag[]>(() => cachedTags ?? []);
   
   // Group manage state
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -104,49 +106,42 @@ export function ConversationList({
   });
 
   useEffect(() => {
-    const supabase = createClient();
     let cancelled = false;
 
     (async () => {
-      const { data, error } = await supabase
-        .from("conversations")
-        .select(CONVERSATION_SELECT)
-        .order("last_message_at", { ascending: false });
-
-      if (cancelled) return;
-
-      if (error) {
-        // Supabase errors have non-enumerable properties — log fields explicitly
-        console.error("Failed to fetch conversations:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        });
-        setLoading(false);
-        return;
+      try {
+        const res = await fetch("/api/inbox/conversations");
+        if (cancelled) return;
+        if (!res.ok) {
+          throw new Error(`Failed to fetch conversations: ${res.statusText}`);
+        }
+        const json = await res.json();
+        const convList = json.conversations || [];
+        onConversationsLoadedRef.current(convList);
+      } catch (err) {
+        console.error("Failed to fetch conversations:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      onConversationsLoadedRef.current(normalizeConversations(data ?? []));
-      setLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
-    // `resyncToken` is included so the parent can force a refetch when
-    // the realtime channel reconnects or the tab regains focus — catches
-    // up on any events sent while the WS was disconnected or throttled.
   }, [resyncToken]);
 
   // Tag definitions for the filter picker — loaded once so labels/colours
   // stay stable regardless of which conversations happen to be loaded.
   useEffect(() => {
+    if (cachedTags) return;
     const supabase = createClient();
     let cancelled = false;
     (async () => {
       const { data } = await supabase.from("tags").select("*").order("name");
-      if (!cancelled && data) setTags(data as Tag[]);
+      if (!cancelled && data) {
+        cachedTags = data as Tag[];
+        setTags(data as Tag[]);
+      }
     })();
     return () => {
       cancelled = true;
@@ -234,6 +229,13 @@ export function ConversationList({
 
     if (filter === "unread") {
       result = result.filter((c) => c.unread_count > 0);
+    } else if (filter === "replies") {
+      result = result.filter(
+        (c) =>
+          Boolean(c.has_customer_reply) ||
+          c.last_sender_type === "customer" ||
+          c.unread_count > 0
+      );
     } else if (filter !== "all") {
       result = result.filter((c) => c.status === filter);
     }
@@ -254,7 +256,13 @@ export function ConversationList({
         const name = c.contact?.name?.toLowerCase() ?? "";
         const phone = c.contact?.phone?.toLowerCase() ?? "";
         const lastMsg = c.last_message_text?.toLowerCase() ?? "";
-        return name.includes(q) || phone.includes(q) || lastMsg.includes(q);
+        const custMsg = c.last_customer_message_text?.toLowerCase() ?? "";
+        return (
+          name.includes(q) ||
+          phone.includes(q) ||
+          lastMsg.includes(q) ||
+          custMsg.includes(q)
+        );
       });
     }
 
@@ -449,6 +457,51 @@ export function ConversationList({
             placeholder={t("searchPlaceholder")}
             className="border-border bg-muted pl-9 text-sm text-foreground placeholder-muted-foreground focus:border-primary/50"
           />
+        </div>
+
+        {/* Quick Filter Pills */}
+        <div className="flex items-center gap-1.5 pt-0.5">
+          <button
+            type="button"
+            onClick={() => setFilter("all")}
+            className={cn(
+              "px-2.5 py-1 text-xs rounded-full font-medium transition-colors cursor-pointer",
+              filter === "all"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+            )}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter("replies")}
+            className={cn(
+              "px-2.5 py-1 text-xs rounded-full font-medium transition-colors flex items-center gap-1 cursor-pointer",
+              filter === "replies"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100"
+            )}
+          >
+            <span>💬 Replies</span>
+            {conversations.filter((c) => c.has_customer_reply || c.last_sender_type === "customer").length > 0 && (
+              <span className="text-[10px] bg-emerald-200/60 dark:bg-emerald-900/80 px-1 rounded-full font-semibold">
+                {conversations.filter((c) => c.has_customer_reply || c.last_sender_type === "customer").length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter("unread")}
+            className={cn(
+              "px-2.5 py-1 text-xs rounded-full font-medium transition-colors cursor-pointer",
+              filter === "unread"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+            )}
+          >
+            Unread
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
@@ -661,8 +714,19 @@ function ConversationItem({
   t,
 }: ConversationItemProps) {
   const contact = conversation.contact;
-  const displayName = contact?.name || contact?.phone || t("unknown");
-  const initials = displayName.charAt(0).toUpperCase();
+  const rawName = contact?.name?.trim();
+  const rawPhone = contact?.phone?.trim();
+  const hasRealName = Boolean(rawName && rawName !== "" && rawName !== rawPhone);
+  const displayName = hasRealName
+    ? rawName!
+    : (rawPhone ? (rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`) : t("unknown"));
+  const displayPhone = hasRealName && rawPhone ? (rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`) : null;
+  const initials = (hasRealName ? rawName! : (rawPhone || "U")).charAt(0).toUpperCase();
+
+  const isCustomerReply =
+    conversation.last_sender_type === "customer" ||
+    Boolean(conversation.has_customer_reply) ||
+    conversation.unread_count > 0;
 
   const handleClick = useCallback(() => {
     onSelect(conversation);
@@ -678,12 +742,13 @@ function ConversationItem({
     <button
       onClick={handleClick}
       className={cn(
-        "flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/50",
-        isActive && "border-l-2 border-primary bg-muted/70"
+        "flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 border-b border-border/40",
+        isActive && "border-l-2 border-primary bg-muted/70",
+        isCustomerReply && !isActive && "bg-emerald-500/[0.04]"
       )}
     >
       {/* Avatar */}
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
+      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
         {contact?.avatar_url ? (
           <img
             src={contact.avatar_url}
@@ -693,23 +758,59 @@ function ConversationItem({
         ) : (
           initials
         )}
+        {isCustomerReply && (
+          <span
+            className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-background"
+            title="Customer reply"
+          />
+        )}
       </div>
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground">
+        <div className="flex items-center justify-between gap-1.5">
+          <span className="truncate text-sm font-semibold text-foreground">
             {displayName}
           </span>
           <span className="shrink-0 text-[10px] text-muted-foreground">{timeAgo}</span>
         </div>
-        <div className="mt-0.5 flex items-center justify-between gap-2">
-          <p className="truncate text-xs text-muted-foreground">
-            {conversation.last_message_text || t("noMessagesYet")}
-          </p>
+
+        {/* Contact Phone & Company */}
+        {displayPhone && (
+          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+            <span>{displayPhone}</span>
+            {contact?.company && (
+              <span className="text-[10px] px-1 py-0.2 rounded bg-muted text-muted-foreground font-sans">
+                {contact.company}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Message preview and Status */}
+        <div className="mt-1 flex items-center justify-between gap-2">
+          {isCustomerReply ? (
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="shrink-0 text-[9px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-950/80 dark:text-emerald-300 px-1 py-0.2 rounded border border-emerald-300 dark:border-emerald-800">
+                💬 Reply
+              </span>
+              <p className="truncate text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                {conversation.last_customer_message_text || conversation.last_message_text}
+              </p>
+            </div>
+          ) : (
+            <p className="truncate text-xs text-muted-foreground flex-1">
+              {conversation.last_message_text?.startsWith("Template:") ? (
+                <span className="text-muted-foreground/80">📢 {conversation.last_message_text}</span>
+              ) : (
+                conversation.last_message_text || t("noMessagesYet")
+              )}
+            </p>
+          )}
+
           <div className="flex shrink-0 items-center gap-1.5">
             {conversation.unread_count > 0 && (
-              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] font-bold text-white shadow-xs">
                 {conversation.unread_count}
               </span>
             )}

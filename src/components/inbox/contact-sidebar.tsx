@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import type { Contact, Deal, ContactNote, Tag } from "@/types";
@@ -43,50 +42,21 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const fetchContactData = useCallback(async () => {
     if (!contact) return;
 
-    const supabase = createClient();
-
-    // Fetch deals, notes, and tags in parallel
-    const [dealsRes, notesRes, tagsRes, allTagsRes] = await Promise.all([
-      supabase
-        .from("deals")
-        .select("*, stage:pipeline_stages(*)")
-        .eq("contact_id", contact.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("contact_notes")
-        .select("*")
-        .eq("contact_id", contact.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("contact_tags")
-        .select("id, tag_id, tags(*)")
-        .eq("contact_id", contact.id),
-      supabase
-        .from("tags")
-        .select("*")
-        .order("name"),
-    ]);
-
-    if (dealsRes.data) setDeals(dealsRes.data);
-    if (notesRes.data) setNotes(notesRes.data);
-    if (tagsRes.data) {
-      const mapped = tagsRes.data
-        .filter((ct: Record<string, unknown>) => ct.tags)
-        .map((ct: Record<string, unknown>) => ({
-          ...(ct.tags as Tag),
-          contact_tag_id: ct.id as string,
-        }));
-      setTags(mapped);
-    }
-    if (allTagsRes.data) {
-      setAllTags(allTagsRes.data);
+    try {
+      const res = await fetch(`/api/inbox/contact-details?contactId=${encodeURIComponent(contact.id)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.deals) setDeals(data.deals);
+      if (data.notes) setNotes(data.notes);
+      if (data.tags) setTags(data.tags);
+      if (data.allTags) setAllTags(data.allTags);
+    } catch (err) {
+      console.error("Failed to fetch contact details:", err);
     }
   }, [contact]);
 
-  // Load on contact change. setContactData/setTags run inside async
-  // Supabase callbacks, not synchronously in the effect body.
+  // Load on contact change.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchContactData();
   }, [fetchContactData]);
 
@@ -95,55 +65,56 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
     await navigator.clipboard.writeText(contact.phone);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    // Dep is the whole `contact` object (not `contact?.phone`) so the
-    // React Compiler's inference agrees with the manual dep list —
-    // fixes the `preserve-manual-memoization` lint error.
   }, [contact]);
 
   const handleAddNote = useCallback(async () => {
     if (!contact || !newNote.trim()) return;
-    if (!accountId) return;
     setAddingNote(true);
 
-    const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const user = session?.user;
-
-    const { data, error } = await supabase
-      .from("contact_notes")
-      .insert({
-        contact_id: contact.id,
-        account_id: accountId,
-        user_id: user?.id,
-        note_text: newNote.trim(),
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
-      setNotes((prev) => [data, ...prev]);
-      setNewNote("");
+    try {
+      const res = await fetch("/api/inbox/contact-details", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add_note",
+          contact_id: contact.id,
+          account_id: accountId,
+          note_text: newNote.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.note) {
+        setNotes((prev) => [data.note, ...prev]);
+        setNewNote("");
+      }
+    } catch (err) {
+      console.error("Failed to add note:", err);
+    } finally {
+      setAddingNote(false);
     }
-    setAddingNote(false);
   }, [contact, newNote, accountId]);
 
   const handleAssignGroup = async (tagId: string) => {
-    if (!contact || !tagId || tagId === 'none') return;
-    const supabase = createClient();
+    if (!contact || !tagId || tagId === "none") return;
     
     // Check if already assigned
-    if (tags.some(t => t.id === tagId)) return;
+    if (tags.some((t) => t.id === tagId)) return;
     
-    const { data, error } = await supabase
-      .from("contact_tags")
-      .insert({ contact_id: contact.id, tag_id: tagId })
-      .select('id')
-      .single();
-      
-    if (!error) {
-      fetchContactData();
+    try {
+      const res = await fetch("/api/inbox/contact-details", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "assign_tag",
+          contact_id: contact.id,
+          tag_id: tagId,
+        }),
+      });
+      if (res.ok) {
+        fetchContactData();
+      }
+    } catch (err) {
+      console.error("Failed to assign tag:", err);
     }
   };
 

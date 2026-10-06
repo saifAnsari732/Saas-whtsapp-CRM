@@ -41,6 +41,11 @@ export function WhatsAppPhoneMockup({
   className
 }: WhatsAppPhoneMockupProps) {
   const displayText = bodyText || template?.body_text || '';
+  const [hasImgError, setHasImgError] = React.useState(false);
+
+  React.useEffect(() => {
+    setHasImgError(false);
+  }, [headerMediaUrl]);
 
   return (
     <div className={cn("relative mx-auto w-full max-w-[340px] sm:max-w-[360px] select-none", className)}>
@@ -53,7 +58,7 @@ export function WhatsAppPhoneMockup({
       {/* Main Outer Phone Chassis */}
       <div className="relative rounded-[48px] bg-slate-950 p-2.5 shadow-2xl ring-1 ring-slate-800/80 border-[3px] border-slate-700/60">
         {/* Subtle Metallic Bezel Inner Highlight */}
-        <div className="rounded-[40px] overflow-hidden bg-slate-900 border border-slate-800/90 flex flex-col h-[640px] sm:h-[670px] relative shadow-inner">
+        <div className="rounded-[40px] overflow-hidden bg-slate-900 border border-slate-800/90 flex flex-col h-[740px] sm:h-[780px] relative shadow-inner">
           
           {/* Top Notch / Dynamic Island */}
           <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 h-[22px] w-[100px] bg-black rounded-full flex items-center justify-between px-3 shadow-xs">
@@ -168,11 +173,19 @@ export function WhatsAppPhoneMockup({
                           </div>
                         </div>
                       ) : (
-                        <img 
-                          src={headerMediaUrl} 
-                          alt="Template Header Media" 
-                          className="w-full max-h-48 object-cover" 
-                        />
+                        !hasImgError ? (
+                          <img 
+                            src={headerMediaUrl} 
+                            alt="Template Header Media" 
+                            className="w-full max-h-56 object-cover" 
+                            onError={() => setHasImgError(true)}
+                          />
+                        ) : (
+                          <div className="p-6 flex flex-col items-center justify-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            <Camera className="h-6 w-6 text-slate-400" />
+                            <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Media Header Attached</span>
+                          </div>
+                        )
                       )}
                     </div>
                   )}

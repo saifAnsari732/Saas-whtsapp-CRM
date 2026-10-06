@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { Broadcast } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,18 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2, Send, Users, CheckCircle2, Clock, AlertCircle, X } from 'lucide-react';
+import { Plus, Loader2, Send, Users, CheckCircle2, Clock } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
 import { useTranslations } from 'next-intl';
 
-/**
- * Poll cadence while any broadcast is sending. Kept modest so we don't
- * beat on Supabase — the aggregate trigger in migration 003 keeps
- * counts consistent; we just need to surface the freshest snapshot.
- */
-const POLL_INTERVAL_MS = 5_000;
+const POLL_INTERVAL_MS = 3_000;
 
 function percent(numerator: number, denominator: number): number {
   if (!denominator) return 0;
@@ -38,7 +32,6 @@ function RateCell({
 }: {
   value: number;
   total: number;
-  /** Tailwind bg class for the fill, e.g. "bg-primary" */
   color: string;
 }) {
   const pct = percent(value, total);
@@ -62,49 +55,45 @@ export default function BroadcastsPage() {
   const t = useTranslations('Broadcasts.page');
   const tStatus = useTranslations('Broadcasts.status');
   const canCreate = useCan('send-messages');
-  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const [broadcasts, setBroadcasts] = useState<Broadcast[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem('cached_broadcasts');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState<boolean>(() => broadcasts.length === 0);
   const [error, setError] = useState<string | null>(null);
-  const [isNoticeDismissed, setIsNoticeDismissed] = useState(false);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const dismissed = localStorage.getItem('hide_meta_payment_notice');
-      if (dismissed === 'true') {
-        setIsNoticeDismissed(true);
-      }
-    }
-  }, []);
-
-  const handleDismissNotice = () => {
-    setIsNoticeDismissed(true);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('hide_meta_payment_notice', 'true');
-    }
-  };
-
-  // Used to kick off polling only while something is actively sending.
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  async function fetchBroadcasts() {
+  async function fetchBroadcasts(isSilent = false) {
+    if (!isSilent && broadcasts.length === 0) setLoading(true);
     try {
-      const supabase = createClient();
-      const { data, error: fetchError } = await supabase
-        .from('broadcasts')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (fetchError) throw fetchError;
-      setBroadcasts(data ?? []);
+      const res = await fetch('/api/whatsapp/broadcasts');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t('errorLoad'));
+      const list = data.broadcasts ?? [];
+      setBroadcasts(list);
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('cached_broadcasts', JSON.stringify(list));
+        } catch {}
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorLoad'));
+      if (broadcasts.length === 0) {
+        setError(err instanceof Error ? err.message : t('errorLoad'));
+      }
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    fetchBroadcasts();
+    fetchBroadcasts(broadcasts.length > 0);
   }, []);
 
   const anySending = useMemo(
@@ -115,7 +104,7 @@ export default function BroadcastsPage() {
   useEffect(() => {
     function startPolling() {
       if (pollTimer.current) return;
-      pollTimer.current = setInterval(fetchBroadcasts, POLL_INTERVAL_MS);
+      pollTimer.current = setInterval(() => fetchBroadcasts(true), POLL_INTERVAL_MS);
     }
     function stopPolling() {
       if (!pollTimer.current) return;
@@ -123,15 +112,12 @@ export default function BroadcastsPage() {
       pollTimer.current = null;
     }
 
-    // Pause polling while the tab is hidden — keeps Supabase cold when
-    // the user is away, and ensures a fresh fetch the moment they
-    // refocus so they don't see stale data on return.
     function handleVisibilityChange() {
       if (!anySending) return;
       if (document.visibilityState === 'hidden') {
         stopPolling();
       } else {
-        fetchBroadcasts();
+        fetchBroadcasts(true);
         startPolling();
       }
     }
@@ -148,19 +134,11 @@ export default function BroadcastsPage() {
     };
   }, [anySending]);
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (error) {
+  if (error && broadcasts.length === 0) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-2">
         <p className="text-sm text-red-400">{error}</p>
-        <Button variant="outline" onClick={() => window.location.reload()}>
+        <Button variant="outline" onClick={() => fetchBroadcasts()}>
           {t('retry')}
         </Button>
       </div>
@@ -169,8 +147,7 @@ export default function BroadcastsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top indeterminate progress bar: only visible while a broadcast
-          is mid-send. Pure CSS animation so no extra deps. */}
+      {/* Indeterminate top progress bar while sending */}
       {anySending && (
         <div
           role="progressbar"
@@ -182,16 +159,11 @@ export default function BroadcastsPage() {
             .broadcast-indeterminate-bar {
               width: 33%;
               transform: translateX(-100%);
-              animation: broadcast-slide 1.6s cubic-bezier(0.4, 0, 0.2, 1)
-                infinite;
+              animation: broadcast-slide 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
             }
             @keyframes broadcast-slide {
-              0% {
-                transform: translateX(-100%);
-              }
-              100% {
-                transform: translateX(400%);
-              }
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(400%); }
             }
           `}</style>
         </div>
@@ -254,50 +226,17 @@ export default function BroadcastsPage() {
         </div>
       </div>
 
-      {/* Meta Delivery & Payment Troubleshooting Guide */}
-      {!isNoticeDismissed && (
-        <div className="flex items-start justify-between gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 shadow-xs relative animate-in fade-in-50 duration-200">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="text-xs space-y-1">
-              <p className="font-bold text-amber-950 dark:text-amber-100 flex items-center gap-2">
-                <span>Message Status &quot;Sent&quot; but not received on device? Check Meta Payment Setup</span>
-              </p>
-              <p className="text-[11px] leading-relaxed text-amber-900/80 dark:text-amber-200/80">
-                For <strong>Marketing Templates</strong> (e.g. <code>kisan_choice</code>), Meta WhatsApp Cloud API requires a valid <strong>Payment Method (Credit/Debit Card)</strong> and Business Tax info (GSTIN/PAN) attached to your WhatsApp Business Account. Without a payment method, Meta accepts the message request with a message ID, but pauses/withholds delivery to destination devices (Meta error 131042: <em>&quot;Business eligibility payment issue&quot;</em>).
-              </p>
-              <div className="flex items-center gap-3 pt-1 text-[11px] flex-wrap">
-                <a 
-                  href="https://business.facebook.com/wa/manage/home/" 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="font-bold underline text-amber-800 dark:text-amber-300 hover:text-amber-950 inline-flex items-center gap-1"
-                >
-                  Open Meta WhatsApp Manager &rarr;
-                </a>
-                <span className="text-amber-600/60 dark:text-amber-400/60">&bull;</span>
-                <span className="text-muted-foreground">Ensure phone numbers include the <strong>91</strong> country code prefix (e.g. 919511450914).</span>
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleDismissNotice}
-            title="Dismiss notice"
-            className="p-1 rounded-lg text-amber-700/70 hover:text-amber-950 dark:text-amber-300/70 dark:hover:text-amber-100 hover:bg-amber-500/20 transition-colors shrink-0 cursor-pointer"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
       {/* Summary Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-muted-foreground text-xs font-semibold block">Total Recipients</span>
             <span className="text-2xl font-extrabold text-foreground mt-1 block">
-              {broadcasts.reduce((acc, b) => acc + (b.total_recipients || 0), 0)}
+              {loading ? (
+                <div className="h-7 w-12 bg-muted animate-pulse rounded" />
+              ) : (
+                broadcasts.reduce((acc, b) => acc + (b.total_recipients || 0), 0)
+              )}
             </span>
           </div>
           <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
@@ -309,7 +248,11 @@ export default function BroadcastsPage() {
           <div>
             <span className="text-muted-foreground text-xs font-semibold block">Messages Sent</span>
             <span className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 block">
-              {broadcasts.reduce((acc, b) => acc + (b.sent_count || 0), 0)}
+              {loading ? (
+                <div className="h-7 w-12 bg-muted animate-pulse rounded" />
+              ) : (
+                broadcasts.reduce((acc, b) => acc + (b.sent_count || 0), 0)
+              )}
             </span>
           </div>
           <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
@@ -321,10 +264,14 @@ export default function BroadcastsPage() {
           <div>
             <span className="text-muted-foreground text-xs font-semibold block">Delivered Rate</span>
             <span className="text-2xl font-extrabold text-teal-600 dark:text-teal-400 mt-1 block">
-              {percent(
-                broadcasts.reduce((acc, b) => acc + (b.delivered_count || 0), 0),
-                broadcasts.reduce((acc, b) => acc + (b.total_recipients || 0), 0)
-              )}%
+              {loading ? (
+                <div className="h-7 w-12 bg-muted animate-pulse rounded" />
+              ) : (
+                `${percent(
+                  broadcasts.reduce((acc, b) => acc + (b.delivered_count || 0), 0),
+                  broadcasts.reduce((acc, b) => acc + (b.total_recipients || 0), 0)
+                )}%`
+              )}
             </span>
           </div>
           <div className="h-10 w-10 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center">
@@ -336,7 +283,11 @@ export default function BroadcastsPage() {
           <div>
             <span className="text-muted-foreground text-xs font-semibold block">Scheduled / Queued</span>
             <span className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1 block">
-              {broadcasts.filter((b) => b.status === 'scheduled' || b.status === 'draft').length}
+              {loading ? (
+                <div className="h-7 w-12 bg-muted animate-pulse rounded" />
+              ) : (
+                broadcasts.filter((b) => b.status === 'scheduled' || b.status === 'draft').length
+              )}
             </span>
           </div>
           <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
@@ -345,7 +296,13 @@ export default function BroadcastsPage() {
         </div>
       </div>
 
-      {broadcasts.length === 0 ? (
+      {loading && broadcasts.length === 0 ? (
+        <div className="overflow-x-auto rounded-xl border border-border bg-card p-4 space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-12 w-full bg-muted/60 animate-pulse rounded-lg" />
+          ))}
+        </div>
+      ) : broadcasts.length === 0 ? (
         <div className="flex h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-6 text-center">
           <div className="h-14 w-14 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-4">
             <Send className="h-7 w-7" />

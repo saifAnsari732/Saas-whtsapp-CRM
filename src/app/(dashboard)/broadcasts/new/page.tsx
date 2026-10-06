@@ -31,10 +31,12 @@ import {
   UploadCloud, 
   Smartphone,
   Phone,
-  Rocket,
-  Sparkles,
+  Send,
+  SlidersHorizontal,
+  Layers,
   ShieldCheck,
   CheckCircle2,
+  AlertCircle,
   AlertTriangle,
   ArrowLeft,
   Calendar,
@@ -100,7 +102,7 @@ export default function NewBroadcastPage() {
   // Scheduling & Delay
   const [sendWhen, setSendWhen] = useState<'immediately' | 'later'>('immediately');
   const [scheduleDate, setScheduleDate] = useState('');
-  const [sendDelaySeconds, setSendDelaySeconds] = useState<number>(3);
+  const [sendDelaySeconds, setSendDelaySeconds] = useState<number>(10);
 
   // Templates
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -153,26 +155,30 @@ export default function NewBroadcastPage() {
   useEffect(() => {
     async function fetchTemplates() {
       setIsLoadingTemplates(true);
-      const [tplRes, tagsRes] = await Promise.all([
-        supabase.from('message_templates').select('*').eq('status', 'APPROVED'),
-        supabase.from('tags').select('*').order('name')
-      ]);
-      
-      if (!tagsRes.error && tagsRes.data) {
-        setContactGroups(tagsRes.data);
-      }
-      
-      const { data, error } = tplRes;
-      if (!error && data) {
-        setTemplates(data as MessageTemplate[]);
+      try {
+        const [tplRes, tagsRes] = await Promise.all([
+          fetch('/api/whatsapp/templates').then((r) => r.json()).catch(() => ({ templates: [] })),
+          supabase.from('tags').select('*').order('name')
+        ]);
+        
+        if (!tagsRes.error && tagsRes.data) {
+          setContactGroups(tagsRes.data);
+        }
+        
+        const loadedTemplates: MessageTemplate[] = Array.isArray(tplRes.templates) ? tplRes.templates : [];
+        const approvedTemplates = loadedTemplates.filter(
+          (t) => !t.status || (t.status || '').toUpperCase() === 'APPROVED' || (t.status || '').toLowerCase() === 'approved'
+        );
+        const data = approvedTemplates.length > 0 ? approvedTemplates : loadedTemplates;
+        setTemplates(data);
         
         const resendId = searchParams.get('resend_id');
         const resendName = searchParams.get('resend_name');
         const resendTemplateName = searchParams.get('resend_template');
         if (resendName) setName(resendName + ' (Copy)');
         if (resendTemplateName) {
-           const found = (data as MessageTemplate[]).find(t => t.name === resendTemplateName);
-           if (found) setSelectedTemplateId(found.id);
+          const found = data.find((t) => t.name === resendTemplateName);
+          if (found) setSelectedTemplateId(found.id);
         }
 
         if (resendId) {
@@ -180,16 +186,20 @@ export default function NewBroadcastPage() {
             .from('broadcast_recipients')
             .select('contact:contacts(phone)')
             .eq('broadcast_id', resendId);
-            
+
           if (oldRecipients && oldRecipients.length > 0) {
             setRecipientMode('numbers');
             const phones = oldRecipients.map((r: any) => r.contact?.phone).filter(Boolean);
             setPastedNumbers(phones.join('\n'));
           }
         }
+      } catch (err) {
+        console.error('Failed to load templates for broadcast:', err);
+      } finally {
+        setIsLoadingTemplates(false);
       }
-      setIsLoadingTemplates(false);
     }
+
     fetchTemplates();
   }, [supabase, searchParams]);
 
@@ -204,32 +214,24 @@ export default function NewBroadcastPage() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedTemplateId) return;
+    if (!file) return;
 
     try {
       setIsUploading(true);
       toast.info('Uploading media attachment...');
       
-      const { publicUrl } = await uploadAccountMedia('chat-media', file);
+      const { publicUrl } = await uploadAccountMedia('chat-media', file, selectedTemplateId);
       setHeaderMediaUrl(publicUrl);
 
-      const { error } = await supabase
-        .from('message_templates')
-        .update({ header_media_url: publicUrl })
-        .eq('id', selectedTemplateId);
-
-      if (error) {
-        console.error("Failed to update template permanent URL:", error);
-      } else {
+      if (selectedTemplateId) {
         setTemplates(prev => prev.map(t => 
           t.id === selectedTemplateId ? { ...t, header_media_url: publicUrl } : t
         ));
-        toast.success('Media uploaded and saved to template permanently!');
       }
-
+      toast.success('Media uploaded successfully!');
     } catch (err) {
       console.error(err);
-      toast.error('Failed to upload file');
+      toast.error(err instanceof Error ? err.message : 'Failed to upload file');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -527,11 +529,11 @@ export default function NewBroadcastPage() {
               disabled={isProcessing} 
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-5 h-9 rounded-xl shadow-sm transition-all gap-1.5 active:scale-[0.98]"
             >
-              {isProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
+              {isProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
               <span>
                 {isProcessing 
                   ? (sendWhen === 'later' ? 'Scheduling...' : 'Dispatching...') 
-                  : (sendWhen === 'later' ? 'Schedule Broadcast' : 'Launch Campaign Now')}
+                  : (sendWhen === 'later' ? 'Schedule Broadcast' : 'Launch Campaign')}
               </span>
             </Button>
           </div>
@@ -731,7 +733,8 @@ export default function NewBroadcastPage() {
 
                   <Textarea 
                     placeholder="Paste numbers (one per line, with or without 91):&#10;9511450924&#10;9876543210&#10;+91 91234 56789" 
-                    className="min-h-[130px] bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 font-mono text-xs rounded-xl p-3 leading-relaxed focus-visible:ring-emerald-500"
+                    className="h-36 max-h-36 min-h-[144px] [field-sizing:fixed] overflow-y-auto resize-none bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 font-mono text-xs rounded-xl p-3 leading-relaxed focus-visible:ring-emerald-500"
+                    style={{ fieldSizing: 'fixed' as any, height: '144px', maxHeight: '144px', overflowY: 'auto' }}
                     value={pastedNumbers}
                     onChange={(e) => setPastedNumbers(e.target.value)}
                   />
@@ -898,11 +901,11 @@ export default function NewBroadcastPage() {
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
                       <SelectItem value="1" className="text-xs">1 Second (High Speed)</SelectItem>
-                      <SelectItem value="2" className="text-xs">2 Seconds (Normal)</SelectItem>
-                      <SelectItem value="3" className="text-xs font-bold text-emerald-600">3 Seconds (Recommended)</SelectItem>
-                      <SelectItem value="5" className="text-xs">5 Seconds (Very Safe)</SelectItem>
-                      <SelectItem value="10" className="text-xs">10 Seconds (Ultra Protection)</SelectItem>
+                      <SelectItem value="3" className="text-xs">3 Seconds (Fast)</SelectItem>
+                      <SelectItem value="5" className="text-xs">5 Seconds (Balanced)</SelectItem>
+                      <SelectItem value="10" className="text-xs font-bold text-emerald-600">10 Seconds (Recommended - Safe Anti-Ban)</SelectItem>
                       <SelectItem value="15" className="text-xs">15 Seconds (Extra Safe)</SelectItem>
+                      <SelectItem value="30" className="text-xs">30 Seconds (Max Protection)</SelectItem>
                     </SelectContent>
                   </Select>
                   <span className="text-[11px] text-muted-foreground font-medium">
@@ -933,7 +936,9 @@ export default function NewBroadcastPage() {
                 </Label>
                 <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v || '')} disabled={isLoadingTemplates}>
                   <SelectTrigger className="bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 font-medium rounded-xl h-11 text-xs">
-                    <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Choose an approved template..."} />
+                    <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Choose an approved template..."}>
+                      {selectedTemplate ? `${selectedTemplate.name} (${selectedTemplate.category || 'Utility'}) — ${selectedTemplate.language || 'en'}` : undefined}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
                     {templates.length === 0 && !isLoadingTemplates && (
@@ -947,90 +952,82 @@ export default function NewBroadcastPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Meta Marketing Notice */}
-                {selectedTemplate?.category?.toUpperCase() === 'MARKETING' && (
-                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs">
-                    <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
-                    <div className="space-y-1">
-                      <p className="font-bold">Meta Cloud API: Marketing Template Notice</p>
-                      <p className="text-[11px] leading-relaxed text-amber-900/80 dark:text-amber-200/80">
-                        This is a <strong>Marketing</strong> template. Ensure your WhatsApp Business Account has a valid <strong>Payment Method (Card)</strong> added in Meta WhatsApp Manager (Business Settings &gt; WhatsApp Accounts &gt; Billing). Without a linked card, Meta may accept the API call but pause delivery with <em>&quot;Business eligibility payment issue&quot;</em>.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                {/* Removed Meta Marketing Notice as requested */}
               </div>
 
               {/* Dynamic Variables Mapper */}
               {selectedTemplate && placeholders.length > 0 && (
                 <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80">
-                  <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-bold text-xs">
-                    <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>Personalize Dynamic Variables</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-semibold text-xs">
+                      <SlidersHorizontal className="h-4 w-4 text-emerald-600" />
+                      <span>Template Personalization ({placeholders.join(', ')})</span>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground font-normal">
+                      Auto-replaces variables per contact
+                    </span>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+
+                  <div className="grid gap-3">
                     {placeholders.map((ph) => {
                       const key = ph.replace(/[\{\}]/g, '');
                       const current = variables[key] || { type: 'field', value: 'name' };
+                      const combinedValue = current.type === 'static' ? 'static' : (current.value || 'name');
+
                       return (
-                        <div key={ph} className="p-3 border border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50/50 dark:bg-zinc-950 space-y-2">
-                          <div className="flex items-center justify-between font-bold text-xs">
-                            <span className="text-slate-900 dark:text-white font-mono">{ph}</span>
-                            <span className="text-[10px] bg-slate-200/70 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-semibold">
-                              {current.type === 'field' ? 'Contact Field' : current.type === 'custom_field' ? 'Custom Field' : 'Static Text'}
+                        <div key={ph} className="p-3.5 border border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50/60 dark:bg-zinc-950 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-mono text-xs font-bold border border-emerald-200/60 dark:border-emerald-800/50">
+                                {ph}
+                              </span>
+                              <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                                Maps to recipient data:
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground">
+                              {current.type === 'static' ? 'Fixed text for all' : 'Dynamic per contact'}
                             </span>
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
+
+                          <div className="grid gap-2 sm:grid-cols-2">
                             <Select
-                              value={current.type}
-                              onValueChange={(val: any) => {
-                                setVariables(prev => ({
-                                  ...prev,
-                                  [key]: { type: val, value: val === 'field' ? 'name' : '' }
-                                }));
+                              value={combinedValue}
+                              onValueChange={(val) => {
+                                if (val === 'static') {
+                                  setVariables(prev => ({
+                                    ...prev,
+                                    [key]: { type: 'static', value: prev[key]?.type === 'static' ? prev[key].value : '' }
+                                  }));
+                                } else {
+                                  setVariables(prev => ({
+                                    ...prev,
+                                    [key]: { type: 'field', value: val || '' }
+                                  }));
+                                }
                               }}
                             >
                               <SelectTrigger className="text-xs h-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 rounded-lg">
-                                <SelectValue placeholder="Type" />
+                                <SelectValue placeholder="Choose Value" />
                               </SelectTrigger>
                               <SelectContent className="rounded-xl">
-                                <SelectItem value="field" className="text-xs">Contact Field</SelectItem>
-                                <SelectItem value="static" className="text-xs">Static Text</SelectItem>
-                                <SelectItem value="custom_field" className="text-xs">Custom Field</SelectItem>
+                                <SelectItem value="name" className="text-xs">Contact Name (Recommended)</SelectItem>
+                                <SelectItem value="phone" className="text-xs">Phone Number</SelectItem>
+                                <SelectItem value="email" className="text-xs">Email Address</SelectItem>
+                                <SelectItem value="company" className="text-xs">Company Name</SelectItem>
+                                <SelectItem value="static" className="text-xs">Custom Fixed Text...</SelectItem>
                               </SelectContent>
                             </Select>
 
-                            {current.type === 'field' ? (
-                              <Select
-                                value={current.value || 'name'}
-                                onValueChange={(val) => {
-                                  if (val) {
-                                    setVariables(prev => ({
-                                      ...prev,
-                                      [key]: { type: 'field', value: val }
-                                    }));
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="text-xs h-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 rounded-lg">
-                                  <SelectValue placeholder="Field" />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-xl">
-                                  <SelectItem value="name" className="text-xs">Name</SelectItem>
-                                  <SelectItem value="phone" className="text-xs">Phone Number</SelectItem>
-                                  <SelectItem value="email" className="text-xs">Email</SelectItem>
-                                  <SelectItem value="company" className="text-xs">Company</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            ) : (
+                            {current.type === 'static' && (
                               <Input
-                                placeholder={current.type === 'static' ? "Static text..." : "Field ID..."}
+                                placeholder="Enter custom text for this variable..."
                                 value={current.value || ''}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   setVariables(prev => ({
                                     ...prev,
-                                    [key]: { type: current.type, value: val }
+                                    [key]: { type: 'static', value: val }
                                   }));
                                 }}
                                 className="text-xs h-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 rounded-lg"
@@ -1040,6 +1037,13 @@ export default function NewBroadcastPage() {
                         </div>
                       );
                     })}
+                  </div>
+
+                  <div className="flex items-start gap-2 text-[11px] text-muted-foreground bg-emerald-50/50 dark:bg-emerald-950/20 p-2.5 rounded-xl border border-emerald-200/50 dark:border-emerald-900/30">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Safe Fallback:</strong> If a contact has no name saved, our system automatically supplies <em>&quot;Customer&quot;</em> so WhatsApp Meta API never rejects delivery due to missing parameters.
+                    </span>
                   </div>
                 </div>
               )}
@@ -1061,6 +1065,19 @@ export default function NewBroadcastPage() {
                         className="bg-slate-50/50 dark:bg-zinc-950 flex-1 text-xs rounded-xl h-10 border-slate-200 dark:border-zinc-800"
                       />
                       
+                      {headerMediaUrl && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setHeaderMediaUrl('')}
+                          title="Remove media attachment"
+                          className="h-10 w-10 border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl shrink-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+
                       <input
                         type="file"
                         ref={fileInputRef}
@@ -1105,11 +1122,11 @@ export default function NewBroadcastPage() {
                 disabled={isProcessing} 
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-6 h-10 rounded-xl shadow-sm transition-all gap-2 active:scale-[0.98]"
               >
-                {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 <span>
                   {isProcessing 
                     ? (sendWhen === 'later' ? 'Scheduling...' : 'Dispatching...') 
-                    : (sendWhen === 'later' ? 'Schedule Broadcast' : '🚀 Launch Campaign Now')}
+                    : (sendWhen === 'later' ? 'Schedule Broadcast' : 'Launch Campaign Now')}
                 </span>
               </Button>
             </div>
@@ -1153,11 +1170,11 @@ export default function NewBroadcastPage() {
                   disabled={isProcessing} 
                   className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-11 text-xs shadow-sm rounded-xl transition-all gap-2 active:scale-[0.98]"
                 >
-                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   <span>
                     {isProcessing 
                       ? (sendWhen === 'later' ? 'Scheduling...' : 'Dispatching...') 
-                      : (sendWhen === 'later' ? 'Schedule Broadcast' : '🚀 Launch Campaign Now')}
+                      : (sendWhen === 'later' ? 'Schedule Broadcast' : 'Launch Campaign Now')}
                   </span>
                 </Button>
               </div>

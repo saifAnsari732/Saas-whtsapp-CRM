@@ -25,8 +25,10 @@ import {
   RefreshCw,
   Eye,
   Check,
-  Power
+  Power,
+  Cloud
 } from 'lucide-react';
+import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -335,16 +337,19 @@ export function ChatbotStudio() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-2xl font-black text-foreground">AI Auto-Reply Chatbot & Follow-ups</h2>
+                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 font-bold text-[10px] uppercase tracking-wider">
+                    WhatsApp Coexistence Engine
+                  </Badge>
                   <Badge variant="outline" className={cn(
                     "font-bold text-xs px-2.5 py-0.5 rounded-full flex items-center gap-1.5",
                     isActive ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-muted text-muted-foreground"
                   )}>
                     <span className={cn("h-2 w-2 rounded-full", isActive ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground")} />
-                    {isActive ? "ENGINE LIVE" : "ENGINE PAUSED"}
+                    {isActive ? "LIVE ON LINKED PHONE" : "ENGINE PAUSED"}
                   </Badge>
                 </div>
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                  Intelligent auto-responder with custom system prompts, persona presets, keyword rules, and multi-step lead follow-up sequences for WhatsApp.
+                  Dedicated auto-responder for your paired WhatsApp phone. Handles 24/7 AI chat replies, keyword matching, welcome greetings, and automated lead follow-up sequences with <strong className="text-foreground font-semibold">zero Meta per-conversation charges</strong>. Operates independently from the Meta Cloud API bot.
                 </p>
               </div>
             </div>

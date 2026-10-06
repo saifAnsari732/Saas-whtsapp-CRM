@@ -286,12 +286,20 @@ export async function POST(request: Request) {
         headerType = headerFormat.toLowerCase()
       }
 
+function toValidUUID(str: string): string {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (uuidRegex.test(str)) return str
+  const hex = Array.from(new TextEncoder().encode(str))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .padEnd(32, '0')
+    .slice(0, 32)
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`
+}
+
       const row = {
-        // Account tenancy + user audit, same split as the submit
-        // route. account_id is NOT NULL on message_templates
-        // post-017, so an INSERT without it errors.
         account_id: accountId,
-        user_id: user.uid,
+        user_id: toValidUUID(user.uid),
         name: t.name,
         category: normalizeCategory(t.category),
         language: t.language,

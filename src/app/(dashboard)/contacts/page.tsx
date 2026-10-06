@@ -72,9 +72,19 @@ export default function ContactsPage() {
 
   const [contacts, setContacts] = useState<ContactWithTags[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchInput);
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchInput]);
+
   // Tag filter — contacts shown must have ANY of these tags (OR).
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
@@ -158,7 +168,7 @@ export default function ContactsPage() {
         updated_at: d.data().updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       })) as ContactWithTags[];
 
-      const term = search.trim().toLowerCase();
+      const term = debouncedSearch.trim().toLowerCase();
       if (term) {
         allContacts = allContacts.filter(
           (c) =>
@@ -187,7 +197,7 @@ export default function ContactsPage() {
         setLoading(false);
       }
     }
-  }, [page, search, selectedTagIds, t]);
+  }, [page, debouncedSearch, selectedTagIds, t]);
 
   useEffect(() => {
     fetchTags();
@@ -316,7 +326,7 @@ export default function ContactsPage() {
   const allTags = Object.values(tagsMap).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
-  const hasActiveFilters = search.trim().length > 0 || selectedTagIds.length > 0;
+  const hasActiveFilters = searchInput.trim().length > 0 || selectedTagIds.length > 0;
 
   function toggleTagFilter(tagId: string) {
     setSelectedTagIds((prev) =>
@@ -381,12 +391,9 @@ export default function ContactsPage() {
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
-              value={search}
+              value={searchInput}
               onChange={(e) => {
-                setSearch(e.target.value);
-                // Reset pagination when the query changes — the result
-                // set shrinks/grows, page N may no longer be valid.
-                setPage(0);
+                setSearchInput(e.target.value);
               }}
               placeholder={t('searchPlaceholder')}
               className="pl-8 bg-card border-border text-foreground placeholder:text-muted-foreground"

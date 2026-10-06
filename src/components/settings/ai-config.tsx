@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Sparkles, CheckCircle2, Trash2, Eye, EyeOff, FileText, X } from 'lucide-react';
+import { Loader2, Sparkles, CheckCircle2, Trash2, Eye, EyeOff, FileText, X, Cloud, Smartphone } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { createClient } from '@/lib/supabase/client';
 import { canEditSettings } from '@/lib/auth/roles';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -443,6 +444,26 @@ export function AiConfig() {
                 onCheckedChange={setIsActive}
                 disabled={disabled}
               />
+            </div>
+
+            {/* Channel Identity Banner: Meta Official Cloud API */}
+            <div className="rounded-xl border border-blue-500/20 bg-gradient-to-r from-blue-500/10 via-indigo-500/5 to-transparent p-4 flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+                <Cloud className="h-5 w-5" />
+              </div>
+              <div className="space-y-0.5 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                    Channel: Meta Official Cloud API (WABA)
+                  </span>
+                  <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30 font-semibold py-0">
+                    Webhook Powered
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Automated AI responses sent to customers messaging your Official WhatsApp Business Account (WABA). Follows Meta 24-hour window compliance and operates independently from your Coexistence Phone QR Bot.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">

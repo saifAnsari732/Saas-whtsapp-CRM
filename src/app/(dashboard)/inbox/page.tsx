@@ -48,6 +48,8 @@ function InboxPageInner() {
     useState<Conversation | null>(null);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  // In-memory message cache for instantaneous conversation switching (0ms latency)
+  const messageCacheRef = useRef<Map<string, Message[]>>(new Map());
   const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(
     null
   );
@@ -132,33 +134,15 @@ function InboxPageInner() {
     if (hydratingConvIdsRef.current.has(convId)) return;
     hydratingConvIdsRef.current.add(convId);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("conversations")
-        .select(CONVERSATION_SELECT)
-        .eq("id", convId)
-        .maybeSingle();
-      if (error) {
-        // Supabase errors have non-enumerable properties — log fields
-        // explicitly so the console message isn't just `{}`.
-        console.error("Failed to hydrate conversation:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        });
-        return;
-      }
-      if (!data) return;
-      const fetched = normalizeConversation(data);
+      const res = await fetch(`/api/inbox/conversations/${convId}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const fetched = json.conversation;
+      if (!fetched) return;
+
       setConversations((prev) => {
         const existing = prev.find((c) => c.id === fetched.id);
         if (existing) {
-          // Already in state — keep its fields (a realtime UPDATE may
-          // have landed while the fetch was in flight and patched
-          // last_message_text / unread_count to fresher values than
-          // the row we just read). Only backfill `contact`, which the
-          // realtime payloads never carry.
           return prev.map((c) =>
             c.id === fetched.id
               ? { ...c, contact: c.contact ?? fetched.contact }
@@ -167,6 +151,8 @@ function InboxPageInner() {
         }
         return [fetched, ...prev];
       });
+    } catch (err) {
+      console.error("Failed to hydrate conversation:", err);
     } finally {
       hydratingConvIdsRef.current.delete(convId);
     }
@@ -174,42 +160,33 @@ function InboxPageInner() {
 
   // Check WhatsApp connection status on mount
   useEffect(() => {
+    let cancelled = false;
     const checkConnection = async () => {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
-
-      if (!user) return;
-
-      // whatsapp_config is one-row-per-account post-multi-user, so
-      // the previous `.eq('user_id', user.id)` would miss the row
-      // for any teammate who didn't personally save the config —
-      // the "WhatsApp not connected" banner would show in the
-      // shared inbox even though the admin had it configured.
-      // Resolve account_id via the profile and query by that.
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("account_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      const accountId = profile?.account_id as string | undefined;
-      if (!accountId) {
-        setWhatsappConnected(false);
-        return;
+      try {
+        const res = await fetch("/api/whatsapp/config");
+        if (!res.ok) {
+          if (!cancelled) setWhatsappConnected(false);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) {
+          const isConnected =
+            data.connected === true ||
+            data.config?.status === "connected" ||
+            data.status === "connected" ||
+            Boolean(data.config?.phone_number_id) ||
+            Boolean(data.phone_number_id);
+          setWhatsappConnected(isConnected);
+        }
+      } catch {
+        if (!cancelled) setWhatsappConnected(false);
       }
-
-      const { data } = await supabase
-        .from("whatsapp_config")
-        .select("status")
-        .eq("account_id", accountId)
-        .maybeSingle();
-
-      setWhatsappConnected(data?.status === "connected");
     };
 
     checkConnection();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Handle realtime message events
@@ -230,8 +207,17 @@ function InboxPageInner() {
             const withoutOptimistic = prev.filter(
               (m) => !m.id.startsWith("temp-")
             );
-            return [...withoutOptimistic, newMsg];
+            const next = [...withoutOptimistic, newMsg];
+            messageCacheRef.current.set(newMsg.conversation_id, next);
+            return next;
           });
+        } else {
+          // If not active, but present in cache, update cache
+          const cached = messageCacheRef.current.get(newMsg.conversation_id);
+          if (cached && !cached.some((m) => m.id === newMsg.id)) {
+            const withoutOptimistic = cached.filter((m) => !m.id.startsWith("temp-"));
+            messageCacheRef.current.set(newMsg.conversation_id, [...withoutOptimistic, newMsg]);
+          }
         }
 
         // Update conversation list preview. We need to know *synchronously*
@@ -455,7 +441,14 @@ function InboxPageInner() {
       if (activeConversation?.id === conv.id) return;
       setActiveConversation(conv);
       setActiveContact(conv.contact ?? null);
-      setMessages([]);
+      
+      // Instant switch: load from in-memory cache if available (0ms latency, zero flicker)
+      const cached = messageCacheRef.current.get(conv.id);
+      if (cached && cached.length > 0) {
+        setMessages(cached);
+      } else {
+        setMessages([]);
+      }
       // Optimistically clear the unread badge for this conv. The
       // server-side reset is fired by the unread-reset effect inside
       // MessageThread (which reads activeConversation.unread_count, not
@@ -504,22 +497,33 @@ function InboxPageInner() {
 
   const handleMessagesLoaded = useCallback((loaded: Message[]) => {
     setMessages(loaded);
-  }, []);
+    if (activeConversation?.id) {
+      messageCacheRef.current.set(activeConversation.id, loaded);
+    }
+  }, [activeConversation?.id]);
 
   const handleNewMessage = useCallback((msg: Message) => {
     setMessages((prev) => {
       if (prev.some((m) => m.id === msg.id)) return prev;
-      return [...prev, msg];
+      const next = [...prev, msg];
+      if (msg.conversation_id) {
+        messageCacheRef.current.set(msg.conversation_id, next);
+      }
+      return next;
     });
   }, []);
 
   const handleUpdateMessage = useCallback(
     (id: string, updates: Partial<Message>) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
-      );
+      setMessages((prev) => {
+        const next = prev.map((m) => (m.id === id ? { ...m, ...updates } : m));
+        if (activeConversation?.id) {
+          messageCacheRef.current.set(activeConversation.id, next);
+        }
+        return next;
+      });
     },
-    []
+    [activeConversation?.id]
   );
 
   const handleStatusChange = useCallback(

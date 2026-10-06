@@ -77,42 +77,32 @@ export default function DashboardPage() {
   const { user, profile, defaultCurrency } = useAuth()
   const userId = user?.id
 
-  // 1. Instant Cache Hydration: Read previous metrics instantly (0ms latency)
-  const [metrics, setMetrics] = useState<MetricsBundle | null>(null)
-  const [metricsLoading, setMetricsLoading] = useState(true)
+  // 1. Instant Cache Hydration: Read previous metrics instantly (0ms latency, zero skeleton flash)
+  const [metrics, setMetrics] = useState<MetricsBundle | null>(() => getCached<MetricsBundle>('wacrm_dash_metrics', userId))
+  const [metricsLoading, setMetricsLoading] = useState(() => !getCached<MetricsBundle>('wacrm_dash_metrics', userId))
 
   const [range, setRange] = useState<RangeDays>(30)
-  const [series, setSeries] = useState<Record<RangeDays, ConversationsSeriesPoint[] | null>>({
-    7: null,
-    30: null,
-    90: null,
+  const [series, setSeries] = useState<Record<RangeDays, ConversationsSeriesPoint[] | null>>(() => {
+    const cached30 = getCached<ConversationsSeriesPoint[]>('wacrm_dash_series_30', userId)
+    return { 7: null, 30: cached30, 90: null }
   })
-  const [seriesLoading, setSeriesLoading] = useState(true)
+  const [seriesLoading, setSeriesLoading] = useState(() => !getCached<ConversationsSeriesPoint[]>('wacrm_dash_series_30', userId))
 
-  const [pipeline, setPipeline] = useState<PipelineDonutData | null>(null)
-  const [pipelineLoading, setPipelineLoading] = useState(true)
+  const [pipeline, setPipeline] = useState<PipelineDonutData | null>(() => getCached<PipelineDonutData>('wacrm_dash_pipeline', userId))
+  const [pipelineLoading, setPipelineLoading] = useState(() => !getCached<PipelineDonutData>('wacrm_dash_pipeline', userId))
 
-  const [responseTime, setResponseTime] = useState<ResponseTimeSummary | null>(null)
-  const [responseTimeLoading, setResponseTimeLoading] = useState(true)
+  const [responseTime, setResponseTime] = useState<ResponseTimeSummary | null>(() => getCached<ResponseTimeSummary>('wacrm_dash_resptime', userId))
+  const [responseTimeLoading, setResponseTimeLoading] = useState(() => !getCached<ResponseTimeSummary>('wacrm_dash_resptime', userId))
 
-  const [activity, setActivity] = useState<ActivityItem[] | null>(null)
-  const [activityLoading, setActivityLoading] = useState(true)
+  const [activity, setActivity] = useState<ActivityItem[] | null>(() => getCached<ActivityItem[]>('wacrm_dash_activity', userId))
+  const [activityLoading, setActivityLoading] = useState(() => !getCached<ActivityItem[]>('wacrm_dash_activity', userId))
 
-  const [waConfig, setWaConfig] = useState<{ 
-    connected?: boolean; 
-    reason?: string;
-    phone_info?: {
-      id?: string;
-      display_phone_number?: string;
-      verified_name?: string;
-      quality_rating?: string;
-    }
-  } | null>(null)
-  const [coexStatus, setCoexStatus] = useState<{ connected?: boolean; state?: string; status?: string } | null>(null)
-  const [msgAnalytics, setMsgAnalytics] = useState<{ delivered: number, seen: number, failed: number, pending: number } | null>(null)
+  const [waConfig, setWaConfig] = useState<any>(() => getCached('wacrm_dash_waconfig', userId))
+  const [coexStatus, setCoexStatus] = useState<any>(() => getCached('wacrm_dash_coexstatus', userId))
+  const [msgAnalytics, setMsgAnalytics] = useState<any>(() => getCached('wacrm_dash_msganalytics', userId))
 
-  const [templatePerf, setTemplatePerf] = useState<TemplatePerformanceData | null>(null)
-  const [broadcastPerf, setBroadcastPerf] = useState<BroadcastAnalyticsData | null>(null)
+  const [templatePerf, setTemplatePerf] = useState<TemplatePerformanceData | null>(() => getCached('wacrm_dash_templateperf', userId))
+  const [broadcastPerf, setBroadcastPerf] = useState<BroadcastAnalyticsData | null>(() => getCached('wacrm_dash_broadcastperf', userId))
 
   // Hydrate user-scoped cache when user ID changes
   useEffect(() => {
@@ -211,17 +201,46 @@ export default function DashboardPage() {
       })
       .catch(() => {})
 
-    // Concurrently fetch all metrics
+    fetch('/api/dashboard/stats')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.metrics) {
+          setMetrics((prev) => ({ ...prev, ...data.metrics }));
+          setCache('wacrm_dash_metrics', data.metrics, userId);
+          setMetricsLoading(false);
+        }
+        if (data.msgAnalytics) {
+          setMsgAnalytics(data.msgAnalytics);
+          setCache('wacrm_dash_msganalytics', data.msgAnalytics, userId);
+        }
+        if (data.broadcastAnalytics) {
+          setBroadcastPerf(data.broadcastAnalytics);
+          setCache('wacrm_dash_broadcastperf', data.broadcastAnalytics, userId);
+        }
+        if (data.templatePerformance) {
+          setTemplatePerf(data.templatePerformance);
+          setCache('wacrm_dash_templateperf', data.templatePerformance, userId);
+        }
+      })
+      .catch(() => {
+        // Fallback to client queries only if stats endpoint fails
+        loadMetrics(db).then((m) => {
+          setMetrics(m);
+          setCache('wacrm_dash_metrics', m, userId);
+          setMetricsLoading(false);
+        }).catch(() => {});
+        loadMessageAnalytics(db).then((m) => {
+          setMsgAnalytics(m);
+          setCache('wacrm_dash_msganalytics', m, userId);
+        }).catch(() => {});
+        loadTemplatePerformance(db).then((tData) => {
+          setTemplatePerf(tData);
+          setCache('wacrm_dash_templateperf', tData, userId);
+        }).catch(() => {});
+      });
+
+    // Concurrently fetch chart visuals only (broadcasts & templates handled above)
     Promise.allSettled([
-      loadMetrics(db).then((m) => {
-        setMetrics(m)
-        setCache('wacrm_dash_metrics', m, userId)
-        setMetricsLoading(false)
-      }),
-      loadMessageAnalytics(db).then((m) => {
-        setMsgAnalytics(m)
-        setCache('wacrm_dash_msganalytics', m, userId)
-      }),
       loadConversationsSeries(db, 30).then((s) => {
         setSeries((prev) => ({ ...prev, 30: s }))
         setCache('wacrm_dash_series_30', s, userId)
@@ -241,14 +260,6 @@ export default function DashboardPage() {
         setActivity(a)
         setCache('wacrm_dash_activity', a, userId)
         setActivityLoading(false)
-      }),
-      loadTemplatePerformance(db).then((tData) => {
-        setTemplatePerf(tData)
-        setCache('wacrm_dash_templateperf', tData, userId)
-      }),
-      loadBroadcastAnalytics(db).then((bData) => {
-        setBroadcastPerf(bData)
-        setCache('wacrm_dash_broadcastperf', bData, userId)
       }),
     ]).catch((err) => console.error('[dashboard] loadAll background fetch:', err))
   }, [userId])
@@ -333,6 +344,7 @@ export default function DashboardPage() {
         <WhatsAppLiveGuide
           waConfig={waConfig}
           onDisconnectSuccess={handleDisconnectSuccess}
+          onRefresh={loadAll}
         />
       )}
 
