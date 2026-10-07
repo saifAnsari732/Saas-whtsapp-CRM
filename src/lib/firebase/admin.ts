@@ -30,11 +30,13 @@ function getAdminApp(): App {
     }
   }
 
-  // 2. Try service-account.json file from disk (located in root directory)
+  // 2. Try GOOGLE_APPLICATION_CREDENTIALS or service-account.json file from disk
   try {
     const fs = require('fs');
     const path = require('path');
-    const saPath = path.resolve(process.cwd(), 'service-account.json');
+    const envSaPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    const saPath = envSaPath ? path.resolve(envSaPath) : path.resolve(process.cwd(), 'service-account.json');
+    
     if (fs.existsSync(saPath)) {
       const sa = JSON.parse(fs.readFileSync(saPath, 'utf8'));
       if (sa && (sa.private_key || sa.privateKey)) {
@@ -81,6 +83,8 @@ function getAdminApp(): App {
       console.warn('[Firebase Admin] Cert init failed with env private key:', certErr);
     }
   }
+
+  console.error('[Firebase Admin CRITICAL ERROR] No service account key found! Place service-account.json in root or set FIREBASE_SERVICE_ACCOUNT in .env.local on the server.');
 
   return initializeApp({
     projectId: projectId,
