@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" opacity="0.04">
+  <path fill="currentColor" d="M20 20h10v10H20zm40 40h10v10H60zm80-20h10v10h-10zm20 60h10v10h-10zm-60 40h10v10h-10zm-80 20h10v10H20zm140 0h10v10h-10z" />
+  <circle cx="100" cy="50" r="4" fill="currentColor"/>
+  <circle cx="40" cy="120" r="3" fill="currentColor"/>
+  <circle cx="160" cy="140" r="5" fill="currentColor"/>
+</svg>
