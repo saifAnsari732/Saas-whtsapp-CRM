@@ -106,12 +106,10 @@ function getAdminApp(): App {
           projectId: projectId,
         });
       }
-    } catch (certErr) {
-      console.warn('[Firebase Admin] Cert init failed with env private key:', certErr);
+    } catch {
+      // Malformed env key, fall back cleanly to default embedded credentials
     }
   }
-
-  console.warn('[Firebase Admin] No custom env credentials found, using default embedded service account credentials.');
 
   const DEFAULT_SERVICE_ACCOUNT = {
     projectId: 'whatsapp-saas-7ab44',
