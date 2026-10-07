@@ -11,22 +11,46 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { getAuth, type Auth } from 'firebase-admin/auth';
 import { getStorage, type Storage } from 'firebase-admin/storage';
 
+function formatPrivateKey(key: string): string {
+  if (!key) return '';
+  let cleaned = key.trim();
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  // Replace literal \n and \r\n with actual newline characters
+  return cleaned.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+}
+
 function getAdminApp(): App {
   if (getApps().length > 0) return getApps()[0];
 
-  // 1. Try FIREBASE_SERVICE_ACCOUNT JSON string env variable
+  // 1. Try FIREBASE_SERVICE_ACCOUNT (JSON string or Base64 encoded JSON)
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
-      const sa = typeof process.env.FIREBASE_SERVICE_ACCOUNT === 'string'
-        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-        : process.env.FIREBASE_SERVICE_ACCOUNT;
+      let raw = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+      if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+        raw = raw.slice(1, -1).trim();
+      }
+      if (!raw.startsWith('{') && !raw.startsWith('[')) {
+        try {
+          raw = Buffer.from(raw, 'base64').toString('utf8');
+        } catch {}
+      }
+      const sa = JSON.parse(raw);
       if (sa && (sa.private_key || sa.privateKey)) {
+        const pk = formatPrivateKey(sa.private_key || sa.privateKey);
+        const saObj = {
+          projectId: sa.project_id || sa.projectId,
+          clientEmail: sa.client_email || sa.clientEmail,
+          privateKey: pk,
+        };
         return initializeApp({
-          credential: cert(sa),
+          credential: cert(saObj),
+          projectId: saObj.projectId,
         });
       }
     } catch (saErr) {
-      console.warn('[Firebase Admin] FIREBASE_SERVICE_ACCOUNT JSON parse warning:', saErr);
+      console.warn('[Firebase Admin] FIREBASE_SERVICE_ACCOUNT parse warning:', saErr);
     }
   }
 
@@ -40,8 +64,15 @@ function getAdminApp(): App {
     if (fs.existsSync(saPath)) {
       const sa = JSON.parse(fs.readFileSync(saPath, 'utf8'));
       if (sa && (sa.private_key || sa.privateKey)) {
+        const pk = formatPrivateKey(sa.private_key || sa.privateKey);
+        const saObj = {
+          projectId: sa.project_id || sa.projectId,
+          clientEmail: sa.client_email || sa.clientEmail,
+          privateKey: pk,
+        };
         return initializeApp({
-          credential: cert(sa),
+          credential: cert(saObj),
+          projectId: saObj.projectId,
         });
       }
     }
@@ -60,13 +91,9 @@ function getAdminApp(): App {
     process.env.FIREBASE_ADMIN_CLIENT_EMAIL || 
     `firebase-adminsdk-fbsvc@${projectId}.iam.gserviceaccount.com`;
 
-  let privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
-  if (privateKey) {
-    privateKey = privateKey.replace(/\\n/g, '\n').replace(/\\n/g, '\n');
-    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-      privateKey = privateKey.slice(1, -1);
-    }
-    privateKey = privateKey.replace(/\\n/g, '\n');
+  let rawPrivateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+  if (rawPrivateKey) {
+    const privateKey = formatPrivateKey(rawPrivateKey);
 
     try {
       if (privateKey.includes('BEGIN PRIVATE KEY')) {
