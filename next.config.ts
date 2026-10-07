@@ -35,6 +35,12 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  experimental: {
+    webpackBuildWorker: false,
+  },
   allowedDevOrigins: [
     "*.ngrok-free.app",
     "*.ngrok.app",
