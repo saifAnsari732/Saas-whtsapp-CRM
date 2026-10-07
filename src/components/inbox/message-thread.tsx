@@ -845,6 +845,8 @@ export function MessageThread({
     [conversation, onAssignChange],
   );
 
+  const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
+
   // Empty state — same WhatsApp-style doodle background as the active
   // thread below, so swapping between empty/selected doesn't change the
   // pattern under the user's eye.
@@ -872,7 +874,6 @@ export function MessageThread({
     : (rawPhone ? (rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`) : t("unknown"));
   const displayPhone = rawPhone ? (rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`) : null;
 
-  const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
   const currentStatus = STATUS_OPTIONS.find(
     (s) => s.value === conversation.status
   );
