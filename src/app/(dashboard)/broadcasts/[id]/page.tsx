@@ -169,8 +169,15 @@ export default function BroadcastDetailPage() {
     async function fetchData() {
       try {
         const res = await fetch(`/api/whatsapp/broadcasts/${broadcastId}`);
+        if (!res.ok) {
+          let errorMsg = `Server error (${res.status})`;
+          try {
+            const errorData = await res.json();
+            if (errorData?.error) errorMsg = errorData.error;
+          } catch {}
+          throw new Error(errorMsg);
+        }
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || t('notFound'));
 
         setBroadcast(data.broadcast);
         setRecipients(data.recipients ?? []);

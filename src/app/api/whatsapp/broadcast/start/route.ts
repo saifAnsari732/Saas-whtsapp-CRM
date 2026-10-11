@@ -37,6 +37,8 @@ export async function POST(request: Request) {
       headerMediaUrl,
       scheduledAt,
       delaySeconds,
+      autoReplyEnabled,
+      autoReplyText,
     } = payload;
 
     if (!name || !template) {
@@ -119,35 +121,64 @@ export async function POST(request: Request) {
     }
 
     // ── Step 2: Create Broadcast Row ────────────────────────────────
-    const { data: broadcast, error: broadcastError } = await supabaseAdmin
+    const broadcastInsertPayload: Record<string, any> = {
+      user_id: userId,
+      account_id: accountId,
+      name,
+      template_name: template.name,
+      template_language: template.language ?? 'en_US',
+      template_variables: variables ?? {},
+      audience_filter: {
+        type: audience.type,
+        tagIds: audience.tagIds,
+        customField: audience.customField,
+        excludeTagIds: audience.excludeTagIds,
+      },
+      status: scheduledAt ? 'scheduled' : 'sending',
+      scheduled_at: scheduledAt || null,
+      total_recipients: contacts.length,
+      sent_count: 0,
+      delivered_count: 0,
+      read_count: 0,
+      replied_count: 0,
+      failed_count: 0,
+    };
+
+    let { data: broadcast, error: broadcastError } = await supabaseAdmin
       .from('broadcasts')
-      .insert({
-        user_id: userId,
-        account_id: accountId,
-        name,
-        template_name: template.name,
-        template_language: template.language ?? 'en_US',
-        template_variables: variables ?? {},
-        audience_filter: {
-          type: audience.type,
-          tagIds: audience.tagIds,
-          customField: audience.customField,
-          excludeTagIds: audience.excludeTagIds,
-        },
-        status: scheduledAt ? 'scheduled' : 'sending',
-        scheduled_at: scheduledAt || null,
-        total_recipients: contacts.length,
-        sent_count: 0,
-        delivered_count: 0,
-        read_count: 0,
-        replied_count: 0,
-        failed_count: 0,
-      })
+      .insert(broadcastInsertPayload)
       .select()
       .single();
 
     if (broadcastError || !broadcast) {
       throw new Error(`Failed to create broadcast campaign: ${broadcastError?.message ?? 'unknown error'}`);
+    }
+
+    // ── Save to Firebase Firestore (Enterprise Storage) ──────────────
+    try {
+      const { getAdminDb } = await import('@/lib/firebase/admin');
+      const fDb = getAdminDb();
+      if (fDb) {
+        const autoReplyDoc = {
+          broadcast_id: broadcast.id,
+          name,
+          account_id: accountId,
+          raw_account_id: accCtx.accountId,
+          auto_reply_enabled: Boolean(autoReplyEnabled),
+          auto_reply_text: autoReplyText || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        await Promise.allSettled([
+          fDb.collection('accounts').doc(accountId).collection('broadcast_auto_replies').doc(broadcast.id).set(autoReplyDoc, { merge: true }),
+          fDb.collection('accounts').doc(accCtx.accountId).collection('broadcast_auto_replies').doc(broadcast.id).set(autoReplyDoc, { merge: true }),
+          fDb.collection('broadcast_auto_replies').doc(broadcast.id).set(autoReplyDoc, { merge: true }),
+        ]);
+        console.log(`[broadcast/start] Broadcast auto-reply saved to Firebase Firestore for broadcast ${broadcast.id}`);
+      }
+    } catch (fbErr) {
+      console.warn('[broadcast/start] Firestore broadcast auto-reply save error:', fbErr);
     }
 
     // ── Step 3: Insert Recipient Rows ───────────────────────────────

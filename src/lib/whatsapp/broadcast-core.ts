@@ -55,6 +55,8 @@ export interface CreateBroadcastParams {
   templateName: string;
   templateLanguage?: string | null;
   recipients: BroadcastRecipientInput[];
+  autoReplyEnabled?: boolean;
+  autoReplyText?: string | null;
 }
 
 interface PlannedRecipient {
@@ -217,6 +219,8 @@ export async function createBroadcast(
       template_language: templateLanguage,
       status: 'sending',
       total_recipients: deduped.length,
+      auto_reply_enabled: Boolean(params.autoReplyEnabled),
+      auto_reply_text: params.autoReplyText || null,
     })
     .select('id')
     .single();

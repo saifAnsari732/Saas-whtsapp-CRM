@@ -33,6 +33,8 @@ export interface BroadcastPayload {
   scheduledAt?: string;
   batchDelayMs?: number;
   delaySeconds?: number;
+  autoReplyEnabled?: boolean;
+  autoReplyText?: string;
 }
 
 export interface UseBroadcastSendingReturn {

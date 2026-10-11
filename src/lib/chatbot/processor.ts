@@ -19,7 +19,7 @@ export interface ProcessMessageResult {
   shouldReply: boolean;
   replyText: string | null;
   ruleMatched?: string;
-  source?: 'keyword' | 'ai' | 'welcome' | 'away' | 'fallback';
+  source?: 'broadcast' | 'keyword' | 'ai' | 'welcome' | 'away' | 'fallback';
   delayMs: number;
 }
 
@@ -52,6 +52,124 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
   if (!cleanText) {
     return { shouldReply: false, replyText: null, delayMs: 0 };
+  }
+
+  // 1.1 Priority Broadcast Auto-Reply Check:
+  // If this sender recently received a broadcast campaign that has an auto-reply configured,
+  // reply with that message immediately and once-only.
+  try {
+    const phone = senderJid.split('@')[0];
+    const { data: contacts } = await supabaseAdmin()
+      .from('contacts')
+      .select('id, name')
+      .eq('phone', phone)
+      .limit(1);
+
+    if (contacts && contacts.length > 0) {
+      const contact = contacts[0];
+      const { data: bRecipients } = await supabaseAdmin()
+        .from('broadcast_recipients')
+        .select('id, status, auto_reply_sent_at, broadcast_id, broadcasts!inner(id, name, account_id)')
+        .eq('contact_id', contact.id)
+        .in('status', ['sent', 'delivered', 'read', 'replied'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (bRecipients && bRecipients.length > 0) {
+        const row = bRecipients[0];
+        const bcast: any = row.broadcasts;
+
+        // Mark as replied in database if not yet
+        if (row.status !== 'replied') {
+          await supabaseAdmin()
+            .from('broadcast_recipients')
+            .update({ status: 'replied', replied_at: new Date().toISOString() })
+            .eq('id', row.id);
+        }
+
+        // Check Firebase Firestore primary configuration
+        let autoReplyEnabled = false;
+        let autoReplyText = '';
+
+        try {
+          const { getAdminDb } = await import('@/lib/firebase/admin');
+          const fDb = getAdminDb();
+          if (fDb) {
+            const docSnap = await fDb
+              .collection('accounts')
+              .doc(accountId)
+              .collection('broadcast_auto_replies')
+              .doc(bcast.id)
+              .get();
+
+            if (docSnap.exists) {
+              const fbData = docSnap.data();
+              autoReplyEnabled = Boolean(fbData?.auto_reply_enabled);
+              autoReplyText = fbData?.auto_reply_text || '';
+            }
+          }
+        } catch {}
+
+        if (!autoReplyEnabled && (bcast as any)?.auto_reply_enabled) {
+          autoReplyEnabled = true;
+          autoReplyText = (bcast as any)?.auto_reply_text || '';
+        }
+
+        // Check if broadcast auto reply is enabled and not yet sent
+        if (autoReplyEnabled && autoReplyText.trim()) {
+          // Check Firebase sent status
+          let alreadySentOnFirebase = false;
+          try {
+            const { getAdminDb } = await import('@/lib/firebase/admin');
+            const fDb = getAdminDb();
+            if (fDb) {
+              const sentRef = fDb
+                .collection('accounts')
+                .doc(accountId)
+                .collection('broadcast_auto_replies')
+                .doc(bcast.id)
+                .collection('sent_recipients')
+                .doc(contact.id);
+              const sentSnap = await sentRef.get();
+              if (sentSnap.exists) {
+                alreadySentOnFirebase = true;
+              } else {
+                await sentRef.set({ contact_id: contact.id, sent_at: new Date().toISOString() });
+              }
+            }
+          } catch {}
+
+          if (!alreadySentOnFirebase && !row.auto_reply_sent_at) {
+            const nowIso = new Date().toISOString();
+            try {
+              await supabaseAdmin()
+                .from('broadcast_recipients')
+                .update({
+                  status: 'replied',
+                  replied_at: nowIso,
+                  auto_reply_sent_at: nowIso,
+                })
+                .eq('id', row.id);
+            } catch {}
+
+            const formattedText = formatVariables(autoReplyText.trim(), {
+              name: senderName || contact.name || 'there',
+              phone,
+            });
+
+            return {
+              shouldReply: true,
+              replyText: formattedText,
+              ruleMatched: `Broadcast "${bcast.name}" Auto-Reply`,
+              source: 'broadcast',
+              delayMs: 300, // Instant
+            };
+          }
+        }
+      }
+    }
+  } catch (bcastErr) {
+    console.warn('[chatbot/processor] broadcast auto-reply check failed:', bcastErr);
   }
 
   // 2. Load Chatbot configuration

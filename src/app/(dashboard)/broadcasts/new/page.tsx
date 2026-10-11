@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { 
   Settings, 
@@ -103,6 +104,10 @@ export default function NewBroadcastPage() {
   const [sendWhen, setSendWhen] = useState<'immediately' | 'later'>('immediately');
   const [scheduleDate, setScheduleDate] = useState('');
   const [sendDelaySeconds, setSendDelaySeconds] = useState<number>(10);
+
+  // Instant Broadcast Auto-Reply
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
+  const [autoReplyText, setAutoReplyText] = useState('Thank you for reaching out! We received your message and our team will get back to you shortly.');
 
   // Templates
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -398,6 +403,8 @@ export default function NewBroadcastPage() {
         scheduledAt: sendWhen === 'later' ? new Date(scheduleDate).toISOString() : undefined,
         delaySeconds: sendDelaySeconds,
         batchDelayMs: sendDelaySeconds * 1000,
+        autoReplyEnabled,
+        autoReplyText: autoReplyEnabled ? autoReplyText.trim() : undefined,
       } as any);
 
       toast.success(sendWhen === 'later' ? 'Campaign scheduled successfully!' : 'Campaign launched successfully!');
@@ -539,8 +546,8 @@ export default function NewBroadcastPage() {
           </div>
         </div>
 
-        {/* 4-Step Sleek Workflow Guide */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* 5-Step Sleek Workflow Guide */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className={cn(
             "p-3 rounded-2xl border transition-all flex items-center gap-3",
             name.trim() 
@@ -554,7 +561,7 @@ export default function NewBroadcastPage() {
               {name.trim() ? <Check className="h-4 w-4 stroke-[2.5]" /> : "1"}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">1. Campaign Title</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">1. Title</p>
               <p className="text-[11px] text-muted-foreground truncate">{name.trim() || 'Name broadcast'}</p>
             </div>
           </div>
@@ -574,11 +581,11 @@ export default function NewBroadcastPage() {
               {(recipientMode === 'numbers' ? validCount > 0 : !!groupId) ? <Check className="h-4 w-4 stroke-[2.5]" /> : "2"}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">2. Target Audience</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">2. Audience</p>
               <p className="text-[11px] text-muted-foreground truncate">
                 {recipientMode === 'numbers' 
-                  ? (validCount > 0 ? `${validCount} Valid Numbers` : 'Paste numbers') 
-                  : (groupId ? 'Group selected' : 'Choose group')}
+                  ? (validCount > 0 ? `${validCount} Valid` : 'Paste numbers') 
+                  : (groupId ? 'Selected' : 'Choose')}
               </p>
             </div>
           </div>
@@ -588,9 +595,9 @@ export default function NewBroadcastPage() {
               3
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">3. Delivery Speed</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">3. Speed</p>
               <p className="text-[11px] text-muted-foreground truncate">
-                {sendWhen === 'immediately' ? `Instant (${sendDelaySeconds}s delay)` : 'Scheduled'}
+                {sendWhen === 'immediately' ? `${sendDelaySeconds}s delay` : 'Scheduled'}
               </p>
             </div>
           </div>
@@ -608,9 +615,29 @@ export default function NewBroadcastPage() {
               {selectedTemplate ? <Check className="h-4 w-4 stroke-[2.5]" /> : "4"}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">4. Template & Preview</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">4. Template</p>
               <p className="text-[11px] text-muted-foreground truncate">
                 {selectedTemplate ? selectedTemplate.name : 'Choose template'}
+              </p>
+            </div>
+          </div>
+
+          <div className={cn(
+            "p-3 rounded-2xl border transition-all flex items-center gap-3",
+            autoReplyEnabled
+              ? "bg-amber-50/40 dark:bg-amber-950/20 border-amber-300/80 dark:border-amber-800/60" 
+              : "bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs"
+          )}>
+            <div className={cn(
+              "h-8 w-8 rounded-xl font-bold text-xs flex items-center justify-center shrink-0",
+              autoReplyEnabled ? "bg-amber-600 text-white" : "bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300"
+            )}>
+              {autoReplyEnabled ? <Zap className="h-4 w-4 fill-white" /> : "5"}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">5. Auto-Reply</p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {autoReplyEnabled ? 'Active (⚡ <300ms)' : 'Disabled'}
               </p>
             </div>
           </div>
@@ -1105,6 +1132,68 @@ export default function NewBroadcastPage() {
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* Step 5: Instant Auto-Reply on Customer Response (Smart Bot) */}
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800/80 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xs">
+                    <Zap className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                        5. Instant Auto-Reply on Customer Reply
+                      </h2>
+                      <Badge variant="outline" className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 text-[10px] font-bold">
+                        Ultra Fast (⚡ &lt;300ms)
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Automatically send a custom reply whenever any recipient responds to this campaign
+                    </p>
+                  </div>
+                </div>
+
+                <Switch
+                  checked={autoReplyEnabled}
+                  onCheckedChange={setAutoReplyEnabled}
+                  aria-label="Enable instant auto-reply"
+                />
+              </div>
+
+              {autoReplyEnabled ? (
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      Custom Instant Reply Message
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground">
+                      Supports dynamic variable: <code className="bg-muted px-1 py-0.5 rounded text-[10px]">&#123;name&#125;</code>
+                    </span>
+                  </div>
+
+                  <Textarea
+                    rows={3}
+                    placeholder="e.g. Namaste {name}! Thank you for your reply. Our support team has received your message and will connect with you right away."
+                    value={autoReplyText}
+                    onChange={(e) => setAutoReplyText(e.target.value)}
+                    className="bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 rounded-xl text-xs leading-relaxed"
+                  />
+
+                  <div className="flex items-start gap-2 text-[11px] text-muted-foreground bg-amber-50/50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200/50 dark:border-amber-900/30">
+                    <ShieldCheck className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Spam Protection Active:</strong> Dispatches immediately when customer texts back. Automatically locked to fire strictly once per recipient so customers are never spammed.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  Instant auto-reply is currently disabled for this broadcast. Inbound replies will only be stored in Inbox.
+                </p>
               )}
             </div>
 

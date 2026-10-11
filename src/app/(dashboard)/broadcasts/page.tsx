@@ -74,10 +74,18 @@ export default function BroadcastsPage() {
     if (!isSilent && broadcasts.length === 0) setLoading(true);
     try {
       const res = await fetch('/api/whatsapp/broadcasts');
+      if (!res.ok) {
+        let errorMsg = `Server error (${res.status})`;
+        try {
+          const errorData = await res.json();
+          if (errorData?.error) errorMsg = errorData.error;
+        } catch {}
+        throw new Error(errorMsg);
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || t('errorLoad'));
       const list = data.broadcasts ?? [];
       setBroadcasts(list);
+      setError(null);
       if (typeof window !== 'undefined') {
         try {
           sessionStorage.setItem('cached_broadcasts', JSON.stringify(list));

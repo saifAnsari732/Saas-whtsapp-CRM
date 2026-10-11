@@ -401,6 +401,8 @@ export interface Broadcast {
   read_count: number;
   replied_count: number;
   failed_count: number;
+  auto_reply_enabled?: boolean;
+  auto_reply_text?: string | null;
   created_at: string;
 }
 
@@ -418,6 +420,7 @@ export interface BroadcastRecipient {
   delivered_at?: string;
   read_at?: string;
   replied_at?: string;
+  auto_reply_sent_at?: string;
   error_message?: string;
   /**
    * Meta's message id, persisted when the broadcast send succeeds so

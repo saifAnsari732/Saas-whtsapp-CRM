@@ -14,6 +14,7 @@ import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
+import { handleBroadcastAutoReplyIfEligible } from '@/lib/whatsapp/broadcast-auto-reply'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -713,10 +714,17 @@ async function processMessage(
     console.error('Error updating conversation:', convError)
   }
 
-  // If this contact was a recent broadcast recipient, flag the reply
-  // so the broadcast's `replied_count` advances (via the aggregate
-  // trigger installed in migration 003).
-  await flagBroadcastReplyIfAny(accountId, contactRecord.id)
+  // If this contact was a recent broadcast recipient, check if the broadcast
+  // has an automated custom reply configured, flag the reply counter,
+  // and immediately dispatch the custom message.
+  const broadcastAutoReplyResult = await handleBroadcastAutoReplyIfEligible({
+    accountId,
+    contactId: contactRecord.id,
+    conversationId: conversation.id,
+    configOwnerUserId,
+    contactName,
+    inboundText: contentText ?? message.text?.body ?? '',
+  })
 
   // ============================================================
   // Flow runner dispatch.
@@ -757,12 +765,12 @@ async function processMessage(
           },
     isFirstInboundMessage,
   })
-  let flowConsumed = flowResult.consumed
+  let flowConsumed = flowResult.consumed || broadcastAutoReplyResult.replied
 
   const inboundText = contentText ?? message.text?.body ?? ''
 
   // Keyword Flow Dispatch
-  // We run this only if the visual Flow runner didn't consume it.
+  // We run this only if neither the visual Flow runner nor broadcast auto-reply consumed it.
   if (!flowConsumed) {
     const kfResult = await dispatchKeywordFlow({
       accountId,
