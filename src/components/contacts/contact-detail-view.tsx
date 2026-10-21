@@ -101,35 +101,34 @@ export function ContactDetailView({
     if (!contactId) return;
     setLoading(true);
 
-    const { data } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('id', contactId)
-      .single();
-
-    if (data) {
-      setContact(data);
-      setEditName(data.name ?? '');
-      setEditPhone(data.phone);
-      setEditEmail(data.email ?? '');
-      setEditCompany(data.company ?? '');
+    try {
+      const res = await fetch('/api/contacts');
+      if (res.ok) {
+        const data = await res.json();
+        const found = (data.contacts || []).find((c: any) => c.id === contactId);
+        if (found) {
+          setContact(found);
+          setEditName(found.name ?? '');
+          setEditPhone(found.phone ?? '');
+          setEditEmail(found.email ?? '');
+          setEditCompany(found.company ?? '');
+          if (Array.isArray(found.tags)) {
+            setContactTagIds(found.tags.map((t: any) => t.id || t));
+          }
+        }
+        if (Array.isArray(data.tags)) {
+          setAllTags(data.tags);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching contact:', err);
     }
     setLoading(false);
-  }, [contactId, supabase]);
+  }, [contactId]);
 
   const fetchTags = useCallback(async () => {
-    if (!contactId) return;
-
-    const [tagsRes, contactTagsRes] = await Promise.all([
-      supabase.from('tags').select('*').order('name'),
-      supabase.from('contact_tags').select('tag_id').eq('contact_id', contactId),
-    ]);
-
-    if (tagsRes.data) setAllTags(tagsRes.data);
-    if (contactTagsRes.data) {
-      setContactTagIds(contactTagsRes.data.map((ct) => ct.tag_id));
-    }
-  }, [contactId, supabase]);
+    // Handled in fetchContact via /api/contacts
+  }, []);
 
   const fetchNotes = useCallback(async () => {
     if (!contactId) return;
@@ -204,25 +203,32 @@ export function ContactDetailView({
     }
 
     setSavingDetails(true);
-    const { error } = await supabase
-      .from('contacts')
-      .update({
-        name: editName.trim() || null,
-        phone: editPhone.trim(),
-        email: editEmail.trim() || null,
-        company: editCompany.trim() || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', contactId);
+    try {
+      const res = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: contactId,
+          name: editName.trim() || null,
+          phone: editPhone.trim(),
+          email: editEmail.trim() || null,
+          company: editCompany.trim() || null,
+          tags: contactTagIds,
+        }),
+      });
 
-    if (error) {
-      toast.error(t('toastUpdateFailed'));
-    } else {
+      if (!res.ok) {
+        throw new Error('Failed to update contact');
+      }
+
       toast.success(t('toastUpdated'));
       fetchContact();
       onUpdated();
+    } catch {
+      toast.error(t('toastUpdateFailed'));
+    } finally {
+      setSavingDetails(false);
     }
-    setSavingDetails(false);
   }
 
   async function toggleTag(tagId: string) {

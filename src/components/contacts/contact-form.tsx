@@ -1,17 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-import { addContactTag, deleteContactTag } from '@/lib/contacts/tag-api';
 import { toast } from 'sonner';
 import type { Contact, Tag, ContactTag } from '@/types';
-import {
-  findExistingContact,
-  isExactMatch,
-  isUniqueViolation,
-  type ExistingContact,
-} from '@/lib/contacts/dedupe';
 import {
   Dialog,
   DialogContent,
@@ -24,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 interface ContactFormProps {
@@ -33,8 +25,7 @@ interface ContactFormProps {
   contact?: Contact | null;
   contactTags?: ContactTag[];
   onSaved: () => void;
-  /** Open an existing contact's detail view — used by the duplicate
-   *  notice to jump to the contact that already owns this number. */
+  /** Open an existing contact's detail view */
   onViewExisting?: (contactId: string) => void;
 }
 
@@ -47,7 +38,6 @@ export function ContactForm({
   onViewExisting,
 }: ContactFormProps) {
   const t = useTranslations('Contacts.form');
-  const supabase = createClient();
   const { accountId } = useAuth();
   const isEdit = !!contact;
 
@@ -56,15 +46,6 @@ export function ContactForm({
   const [email, setEmail] = useState('');
   const [company, setCompany] = useState('');
   const [saving, setSaving] = useState(false);
-
-  // Duplicate-phone detection for NEW contacts. `exact` (same digits)
-  // hard-blocks the save; a fuzzy trunk-variant match only warns. The
-  // DB unique index (migration 022) is the real backstop — this is the
-  // friendly heads-up before we get there.
-  const [dupMatch, setDupMatch] = useState<
-    { contact: ExistingContact; exact: boolean } | null
-  >(null);
-  const [checkingDup, setCheckingDup] = useState(false);
 
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -76,42 +57,25 @@ export function ContactForm({
       setPhone(contact?.phone ?? '');
       setEmail(contact?.email ?? '');
       setCompany(contact?.company ?? '');
-      setSelectedTagIds(contactTags.map((ct) => ct.tag_id));
-      setDupMatch(null);
+      const existingTagIds = (contact?.tags || []).map((t: any) => t.id || t);
+      setSelectedTagIds(existingTagIds.length > 0 ? existingTagIds : contactTags.map((ct) => ct.tag_id));
       fetchTags();
     }
   }, [open, contact]);
 
-  // Look up an existing contact with this number (new contacts only).
-  // Runs on blur so we don't query on every keystroke.
-  async function checkDuplicate() {
-    if (isEdit || !accountId) return;
-    const value = phone.trim();
-    if (!value) {
-      setDupMatch(null);
-      return;
-    }
-    setCheckingDup(true);
-    try {
-      const existing = await findExistingContact(supabase, accountId, value);
-      setDupMatch(
-        existing
-          ? { contact: existing, exact: isExactMatch(existing, value) }
-          : null,
-      );
-    } finally {
-      setCheckingDup(false);
-    }
-  }
-
   async function fetchTags() {
     setLoadingTags(true);
-    const { data } = await supabase
-      .from('tags')
-      .select('*')
-      .order('name');
-    if (data) setTags(data);
-    setLoadingTags(false);
+    try {
+      const res = await fetch('/api/contacts');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.tags)) setTags(data.tags);
+      }
+    } catch (err) {
+      console.error('Error fetching tags in ContactForm:', err);
+    } finally {
+      setLoadingTags(false);
+    }
   }
 
   function toggleTag(tagId: string) {
@@ -130,89 +94,31 @@ export function ContactForm({
       return;
     }
 
-    // Hard-block an exact duplicate on create (the DB unique index is
-    // the real backstop; this avoids a round-trip + a raw error toast).
-    if (!isEdit && dupMatch?.exact) {
-      toast.error(t('toastConflict'));
-      return;
-    }
-
     setSaving(true);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) throw new Error('Not authenticated');
-      if (!accountId) throw new Error('Your profile is not linked to an account.');
+      const res = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: isEdit ? contact?.id : undefined,
+          name: name.trim() || null,
+          phone: phone.trim(),
+          email: email.trim() || null,
+          company: company.trim() || null,
+          tags: selectedTagIds,
+        }),
+      });
 
-      let contactId = contact?.id;
-
-      if (isEdit && contactId) {
-        const { error } = await supabase
-          .from('contacts')
-          .update({
-            name: name.trim() || null,
-            phone: phone.trim(),
-            email: email.trim() || null,
-            company: company.trim() || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', contactId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('contacts')
-          .insert({
-            user_id: user.id,
-            account_id: accountId,
-            name: name.trim() || null,
-            phone: phone.trim(),
-            email: email.trim() || null,
-            company: company.trim() || null,
-          })
-          .select('id')
-          .single();
-        if (error) throw error;
-        contactId = data.id;
-      }
-
-      // Sync tags
-      if (contactId) {
-        const existingTagIds = new Set(contactTags.map((tag) => tag.tag_id));
-        const desiredTagIds = new Set(selectedTagIds);
-        const toRemove = [...existingTagIds].filter((id) => !desiredTagIds.has(id));
-        const toAdd = [...desiredTagIds].filter((id) => !existingTagIds.has(id));
-
-        for (const tagId of toRemove) {
-          await deleteContactTag(contactId, tagId);
-        }
-        for (const tagId of toAdd) {
-          await addContactTag(contactId, tagId);
-        }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || t('toastError'));
       }
 
       toast.success(isEdit ? t('toastSuccessEdit') : t('toastSuccessAdd'));
       onOpenChange(false);
       onSaved();
     } catch (err: unknown) {
-      // The unique index (migration 022) rejects a duplicate phone that
-      // slipped past the on-blur check (race, or a format that
-      // normalizes equal). Surface it as the friendly duplicate notice
-      // and, for new contacts, point the user at the existing record.
-      if (isUniqueViolation(err)) {
-        toast.error(t('toastConflict'));
-        if (!isEdit && accountId) {
-          const existing = await findExistingContact(
-            supabase,
-            accountId,
-            phone.trim(),
-          );
-          if (existing) setDupMatch({ contact: existing, exact: true });
-        }
-        return;
-      }
       const message = err instanceof Error ? err.message : t('toastError');
       toast.error(message);
     } finally {
@@ -255,45 +161,13 @@ export function ContactForm({
             <Input
               id="cf-phone"
               value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
-                if (dupMatch) setDupMatch(null);
-              }}
-              onBlur={checkDuplicate}
+              onChange={(e) => setPhone(e.target.value)}
               placeholder={t('phonePlaceholder')}
               className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
             />
-            {dupMatch ? (
-              <div
-                className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${
-                  dupMatch.exact
-                    ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                    : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-                }`}
-              >
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                <div className="space-y-1">
-                  <p>
-                    {dupMatch.exact
-                      ? t('dupExact')
-                      : t('dupSimilar')}
-                  </p>
-                  {onViewExisting && (
-                    <button
-                      type="button"
-                      onClick={() => onViewExisting(dupMatch.contact.id)}
-                      className="font-medium underline underline-offset-2 hover:no-underline"
-                    >
-                      {t('viewExisting', { name: dupMatch.contact.name || dupMatch.contact.phone })}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {t('phoneHint')}
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              {t('phoneHint')}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -373,7 +247,7 @@ export function ContactForm({
             </Button>
             <Button
               type="submit"
-              disabled={saving || checkingDup || (!isEdit && !!dupMatch?.exact)}
+              disabled={saving}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               {saving && <Loader2 className="size-4 animate-spin" />}

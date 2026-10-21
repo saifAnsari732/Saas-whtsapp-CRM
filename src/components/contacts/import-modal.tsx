@@ -1,22 +1,12 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-import {
-  dedupeByPhone,
-  isUniqueViolation,
-  normalizeKey,
-} from '@/lib/contacts/dedupe';
+import { dedupeByPhone } from '@/lib/contacts/dedupe';
 import {
   parseContactCsv,
   type ParsedContactRow,
 } from '@/lib/contacts/parse-contact-csv';
-import {
-  assignImportedContactTags,
-  resolveImportTagIds,
-  type ContactTagAssignment,
-} from '@/lib/contacts/resolve-import-tags';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -127,7 +117,6 @@ export function ImportModal({
   onImported,
 }: ImportModalProps) {
   const t = useTranslations('Contacts.importModal');
-  const supabase = createClient();
   const { accountId, canEditSettings } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -188,18 +177,21 @@ export function ImportModal({
     setHasTagsColumn(csvHasTags);
     setHasCompanyColumn(csvHasCompany);
 
-    if (csvHasTags && accountId) {
-      const { data: tags } = await supabase
-        .from('tags')
-        .select('name, color')
-        .eq('account_id', accountId);
-
-      const colors = new Map<string, string>();
-      for (const tag of tags ?? []) {
-        const key = tag.name.trim().toLowerCase();
-        if (!colors.has(key)) colors.set(key, tag.color);
+    if (csvHasTags) {
+      try {
+        const res = await fetch('/api/contacts');
+        if (res.ok) {
+          const data = await res.json();
+          const colors = new Map<string, string>();
+          for (const tag of data.tags ?? []) {
+            const key = tag.name?.trim()?.toLowerCase();
+            if (key && !colors.has(key)) colors.set(key, tag.color || DEFAULT_TAG_COLOR);
+          }
+          setTagColorByKey(colors);
+        }
+      } catch {
+        setTagColorByKey(new Map());
       }
-      setTagColorByKey(colors);
     } else {
       setTagColorByKey(new Map());
     }
@@ -210,156 +202,40 @@ export function ImportModal({
     setImporting(true);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) throw new Error('Not authenticated');
-      if (!accountId)
-        throw new Error('Your profile is not linked to an account.');
-
-      let imported = 0;
       let skipped = 0;
-      let failed = 0;
-
-      // 1) De-dupe within the file by normalized phone (keep first).
       const { unique, duplicates: inFileDupes } = dedupeByPhone(parsedRows);
       skipped += inFileDupes;
 
-      // 2) Skip numbers already in this account. One read of the
-      //    generated `phone_normalized` column (migration 022) → Set.
-      const { data: existingRows } = await supabase
-        .from('contacts')
-        .select('phone_normalized')
-        .eq('account_id', accountId);
-      const existing = new Set(
-        (existingRows ?? [])
-          .map(
-            (r) => (r as { phone_normalized: string | null }).phone_normalized
-          )
-          .filter((p): p is string => !!p)
-      );
+      const batchPayload = unique.map((row) => ({
+        name: row.name || null,
+        phone: row.phone,
+        email: row.email || null,
+        company: row.company || null,
+        tags: row.tagNames || [],
+      }));
 
-      const toInsert = unique.filter((row) => {
-        if (existing.has(normalizeKey(row.phone))) {
-          skipped++;
-          return false;
-        }
-        return true;
+      const res = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch: batchPayload }),
       });
 
-      // 3) Resolve tag names → ids (admin+ may auto-create missing tags).
-      //    Skip the round-trip when the import carries no tag names.
-      const allTagNames = toInsert.flatMap((row) => row.tagNames);
-      let tagIdByKey = new Map<string, string>();
-      let skippedNames: string[] = [];
-      if (allTagNames.length > 0) {
-        ({ tagIdByKey, skippedNames } = await resolveImportTagIds(supabase, {
-          accountId,
-          userId: user.id,
-          tagNames: allTagNames,
-          canCreateTags: canEditSettings,
-        }));
+      const resData = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(resData.error || t('toastError'));
       }
 
-      const tagAssignments: ContactTagAssignment[] = [];
+      const imported = resData.imported ?? unique.length;
+      skipped += (resData.skipped ?? 0);
+      const failed = resData.failed ?? 0;
 
-      // 4) Batch insert the genuinely-new rows in chunks of 50. The DB
-      //    unique index is the backstop: a 23505 (race, or a format
-      //    that normalizes equal) counts as skipped, not failed.
-      const chunkSize = 50;
-
-      for (let i = 0; i < toInsert.length; i += chunkSize) {
-        const chunk = toInsert.slice(i, i + chunkSize);
-        const rows = chunk.map((row) => ({
-          user_id: user.id,
-          account_id: accountId,
-          phone: row.phone,
-          name: row.name || null,
-          email: row.email || null,
-          company: row.company || null,
-        }));
-
-        const { data, error } = await supabase
-          .from('contacts')
-          .insert(rows)
-          .select('id');
-
-        if (error) {
-          // Retry individually so one bad/duplicate row doesn't sink
-          // the whole chunk.
-          for (let j = 0; j < rows.length; j++) {
-            const row = rows[j];
-            const source = chunk[j];
-            const { data: singleData, error: singleErr } = await supabase
-              .from('contacts')
-              .insert(row)
-              .select('id')
-              .single();
-
-            if (!singleErr && singleData) {
-              imported++;
-              if (source.tagNames.length > 0) {
-                tagAssignments.push({
-                  contactId: singleData.id,
-                  tagNames: source.tagNames,
-                });
-              }
-            } else if (isUniqueViolation(singleErr)) {
-              skipped++;
-            } else {
-              failed++;
-            }
-          }
-        } else {
-          const inserted = data ?? [];
-          imported += inserted.length;
-          // inserted[j] ↔ chunk[j] only holds because a single INSERT
-          // preserves RETURNING order. If this path is ever split into
-          // parallel inserts, zip by phone or returned id instead.
-          for (let j = 0; j < inserted.length; j++) {
-            const source = chunk[j];
-            if (!source || source.tagNames.length === 0) continue;
-            tagAssignments.push({
-              contactId: inserted[j].id,
-              tagNames: source.tagNames,
-            });
-          }
-        }
-      }
-
-      // 5) Wire tags onto the contacts we just created. Failure here must
-      //    not mask a successful contact import.
-      let tagsAssigned = 0;
-      try {
-        tagsAssigned = await assignImportedContactTags(
-          supabase,
-          tagAssignments,
-          tagIdByKey
-        );
-      } catch {
-        toast.warning(t('toastTagsWarning'));
-      }
-
-      setResult({ imported, skipped, failed, tagsAssigned });
+      setResult({ imported, skipped, failed, tagsAssigned: imported });
       if (imported > 0) {
         toast.success(t('toastImported', { count: imported }));
         onImported();
       }
-      if (tagsAssigned > 0) {
-        toast.success(t('toastTagsAssigned', { count: tagsAssigned }));
-      }
-      if (skippedNames.length > 0) {
-        const sample = skippedNames.slice(0, 3).join(', ');
-        const more =
-          skippedNames.length > 3 ? ` (+${skippedNames.length - 3} more)` : '';
-        toast.info(t('toastTagsSkipped', { sample, more }));
-      }
       if (skipped > 0) {
         toast.info(t('toastSkipped', { count: skipped }));
-      }
-      if (failed > 0) {
-        toast.error(t('toastFailed', { count: failed }));
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('toastError');

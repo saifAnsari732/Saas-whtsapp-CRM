@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getClientAuth, getClientDb } from '@/lib/firebase/client';
-import { collection, doc, getDoc, getDocs, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { toast } from 'sonner';
 import type { Contact, Tag, ContactTag } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -115,18 +113,12 @@ export default function ContactsPage() {
 
   const fetchTags = useCallback(async () => {
     try {
-      const db = getClientDb();
-      const auth = getClientAuth();
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-
-      const userDoc = await getDoc(doc(db, 'users', uid));
-      const accountId = userDoc.data()?.accountId || uid;
-
-      const tagsSnap = await getDocs(collection(db, 'accounts', accountId, 'tags'));
+      const res = await fetch('/api/contacts');
+      if (!res.ok) return;
+      const data = await res.json();
       const map: Record<string, Tag> = {};
-      tagsSnap.docs.forEach((d) => {
-        map[d.id] = { id: d.id, ...d.data() } as Tag;
+      (data.tags || []).forEach((d: Tag) => {
+        map[d.id] = d;
       });
       setTagsMap(map);
       setSelectedTagIds((prev) => {
@@ -144,29 +136,23 @@ export default function ContactsPage() {
     setSelected(new Set());
 
     try {
-      const db = getClientDb();
-      const auth = getClientAuth();
-      const uid = auth.currentUser?.uid;
-      if (!uid) {
-        setLoading(false);
-        return;
+      const res = await fetch('/api/contacts');
+      if (!res.ok) {
+        throw new Error('Failed to load contacts');
       }
-
-      const userDoc = await getDoc(doc(db, 'users', uid));
-      const accountId = userDoc.data()?.accountId || uid;
-
-      const contactsRef = collection(db, 'accounts', accountId, 'contacts');
-      const q = query(contactsRef, orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
+      const data = await res.json();
 
       if (seq !== fetchSeq.current) return;
 
-      let allContacts = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-        created_at: d.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-        updated_at: d.data().updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-      })) as ContactWithTags[];
+      if (data.tags && Array.isArray(data.tags)) {
+        const map: Record<string, Tag> = {};
+        data.tags.forEach((d: Tag) => {
+          map[d.id] = d;
+        });
+        setTagsMap(map);
+      }
+
+      let allContacts = (data.contacts || []) as ContactWithTags[];
 
       const term = debouncedSearch.trim().toLowerCase();
       if (term) {
@@ -240,16 +226,14 @@ export default function ContactsPage() {
     setDeleting(true);
 
     try {
-      const db = getClientDb();
-      const auth = getClientAuth();
-      const uid = auth.currentUser?.uid;
-      if (uid) {
-        const userDoc = await getDoc(doc(db, 'users', uid));
-        const accountId = userDoc.data()?.accountId || uid;
-        await deleteDoc(doc(db, 'accounts', accountId, 'contacts', deleteTarget.id));
-        toast.success(t('toastDeleted'));
-        fetchContacts();
+      const res = await fetch(`/api/contacts?id=${encodeURIComponent(deleteTarget.id)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        throw new Error('Failed to delete contact');
       }
+      toast.success(t('toastDeleted'));
+      fetchContacts();
     } catch (err) {
       console.error('Error deleting contact:', err);
       toast.error(t('toastFailedDelete'));
@@ -291,23 +275,17 @@ export default function ContactsPage() {
     setDeleting(true);
 
     try {
-      const db = getClientDb();
-      const auth = getClientAuth();
-      const uid = auth.currentUser?.uid;
-      if (uid) {
-        const userDoc = await getDoc(doc(db, 'users', uid));
-        const accountId = userDoc.data()?.accountId || uid;
-
-        await Promise.all(
-          ids.map((id) =>
-            deleteDoc(doc(db, 'accounts', accountId, 'contacts', id))
-          )
-        );
-
-        toast.success(t('toastBulkDeleted', { count: ids.length }));
-        setSelected(new Set());
-        fetchContacts();
+      const res = await fetch('/api/contacts', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to bulk delete contacts');
       }
+      toast.success(t('toastBulkDeleted', { count: ids.length }));
+      setSelected(new Set());
+      fetchContacts();
     } catch (err) {
       console.error('Error bulk deleting contacts:', err);
       toast.error(t('toastBulkFailedDelete'));

@@ -1,0 +1,754 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required on create, immutable) - Firebase Auth UID
+    //   - email: string (required, valid email format)
+    //   - fullName / full_name: string (optional, max 100 chars)
+    //   - accountId / account_id: string (optional, max 128 chars) - tenant account
+    //   - accountRole / account_role: string (optional, enum: owner, admin, member, agent, viewer)
+    //   - role: string (optional, enum: user, admin, superadmin - user cannot self-grant admin)
+    //   - avatarUrl / avatar_url: string (optional, max 2048 chars)
+    //   - betaFeatures / beta_features: list of strings (optional, max 50 items)
+    //   - createdAt: timestamp or string (optional, immutable)
+    //   - updatedAt: timestamp or string (optional)
+    //
+    // Collection: accounts
+    // Document ID: {accountId}
+    // Fields:
+    //   - name: string (optional, max 100 chars) - Workspace/company name
+    //   - ownerUserId / owner_user_id: string (optional, max 128 chars, immutable)
+    //   - subscriptionStatus / subscription_status: string (optional, max 50 chars)
+    //   - subscriptionPlan / subscription_plan: string (optional, max 50 chars)
+    //   - trialEndsAt / trial_ends_at: timestamp, string, or null
+    //   - subscriptionExpiresAt: timestamp, string, or null
+    //   - subscriptionStartedAt: timestamp, string, or null
+    //   - currency / default_currency: string (optional, max 10 chars)
+    //   - createdAt: timestamp or string (optional, immutable)
+    //   - updatedAt: timestamp or string (optional)
+    //
+    // Subcollection: accounts/{accountId}/contacts/{contactId}
+    // Fields:
+    //   - phone: string (required, max 30 chars) - WhatsApp international phone number
+    //   - name: string (optional, max 100 chars)
+    //   - email: string (optional, max 100 chars)
+    //   - company: string (optional, max 100 chars)
+    //   - avatarUrl: string (optional, max 2048 chars)
+    //   - tags: list (optional, max 100 items)
+    //   - accountId: string (optional, max 128 chars)
+    //   - createdAt: timestamp or string (optional, immutable)
+    //   - updatedAt: timestamp or string (optional)
+    //
+    // Subcollection: accounts/{accountId}/tags/{tagId}
+    // Fields:
+    //   - name: string (required, max 50 chars)
+    //   - color: string (optional, max 30 chars)
+    //   - accountId / account_id: string (optional, max 128 chars)
+    //   - createdAt: timestamp or string (optional, immutable)
+    //   - updatedAt: timestamp or string (optional)
+    //
+    // Subcollection: accounts/{accountId}/conversations/{conversationId}
+    // Fields:
+    //   - contact_id / contactId: string (optional, max 128 chars)
+    //   - status: string (optional, enum: open, closed, pending, resolved, archived)
+    //   - unread_count: number (optional, >= 0)
+    //   - last_message_text: string (optional, max 2000 chars)
+    //   - last_message_at: timestamp or string (optional)
+    //   - last_sender_type: string (optional, enum: customer, agent, bot, system)
+    //   - has_customer_reply: bool (optional)
+    //   - account_id / accountId: string (optional, max 128 chars)
+    //   - createdAt: timestamp or string (optional, immutable)
+    //   - updatedAt: timestamp or string (optional)
+    //
+    // Subcollection: accounts/{accountId}/conversations/{conversationId}/messages/{messageId}
+    // Fields:
+    //   - conversation_id: string (optional, max 128 chars)
+    //   - sender_type: string (optional, enum: customer, agent, bot, system)
+    //   - content_type: string (optional, max 50 chars)
+    //   - content_text: string (optional, max 10000 chars)
+    //   - template_name: string (optional, max 100 chars)
+    //   - message_id: string (optional, max 128 chars)
+    //   - status: string (optional, enum: pending, sent, delivered, read, failed)
+    //   - created_at / createdAt: timestamp or string (optional, immutable)
+    //
+    // Subcollection: accounts/{accountId}/broadcasts/{broadcastId}
+    // Fields:
+    //   - name: string (required, max 100 chars)
+    //   - templateName: string (optional, max 100 chars)
+    //   - templateLanguage: string (optional, max 20 chars)
+    //   - status: string (optional, max 50 chars)
+    //   - totalRecipients: number (optional, >= 0)
+    //   - sentCount / deliveredCount / readCount / failedCount / repliedCount: number (optional, >= 0)
+    //   - accountId: string (optional, max 128 chars)
+    //   - createdAt: timestamp or string (optional, immutable)
+    //   - updatedAt: timestamp or string (optional)
+    //
+    // Subcollection: accounts/{accountId}/broadcasts/{broadcastId}/recipients/{recipientId}
+    // Fields:
+    //   - phone: string (optional, max 30 chars)
+    //   - status: string (optional, enum: pending, sent, delivered, read, failed, replied)
+    //   - sent_at / delivered_at / read_at: timestamp, string, or null
+    //   - whatsapp_message_id: string (optional, max 128 chars)
+    //   - error_message: string (optional, max 1000 chars)
+    //
+    // Subcollection: accounts/{accountId}/keyword_flows/{flowId} & Collection: keyword_flows/{flowId}
+    // Fields:
+    //   - name: string (required, max 100 chars)
+    //   - keywords: list of strings (required, max 100 items)
+    //   - response_type: string (optional, enum: text, template)
+    //   - template_id / template_name: string (optional, max 128 chars)
+    //   - text_message: string (optional, max 4000 chars)
+    //   - is_active: bool (optional)
+    //   - accountId / account_id: string (optional, max 128 chars)
+    //   - user_id: string (optional, max 128 chars)
+    //   - created_at: timestamp or string (optional, immutable)
+    //   - updated_at: timestamp or string (optional)
+    //
+    // Subcollection: accounts/{accountId}/whatsapp_config/{configId} & Collection: whatsapp_configs/{accountId}
+    // Fields:
+    //   - phoneNumberId / phone_number_id: string (optional, max 100 chars)
+    //   - wabaId / waba_id: string (optional, max 100 chars)
+    //   - accessToken / access_token: string (optional, max 2000 chars)
+    //   - verifyToken / verify_token: string (optional, max 200 chars)
+    //   - status: string (optional, max 50 chars)
+    //   - accountId: string (optional, max 128 chars)
+    //   - displayName / verified_name: string (optional, max 100 chars)
+    //   - phoneNumber / display_phone_number: string (optional, max 30 chars)
+    //   - quality_rating: string (optional, max 50 chars)
+    //   - createdAt: timestamp or string (optional)
+    //   - updatedAt: timestamp or string (optional)
+    //
+    // Subcollection: accounts/{accountId}/wallet/{walletId}
+    // Fields:
+    //   - balance: number
+    //   - lowBalanceAlert: number (optional)
+    //   - createdAt / updatedAt: timestamp or string (optional)
+    //
+    // Subcollection: accounts/{accountId}/templates/{templateId}
+    // Fields:
+    //   - name: string (required, max 100 chars)
+    //   - category: string (optional, max 50 chars)
+    //   - language: string (optional, max 20 chars)
+    //   - bodyText: string (required, max 4000 chars)
+    //   - status: string (optional, max 50 chars)
+    //   - accountId: string (optional, max 128 chars)
+    //   - createdAt / updatedAt: timestamp or string (optional)
+    // ===============================================================
+
+    // Default deny for all unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Core Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if authenticated user owns the document by matching UID
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if user is a designated superadmin via claims or bootstrap email
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.get('email', '').lower() == 'ansarisaifuddin732@gmail.com' ||
+        request.auth.token.get('email', '').lower() == 'kisandeveloper2@gmail.com' ||
+        request.auth.token.get('admin', false) == true ||
+        request.auth.token.get('role', '') == 'superadmin' ||
+        request.auth.token.get('role', '') == 'admin'
+      );
+    }
+
+    // Check if the user's profile document associates them with this accountId
+    function userProfileHasAccount(accountId) {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('accountId', '') == accountId ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('account_id', '') == accountId
+      );
+    }
+
+    // Check if account document explicitly records this user as owner
+    function isAccountDocOwner(accountId) {
+      return exists(/databases/$(database)/documents/accounts/$(accountId)) && (
+        get(/databases/$(database)/documents/accounts/$(accountId)).data.get('ownerUserId', '') == request.auth.uid ||
+        get(/databases/$(database)/documents/accounts/$(accountId)).data.get('owner_user_id', '') == request.auth.uid
+      );
+    }
+
+    // Check if user is registered in the account members subcollection
+    function isAccountMember(accountId) {
+      return exists(/databases/$(database)/documents/accounts/$(accountId)/members/$(request.auth.uid));
+    }
+
+    // Unified tenant authorization check
+    function canAccessAccount(accountId) {
+      return isAuthenticated() && (
+        request.auth.uid == accountId ||
+        userProfileHasAccount(accountId) ||
+        isAccountDocOwner(accountId) ||
+        isAccountMember(accountId) ||
+        isSuperAdmin()
+      );
+    }
+
+    // Validate email format
+    function isValidEmail(email) {
+      return email is string &&
+        email.size() <= 100 &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // Validate flexible timestamp or ISO date string (prevents DoS, bounded to max 50 chars)
+    function isValidTimeField(val) {
+      return (val is timestamp) || (val is string && val.size() <= 50);
+    }
+
+    // Ensure immutable fields are not modified on update
+    function areImmutableFieldsUnchanged(fields) {
+      return resource == null || !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Optional string length validator
+    function isOptionalString(data, field, minLen, maxLen) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is string &&
+         data[field].size() >= minLen &&
+         data[field].size() <= maxLen);
+    }
+
+    // Required string length validator
+    function isRequiredString(data, field, minLen, maxLen) {
+      return (field in data) &&
+        data[field] is string &&
+        data[field].size() >= minLen &&
+        data[field].size() <= maxLen;
+    }
+
+    // Optional non-negative number validator
+    function isOptionalNonNegativeNumber(data, field) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is number && data[field] >= 0);
+    }
+
+    // Optional list validator with max items
+    function isOptionalList(data, field, maxSize) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is list && data[field].size() <= maxSize);
+    }
+
+    // ===============================================================
+    // Domain Validator Functions (Validator Function Pattern)
+    // ===============================================================
+
+    function isValidUser(data) {
+      return (
+        (!('uid' in data) || (data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128)) &&
+        (!('email' in data) || isValidEmail(data.email)) &&
+        isOptionalString(data, 'fullName', 0, 100) &&
+        isOptionalString(data, 'full_name', 0, 100) &&
+        isOptionalString(data, 'accountId', 0, 128) &&
+        isOptionalString(data, 'account_id', 0, 128) &&
+        (!('accountRole' in data) || data.accountRole in ['owner', 'admin', 'member', 'agent', 'viewer']) &&
+        (!('account_role' in data) || data.account_role in ['owner', 'admin', 'member', 'agent', 'viewer']) &&
+        (!('role' in data) || data.role in ['user', 'admin', 'superadmin']) &&
+        isOptionalString(data, 'avatarUrl', 0, 2048) &&
+        isOptionalString(data, 'avatar_url', 0, 2048) &&
+        isOptionalList(data, 'betaFeatures', 50) &&
+        isOptionalList(data, 'beta_features', 50) &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimeField(data.updatedAt))
+      );
+    }
+
+    function isValidAccount(data) {
+      return (
+        isOptionalString(data, 'name', 1, 100) &&
+        isOptionalString(data, 'ownerUserId', 1, 128) &&
+        isOptionalString(data, 'owner_user_id', 1, 128) &&
+        isOptionalString(data, 'subscriptionStatus', 1, 50) &&
+        isOptionalString(data, 'subscription_status', 1, 50) &&
+        isOptionalString(data, 'subscriptionPlan', 0, 50) &&
+        isOptionalString(data, 'subscription_plan', 0, 50) &&
+        isOptionalString(data, 'currency', 1, 10) &&
+        isOptionalString(data, 'default_currency', 1, 10) &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimeField(data.updatedAt)) &&
+        (!('trialEndsAt' in data) || data.trialEndsAt == null || isValidTimeField(data.trialEndsAt)) &&
+        (!('trial_ends_at' in data) || data.trial_ends_at == null || isValidTimeField(data.trial_ends_at)) &&
+        (!('subscriptionExpiresAt' in data) || data.subscriptionExpiresAt == null || isValidTimeField(data.subscriptionExpiresAt)) &&
+        (!('subscriptionStartedAt' in data) || data.subscriptionStartedAt == null || isValidTimeField(data.subscriptionStartedAt))
+      );
+    }
+
+    function isValidContact(data) {
+      return (
+        isRequiredString(data, 'phone', 3, 30) &&
+        isOptionalString(data, 'name', 0, 100) &&
+        isOptionalString(data, 'email', 0, 100) &&
+        isOptionalString(data, 'company', 0, 100) &&
+        isOptionalString(data, 'avatarUrl', 0, 2048) &&
+        isOptionalList(data, 'tags', 100) &&
+        isOptionalString(data, 'accountId', 0, 128) &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimeField(data.updatedAt))
+      );
+    }
+
+    function isValidTag(data) {
+      return (
+        isRequiredString(data, 'name', 1, 50) &&
+        isOptionalString(data, 'color', 1, 30) &&
+        isOptionalString(data, 'accountId', 0, 128) &&
+        isOptionalString(data, 'account_id', 0, 128) &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimeField(data.updatedAt))
+      );
+    }
+
+    function isValidConversation(data) {
+      return (
+        isOptionalString(data, 'contact_id', 1, 128) &&
+        isOptionalString(data, 'contactId', 1, 128) &&
+        (!('status' in data) || data.status in ['open', 'closed', 'pending', 'resolved', 'archived']) &&
+        isOptionalNonNegativeNumber(data, 'unread_count') &&
+        isOptionalString(data, 'last_message_text', 0, 2000) &&
+        (!('last_sender_type' in data) || data.last_sender_type in ['customer', 'agent', 'bot', 'system']) &&
+        (!('has_customer_reply' in data) || data.has_customer_reply is bool) &&
+        isOptionalString(data, 'account_id', 0, 128) &&
+        isOptionalString(data, 'accountId', 0, 128) &&
+        (!('last_message_at' in data) || data.last_message_at == null || isValidTimeField(data.last_message_at)) &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimeField(data.updatedAt))
+      );
+    }
+
+    function isValidMessage(data) {
+      return (
+        isOptionalString(data, 'conversation_id', 1, 128) &&
+        (!('sender_type' in data) || data.sender_type in ['customer', 'agent', 'bot', 'system']) &&
+        isOptionalString(data, 'content_type', 1, 50) &&
+        isOptionalString(data, 'content_text', 0, 10000) &&
+        isOptionalString(data, 'template_name', 0, 100) &&
+        isOptionalString(data, 'message_id', 0, 128) &&
+        (!('status' in data) || data.status in ['pending', 'sent', 'delivered', 'read', 'failed']) &&
+        (!('created_at' in data) || isValidTimeField(data.created_at)) &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt))
+      );
+    }
+
+    function isValidBroadcast(data) {
+      return (
+        isRequiredString(data, 'name', 1, 100) &&
+        isOptionalString(data, 'templateName', 0, 100) &&
+        isOptionalString(data, 'templateLanguage', 0, 20) &&
+        isOptionalString(data, 'status', 1, 50) &&
+        isOptionalNonNegativeNumber(data, 'totalRecipients') &&
+        isOptionalNonNegativeNumber(data, 'sentCount') &&
+        isOptionalNonNegativeNumber(data, 'deliveredCount') &&
+        isOptionalNonNegativeNumber(data, 'readCount') &&
+        isOptionalNonNegativeNumber(data, 'failedCount') &&
+        isOptionalNonNegativeNumber(data, 'repliedCount') &&
+        isOptionalString(data, 'accountId', 0, 128) &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimeField(data.updatedAt)) &&
+        (!('scheduledAt' in data) || data.scheduledAt == null || isValidTimeField(data.scheduledAt))
+      );
+    }
+
+    function isValidBroadcastRecipient(data) {
+      return (
+        isOptionalString(data, 'phone', 3, 30) &&
+        (!('status' in data) || data.status in ['pending', 'sent', 'delivered', 'read', 'failed', 'replied']) &&
+        isOptionalString(data, 'whatsapp_message_id', 0, 128) &&
+        isOptionalString(data, 'error_message', 0, 1000) &&
+        (!('sent_at' in data) || data.sent_at == null || isValidTimeField(data.sent_at)) &&
+        (!('delivered_at' in data) || data.delivered_at == null || isValidTimeField(data.delivered_at)) &&
+        (!('read_at' in data) || data.read_at == null || isValidTimeField(data.read_at))
+      );
+    }
+
+    function isValidKeywordFlow(data) {
+      return (
+        isRequiredString(data, 'name', 1, 100) &&
+        ('keywords' in data && data.keywords is list && data.keywords.size() <= 100) &&
+        (!('response_type' in data) || data.response_type in ['text', 'template']) &&
+        isOptionalString(data, 'template_id', 0, 128) &&
+        isOptionalString(data, 'template_name', 0, 100) &&
+        isOptionalString(data, 'text_message', 0, 4000) &&
+        (!('is_active' in data) || data.is_active is bool) &&
+        isOptionalString(data, 'accountId', 0, 128) &&
+        isOptionalString(data, 'account_id', 0, 128) &&
+        isOptionalString(data, 'user_id', 0, 128) &&
+        (!('created_at' in data) || isValidTimeField(data.created_at)) &&
+        (!('updated_at' in data) || isValidTimeField(data.updated_at))
+      );
+    }
+
+    function isValidWhatsappConfig(data) {
+      return (
+        isOptionalString(data, 'phoneNumberId', 0, 100) &&
+        isOptionalString(data, 'phone_number_id', 0, 100) &&
+        isOptionalString(data, 'wabaId', 0, 100) &&
+        isOptionalString(data, 'waba_id', 0, 100) &&
+        isOptionalString(data, 'accessToken', 0, 2000) &&
+        isOptionalString(data, 'access_token', 0, 2000) &&
+        isOptionalString(data, 'verifyToken', 0, 200) &&
+        isOptionalString(data, 'verify_token', 0, 200) &&
+        isOptionalString(data, 'status', 0, 50) &&
+        isOptionalString(data, 'accountId', 0, 128) &&
+        isOptionalString(data, 'displayName', 0, 100) &&
+        isOptionalString(data, 'verified_name', 0, 100) &&
+        isOptionalString(data, 'phoneNumber', 0, 30) &&
+        isOptionalString(data, 'display_phone_number', 0, 30) &&
+        isOptionalString(data, 'quality_rating', 0, 50) &&
+        (!('connectedAt' in data) || data.connectedAt == null || isValidTimeField(data.connectedAt)) &&
+        (!('connected_at' in data) || data.connected_at == null || isValidTimeField(data.connected_at)) &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimeField(data.updatedAt))
+      );
+    }
+
+    function isValidWallet(data) {
+      return (
+        ('balance' in data && data.balance is number) &&
+        isOptionalNonNegativeNumber(data, 'lowBalanceAlert') &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimeField(data.updatedAt))
+      );
+    }
+
+    function isValidTemplate(data) {
+      return (
+        isRequiredString(data, 'name', 1, 100) &&
+        isOptionalString(data, 'category', 0, 50) &&
+        isOptionalString(data, 'language', 0, 20) &&
+        isRequiredString(data, 'bodyText', 1, 4000) &&
+        isOptionalString(data, 'status', 1, 50) &&
+        isOptionalString(data, 'accountId', 0, 128) &&
+        (!('createdAt' in data) || isValidTimeField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimeField(data.updatedAt))
+      );
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // ---------------------------------------------------------------
+    // Users Profile Collection
+    // ---------------------------------------------------------------
+    match /users/{userId} {
+      // User can only read their own profile (PII protection, prevents leaks)
+      allow read: if isOwner(userId) || isSuperAdmin();
+
+      // On creation, must match authenticated user, prevent self-granting admin roles
+      allow create: if isOwner(userId) &&
+        isValidUser(request.resource.data) &&
+        (isSuperAdmin() || request.resource.data.get('role', 'user') == 'user');
+
+      // On update, UID and role are protected; user cannot escalate privileges
+      allow update: if (isOwner(userId) || isSuperAdmin()) &&
+        isValidUser(request.resource.data) &&
+        areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+        (isSuperAdmin() || request.resource.data.get('role', 'user') == resource.data.get('role', 'user'));
+
+      // Account profiles can only be deleted by superadmins
+      allow delete: if isSuperAdmin();
+    }
+
+    // ---------------------------------------------------------------
+    // Accounts Collection & Subcollections (Multi-Tenant Core)
+    // ---------------------------------------------------------------
+    match /accounts/{accountId} {
+      // Tenant members can read account details
+      allow read: if canAccessAccount(accountId);
+
+      // Account can be created during signup if caller sets themselves as owner
+      allow create: if isAuthenticated() &&
+        isValidAccount(request.resource.data) &&
+        (
+          request.resource.data.get('ownerUserId', '') == request.auth.uid ||
+          request.resource.data.get('owner_user_id', '') == request.auth.uid ||
+          request.auth.uid == accountId ||
+          isSuperAdmin()
+        );
+
+      // Account updates require membership, protect ownership and creation time
+      allow update: if canAccessAccount(accountId) &&
+        isValidAccount(request.resource.data) &&
+        areImmutableFieldsUnchanged(['ownerUserId', 'owner_user_id', 'createdAt']);
+
+      // Account deletion restricted to owner or superadmin
+      allow delete: if isAuthenticated() &&
+        (request.auth.uid == accountId || isAccountDocOwner(accountId) || isSuperAdmin());
+
+      // -------------------------------------------------------------
+      // Subcollection: contacts
+      // -------------------------------------------------------------
+      match /contacts/{contactId} {
+        allow read: if canAccessAccount(accountId);
+        allow create: if canAccessAccount(accountId) && isValidContact(request.resource.data);
+        allow update: if canAccessAccount(accountId) &&
+          isValidContact(request.resource.data) &&
+          areImmutableFieldsUnchanged(['createdAt']);
+        allow delete: if canAccessAccount(accountId);
+
+        // Contact Notes
+        match /notes/{noteId} {
+          allow read, write: if canAccessAccount(accountId);
+        }
+      }
+
+      // -------------------------------------------------------------
+      // Subcollection: tags
+      // -------------------------------------------------------------
+      match /tags/{tagId} {
+        allow read: if canAccessAccount(accountId);
+        allow create: if canAccessAccount(accountId) && isValidTag(request.resource.data);
+        allow update: if canAccessAccount(accountId) &&
+          isValidTag(request.resource.data) &&
+          areImmutableFieldsUnchanged(['createdAt']);
+        allow delete: if canAccessAccount(accountId);
+      }
+
+      // -------------------------------------------------------------
+      // Subcollection: conversations & messages
+      // -------------------------------------------------------------
+      match /conversations/{conversationId} {
+        allow read: if canAccessAccount(accountId);
+        allow create: if canAccessAccount(accountId) && isValidConversation(request.resource.data);
+        allow update: if canAccessAccount(accountId) &&
+          isValidConversation(request.resource.data) &&
+          areImmutableFieldsUnchanged(['createdAt']);
+        allow delete: if canAccessAccount(accountId);
+
+        match /messages/{messageId} {
+          allow read: if canAccessAccount(accountId);
+          allow create: if canAccessAccount(accountId) && isValidMessage(request.resource.data);
+          allow update: if canAccessAccount(accountId) &&
+            isValidMessage(request.resource.data) &&
+            areImmutableFieldsUnchanged(['created_at', 'createdAt']);
+          allow delete: if canAccessAccount(accountId);
+        }
+      }
+
+      // -------------------------------------------------------------
+      // Subcollection: broadcasts & recipients
+      // -------------------------------------------------------------
+      match /broadcasts/{broadcastId} {
+        allow read: if canAccessAccount(accountId);
+        allow create: if canAccessAccount(accountId) && isValidBroadcast(request.resource.data);
+        allow update: if canAccessAccount(accountId) &&
+          isValidBroadcast(request.resource.data) &&
+          areImmutableFieldsUnchanged(['createdAt']);
+        allow delete: if canAccessAccount(accountId);
+
+        match /recipients/{recipientId} {
+          allow read: if canAccessAccount(accountId);
+          allow create: if canAccessAccount(accountId) && isValidBroadcastRecipient(request.resource.data);
+          allow update: if canAccessAccount(accountId) && isValidBroadcastRecipient(request.resource.data);
+          allow delete: if canAccessAccount(accountId);
+        }
+      }
+
+      // -------------------------------------------------------------
+      // Subcollection: keyword_flows (nested under account)
+      // -------------------------------------------------------------
+      match /keyword_flows/{flowId} {
+        allow read: if canAccessAccount(accountId);
+        allow create: if canAccessAccount(accountId) && isValidKeywordFlow(request.resource.data);
+        allow update: if canAccessAccount(accountId) &&
+          isValidKeywordFlow(request.resource.data) &&
+          areImmutableFieldsUnchanged(['id', 'created_at']);
+        allow delete: if canAccessAccount(accountId);
+      }
+
+      // -------------------------------------------------------------
+      // Subcollection: whatsapp_config (e.g. config document)
+      // -------------------------------------------------------------
+      match /whatsapp_config/{configId} {
+        allow read: if canAccessAccount(accountId);
+        allow create: if canAccessAccount(accountId) && isValidWhatsappConfig(request.resource.data);
+        allow update: if canAccessAccount(accountId) && isValidWhatsappConfig(request.resource.data);
+        allow delete: if canAccessAccount(accountId);
+      }
+
+      // -------------------------------------------------------------
+      // Subcollection: wallet (e.g. data document)
+      // -------------------------------------------------------------
+      match /wallet/{walletId} {
+        allow read: if canAccessAccount(accountId);
+        allow create: if canAccessAccount(accountId) && isValidWallet(request.resource.data);
+        allow update: if canAccessAccount(accountId) && isValidWallet(request.resource.data);
+        allow delete: if isAuthenticated() &&
+          (request.auth.uid == accountId || isAccountDocOwner(accountId) || isSuperAdmin());
+      }
+
+      // -------------------------------------------------------------
+      // Subcollection: templates
+      // -------------------------------------------------------------
+      match /templates/{templateId} {
+        allow read: if canAccessAccount(accountId);
+        allow create: if canAccessAccount(accountId) && isValidTemplate(request.resource.data);
+        allow update: if canAccessAccount(accountId) &&
+          isValidTemplate(request.resource.data) &&
+          areImmutableFieldsUnchanged(['createdAt']);
+        allow delete: if canAccessAccount(accountId);
+      }
+
+      // -------------------------------------------------------------
+      // Subcollection: members (team members within workspace)
+      // -------------------------------------------------------------
+      match /members/{memberId} {
+        allow read: if canAccessAccount(accountId);
+        allow write: if isAccountDocOwner(accountId) || isSuperAdmin();
+      }
+
+      // -------------------------------------------------------------
+      // Supporting Workspace Subcollections
+      // -------------------------------------------------------------
+      match /automations/{automationId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /flows/{flowId} {
+        allow read, write: if canAccessAccount(accountId);
+
+        match /runs/{runId} {
+          allow read, write: if canAccessAccount(accountId);
+        }
+      }
+
+      match /pipelines/{pipelineId} {
+        allow read, write: if canAccessAccount(accountId);
+
+        match /stages/{stageId} {
+          allow read, write: if canAccessAccount(accountId);
+        }
+      }
+
+      match /deals/{dealId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /billing_orders/{orderId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /wallet_transactions/{txId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /api_keys/{keyId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /notifications/{notificationId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /ai_knowledge/{knowledgeId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /quick_replies/{replyId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /webhooks/{webhookId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /ai_config/{configId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+
+      match /chatbot_config/{configId} {
+        allow read, write: if canAccessAccount(accountId);
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Top-Level Collection: whatsapp_configs/{accountId}
+    // ---------------------------------------------------------------
+    match /whatsapp_configs/{accountId} {
+      allow read: if canAccessAccount(accountId);
+      allow create: if canAccessAccount(accountId) && isValidWhatsappConfig(request.resource.data);
+      allow update: if canAccessAccount(accountId) && isValidWhatsappConfig(request.resource.data);
+      allow delete: if canAccessAccount(accountId);
+    }
+
+    // ---------------------------------------------------------------
+    // Top-Level Collection: keyword_flows/{flowId}
+    // ---------------------------------------------------------------
+    match /keyword_flows/{flowId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        canAccessAccount(resource.data.get('accountId', resource.data.get('account_id', ''))) ||
+        resource.data.get('user_id', '') == request.auth.uid
+      );
+
+      allow create: if isAuthenticated() &&
+        isValidKeywordFlow(request.resource.data) &&
+        (
+          isSuperAdmin() ||
+          canAccessAccount(request.resource.data.get('accountId', request.resource.data.get('account_id', ''))) ||
+          request.resource.data.get('user_id', '') == request.auth.uid
+        );
+
+      allow update: if isAuthenticated() &&
+        isValidKeywordFlow(request.resource.data) &&
+        (
+          isSuperAdmin() ||
+          canAccessAccount(resource.data.get('accountId', resource.data.get('account_id', ''))) ||
+          resource.data.get('user_id', '') == request.auth.uid
+        ) &&
+        areImmutableFieldsUnchanged(['id', 'created_at']);
+
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        canAccessAccount(resource.data.get('accountId', resource.data.get('account_id', ''))) ||
+        resource.data.get('user_id', '') == request.auth.uid
+      );
+    }
+
+    // ---------------------------------------------------------------
+    // Top-Level Collection: invitations & coupons
+    // ---------------------------------------------------------------
+    match /invitations/{invitationId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isSuperAdmin() || (
+        isAuthenticated() &&
+        canAccessAccount(request.resource.data.get('accountId', request.resource.data.get('account_id', '')))
+      );
+    }
+
+    match /coupons/{couponId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    match /whatsapp_message_lookups/{lookupId} {
+      allow read: if isAuthenticated() &&
+        canAccessAccount(resource.data.get('account_id', resource.data.get('accountId', '')));
+      allow write: if isSuperAdmin();
+    }
+  }
+}
