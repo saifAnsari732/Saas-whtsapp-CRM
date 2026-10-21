@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin';
 import { getWhatsAppConfigForAccount } from '@/lib/whatsapp/get-config';
 import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
 import { sanitizePhoneForMeta, isValidE164 } from '@/lib/whatsapp/phone-utils';
@@ -42,14 +42,13 @@ function resolveVariables(
       val = (customValues?.get(v.value) ?? '').toString().trim();
     }
     // Meta Cloud API strictly rejects empty strings ("") with error 131008 (Required parameter is missing).
-    // Ensure every parameter is a non-empty string! Fallback to "Customer" if name/field is empty.
     return val || 'Customer';
   });
 }
 
 /**
  * Executes a broadcast sending loop in the background.
- * Safe to call directly inside API handlers without network loopback fetch.
+ * Primary Datastore: Firebase Firestore.
  */
 export async function runBackgroundLoop(broadcastId: string, payload?: any) {
   if (activeBroadcastLocks.has(broadcastId)) {
@@ -58,123 +57,144 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
   }
   activeBroadcastLocks.add(broadcastId);
 
-  const supabase = createAdminClient();
+  const fDb = getAdminDb();
 
   try {
     console.log(`[runBackgroundLoop] Starting dispatch for broadcastId: ${broadcastId}`);
 
-    // 1. Fetch broadcast record
-    const { data: broadcast, error: bcErr } = await supabase
-      .from('broadcasts')
-      .select('*')
-      .eq('id', broadcastId)
-      .single();
+    let broadcast: any = null;
+    let accountId = payload?.accountId || '';
 
-    if (bcErr || !broadcast) {
-      console.error('[runBackgroundLoop] Broadcast record not found:', broadcastId, bcErr);
+    // 1. Fetch broadcast record from Firebase Firestore
+    if (fDb) {
+      try {
+        if (accountId) {
+          const nestedDoc = await fDb
+            .collection('accounts')
+            .doc(accountId)
+            .collection('broadcasts')
+            .doc(broadcastId)
+            .get();
+          if (nestedDoc.exists) {
+            broadcast = { id: nestedDoc.id, ...nestedDoc.data() };
+          }
+        }
+
+        if (!broadcast) {
+          const topDoc = await fDb.collection('broadcasts').doc(broadcastId).get();
+          if (topDoc.exists) {
+            broadcast = { id: topDoc.id, ...topDoc.data() };
+            accountId = accountId || broadcast.account_id || broadcast.accountId || '';
+          }
+        }
+      } catch (fsErr) {
+        console.warn('[runBackgroundLoop] Firestore broadcast read warning:', fsErr);
+      }
+    }
+
+    if (!broadcast) {
+      console.error('[runBackgroundLoop] Broadcast record not found in Firestore:', broadcastId);
       return;
     }
 
+    accountId = accountId || broadcast.account_id || broadcast.accountId || '';
+
     // 2. Fetch WhatsApp Meta Configuration for account
-    const config = await getWhatsAppConfigForAccount(broadcast.account_id);
+    const config = await getWhatsAppConfigForAccount(accountId);
     if (!config || !config.phone_number_id || !config.decrypted_access_token) {
-      console.error('[runBackgroundLoop] WhatsApp config missing for account:', broadcast.account_id);
-      await supabase
-        .from('broadcasts')
-        .update({ status: 'failed', failed_count: broadcast.total_recipients || 1 })
-        .eq('id', broadcastId);
+      console.error('[runBackgroundLoop] WhatsApp config missing for account:', accountId);
+      if (fDb) {
+        await fDb
+          .collection('accounts')
+          .doc(accountId)
+          .collection('broadcasts')
+          .doc(broadcastId)
+          .set({ status: 'failed', failed_count: broadcast.total_recipients || 1 }, { merge: true })
+          .catch(() => {});
+        await fDb.collection('broadcasts').doc(broadcastId).set({ status: 'failed' }, { merge: true }).catch(() => {});
+      }
       return;
     }
 
     // 3. Resolve template if not provided in payload
     let template = payload?.template;
-    if (!template) {
-      let query = supabase
-        .from('message_templates')
-        .select('*')
-        .eq('name', broadcast.template_name);
-
-      if (broadcast.account_id) {
-        query = query.eq('account_id', broadcast.account_id);
-      }
-      if (broadcast.template_language) {
-        query = query.eq('language', broadcast.template_language);
-      }
-
-      const { data: tplData } = await query.limit(1);
-      template = tplData?.[0];
-
-      if (!template) {
-        // Fallback search by template name only
-        const { data: fallbackTpl } = await supabase
-          .from('message_templates')
-          .select('*')
-          .eq('name', broadcast.template_name)
-          .limit(1);
-        template = fallbackTpl?.[0];
-      }
+    if (!template && fDb) {
+      try {
+        const tmplSnap = await fDb
+          .collection('message_templates')
+          .where('name', '==', broadcast.template_name)
+          .limit(1)
+          .get();
+        if (!tmplSnap.empty) {
+          template = tmplSnap.docs[0].data();
+        }
+      } catch {}
     }
 
     if (!template) {
       console.error('[runBackgroundLoop] Template not found for broadcast:', broadcast.template_name);
-      await supabase
-        .from('broadcasts')
-        .update({ status: 'failed', failed_count: broadcast.total_recipients || 1 })
-        .eq('id', broadcastId);
+      if (fDb) {
+        await fDb
+          .collection('accounts')
+          .doc(accountId)
+          .collection('broadcasts')
+          .doc(broadcastId)
+          .set({ status: 'failed', failed_count: broadcast.total_recipients || 1 }, { merge: true })
+          .catch(() => {});
+      }
       return;
     }
 
-    // 4. Fetch recipients joined with contact details
-    const { data: recipients, error: recipientsFetchError } = await supabase
-      .from('broadcast_recipients')
-      .select('*, contact:contacts(*)')
-      .eq('broadcast_id', broadcastId);
+    // 4. Fetch recipients from Firestore subcollection
+    let recipients: any[] = [];
+    let recDocsMap = new Map<string, any>();
 
-    if (recipientsFetchError || !recipients || recipients.length === 0) {
-      console.error('[runBackgroundLoop] Recipients fetch error or empty:', recipientsFetchError);
-      await supabase
-        .from('broadcasts')
-        .update({ status: 'failed' })
-        .eq('id', broadcastId);
+    if (fDb) {
+      try {
+        const recSnap = await fDb
+          .collection('accounts')
+          .doc(accountId)
+          .collection('broadcasts')
+          .doc(broadcastId)
+          .collection('recipients')
+          .get();
+
+        if (!recSnap.empty) {
+          recipients = recSnap.docs.map((d) => {
+            const data = d.data();
+            recDocsMap.set(d.id, d.ref);
+            return { id: d.id, ...data };
+          });
+        }
+      } catch (fsRecErr) {
+        console.warn('[runBackgroundLoop] Firestore recipients read warning:', fsRecErr);
+      }
+    }
+
+    if (recipients.length === 0) {
+      console.error('[runBackgroundLoop] Recipients list empty for broadcast:', broadcastId);
+      if (fDb) {
+        await fDb.collection('accounts').doc(accountId).collection('broadcasts').doc(broadcastId).set(cleanForFirestore({ status: 'failed' }), { merge: true }).catch(() => {});
+      }
       return;
     }
 
-    // Filter recipients that need sending (status === 'pending' or 'failed' if retrying)
+    // Filter recipients that need sending
     const pendingRecipients = recipients.filter((r: any) => r.status === 'pending');
     if (pendingRecipients.length === 0) {
       console.log(`[runBackgroundLoop] No pending recipients for broadcast ${broadcastId}. Marking finished.`);
       const currentSent = recipients.filter((r: any) => r.status === 'sent').length;
       const currentFailed = recipients.filter((r: any) => r.status === 'failed').length;
       const finalStatus = currentFailed === recipients.length ? 'failed' : 'sent';
-      await supabase
-        .from('broadcasts')
-        .update({
+      if (fDb) {
+        await fDb.collection('accounts').doc(accountId).collection('broadcasts').doc(broadcastId).set(cleanForFirestore({
           status: finalStatus,
           sent_count: currentSent,
           delivered_count: currentSent,
           failed_count: currentFailed,
-        })
-        .eq('id', broadcastId);
-      return;
-    }
-
-    // 5. Preload custom field values
-    const contactIds = pendingRecipients.map((r: any) => r.contact?.id).filter(Boolean);
-    const customValueIndex = new Map<string, Map<string, string>>();
-
-    if (contactIds.length > 0) {
-      const { data: cvData } = await supabase
-        .from('contact_custom_values')
-        .select('*')
-        .in('contact_id', contactIds);
-      if (cvData) {
-        for (const row of cvData) {
-          if (!customValueIndex.has(row.contact_id)) {
-            customValueIndex.set(row.contact_id, new Map());
-          }
-          customValueIndex.get(row.contact_id)!.set(row.custom_field_id, row.value ?? '');
-        }
+        }), { merge: true }).catch(() => {});
       }
+      return;
     }
 
     let sentCount = recipients.filter((r: any) => r.status === 'sent').length;
@@ -183,7 +203,7 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
     const headerType = template?.header_type;
     const isMediaHeader =
       headerType === 'image' || headerType === 'video' || headerType === 'document';
-    const headerMediaUrl = (payload?.headerMediaUrl || template?.header_media_url)?.trim();
+    const headerMediaUrl = (payload?.headerMediaUrl || template?.header_media_url || broadcast.header_media_url)?.trim();
     const messageParams = isMediaHeader && headerMediaUrl ? { headerMediaUrl } : undefined;
     const variables = payload?.variables ?? broadcast.template_variables ?? {};
 
@@ -191,25 +211,25 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
       const batch = pendingRecipients.slice(i, i + SEND_BATCH_SIZE);
 
       for (const recipient of batch) {
-        const rawPhone = recipient.contact?.phone || '';
+        const rawPhone = recipient.contact?.phone || recipient.phone || '';
         const sanitized = sanitizePhoneForMeta(rawPhone);
 
         if (!sanitized || !isValidE164(sanitized)) {
           failedCount++;
-          await supabase
-            .from('broadcast_recipients')
-            .update({
+          const recRef = recDocsMap.get(recipient.id);
+          if (recRef) {
+            await recRef.set({
               status: 'failed',
               error_message: 'Invalid phone number format',
-            })
-            .eq('id', recipient.id);
+              updated_at: new Date().toISOString(),
+            }, { merge: true }).catch(() => {});
+          }
           continue;
         }
 
         const params = resolveVariables(
           variables,
-          recipient.contact ?? {},
-          customValueIndex.get(recipient.contact?.id)
+          recipient.contact ?? {}
         );
 
         try {
@@ -225,68 +245,80 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
           });
 
           sentCount++;
-          await supabase
-            .from('broadcast_recipients')
-            .update({
+          const recRef = recDocsMap.get(recipient.id);
+          if (recRef) {
+            await recRef.set(cleanForFirestore({
               status: 'sent',
               sent_at: new Date().toISOString(),
-              whatsapp_message_id: result.messageId,
+              whatsapp_message_id: result.messageId || null,
               error_message: null,
-            })
-            .eq('id', recipient.id);
+            }), { merge: true }).catch(() => {});
+          }
 
-          // Auto-sync into Inbox: ensure a conversation and message thread exists
-          if (recipient.contact?.id && broadcast.account_id) {
+          // Save direct message-to-recipient lookup for 100% reliable instant webhook delivery/read/reply tracking
+          if (fDb && result.messageId) {
+            const lookupPayload = cleanForFirestore({
+              message_id: result.messageId,
+              broadcast_id: broadcastId,
+              recipient_id: recipient.id,
+              account_id: accountId,
+              contact_id: recipient.contact?.id || null,
+              phone: sanitized,
+              created_at: new Date().toISOString(),
+            });
+            await Promise.allSettled([
+              fDb.collection('whatsapp_message_lookups').doc(result.messageId).set(lookupPayload),
+              fDb.collection('whatsapp_contact_last_broadcast').doc(`${accountId}_${sanitized}`).set(lookupPayload),
+              recipient.contact?.id
+                ? fDb.collection('whatsapp_contact_last_broadcast').doc(`${accountId}_${recipient.contact.id}`).set(lookupPayload)
+                : Promise.resolve(),
+            ]).catch(() => {});
+          }
+
+          // Update real-time live counts in Firestore after each message send
+          if (fDb) {
+            const liveProgress = cleanForFirestore({
+              sent_count: sentCount,
+              failed_count: failedCount,
+              updated_at: new Date().toISOString(),
+            });
+            void Promise.allSettled([
+              fDb.collection('accounts').doc(accountId).collection('broadcasts').doc(broadcastId).set(liveProgress, { merge: true }),
+              fDb.collection('broadcasts').doc(broadcastId).set(liveProgress, { merge: true }),
+            ]);
+          }
+
+          // Auto-sync into Inbox in Firestore
+          if (fDb && accountId && recipient.contact?.id) {
             try {
-              let { data: convRow } = await supabase
-                .from('conversations')
-                .select('id')
-                .eq('account_id', broadcast.account_id)
-                .eq('contact_id', recipient.contact.id)
-                .maybeSingle();
-
+              const contactId = recipient.contact.id;
+              const convId = `conv_${contactId}`;
+              const convRef = fDb.collection('accounts').doc(accountId).collection('conversations').doc(convId);
               const nowIso = new Date().toISOString();
-              if (!convRow) {
-                const { data: newC } = await supabase
-                  .from('conversations')
-                  .insert({
-                    account_id: broadcast.account_id,
-                    user_id: broadcast.user_id || (config as any).user_id || broadcast.account_id,
-                    contact_id: recipient.contact.id,
-                    last_message_text: template.name,
-                    last_message_at: nowIso,
-                    status: 'open',
-                    unread_count: 0,
-                  })
-                  .select('id')
-                  .maybeSingle();
-                convRow = newC;
-              } else {
-                await supabase
-                  .from('conversations')
-                  .update({
-                    last_message_text: template.name,
-                    last_message_at: nowIso,
-                  })
-                  .eq('id', convRow.id);
-              }
 
-              if (convRow && result.messageId) {
-                await supabase
-                  .from('messages')
-                  .insert({
-                    conversation_id: convRow.id,
-                    sender_type: 'agent',
-                    content_type: 'template',
-                    content_text: `Template: ${template.name}`,
-                    template_name: template.name,
-                    message_id: result.messageId,
-                    status: 'sent',
-                    created_at: nowIso,
-                  });
-              }
+              await convRef.set(cleanForFirestore({
+                id: convId,
+                account_id: accountId,
+                contact_id: contactId,
+                last_message_text: `Template: ${template.name}`,
+                last_message_at: nowIso,
+                status: 'open',
+                unread_count: 0,
+                updatedAt: nowIso,
+              }), { merge: true });
+
+              await convRef.collection('messages').add(cleanForFirestore({
+                conversation_id: convId,
+                sender_type: 'agent',
+                content_type: 'template',
+                content_text: `Template: ${template.name}`,
+                template_name: template.name,
+                message_id: result.messageId || null,
+                status: 'sent',
+                created_at: nowIso,
+              }));
             } catch (syncErr) {
-              console.warn('[runBackgroundLoop] conv sync error:', syncErr);
+              console.warn('[runBackgroundLoop] Inbox sync warning:', syncErr);
             }
           }
 
@@ -296,31 +328,44 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
           const errMsg = sendErr?.message || 'Meta API error';
           console.error(`[runBackgroundLoop] Send failed for ${sanitized}:`, errMsg);
 
-          await supabase
-            .from('broadcast_recipients')
-            .update({
+          const recRef = recDocsMap.get(recipient.id);
+          if (recRef) {
+            await recRef.set(cleanForFirestore({
               status: 'failed',
               error_message: errMsg,
-            })
-            .eq('id', recipient.id);
+              updated_at: new Date().toISOString(),
+            }), { merge: true }).catch(() => {});
+          }
+
+          // Update real-time live counts on failure as well
+          if (fDb) {
+            const liveProgress = cleanForFirestore({
+              sent_count: sentCount,
+              failed_count: failedCount,
+              updated_at: new Date().toISOString(),
+            });
+            void Promise.allSettled([
+              fDb.collection('accounts').doc(accountId).collection('broadcasts').doc(broadcastId).set(liveProgress, { merge: true }),
+              fDb.collection('broadcasts').doc(broadcastId).set(liveProgress, { merge: true }),
+            ]);
+          }
         }
 
-        // Safe Anti-Ban & Rate-Limit Staggering between individual messages (Default 10 seconds)
-        const perMsgDelay = payload?.delaySeconds 
-          ? payload.delaySeconds * 1000 
-          : 10000;
+        // Delay between individual messages
+        const perMsgDelay = payload?.delaySeconds
+          ? payload.delaySeconds * 1000
+          : (broadcast.delay_seconds ? broadcast.delay_seconds * 1000 : 10000);
         await sleep(perMsgDelay);
       }
 
-      // Update broadcast aggregate counts
-      await supabase
-        .from('broadcasts')
-        .update({
+      // Update broadcast aggregate counts in Firestore
+      if (fDb) {
+        await fDb.collection('accounts').doc(accountId).collection('broadcasts').doc(broadcastId).set(cleanForFirestore({
           sent_count: sentCount,
-          delivered_count: sentCount,
           failed_count: failedCount,
-        })
-        .eq('id', broadcastId);
+          updated_at: new Date().toISOString(),
+        }), { merge: true }).catch(() => {});
+      }
 
       if (i + SEND_BATCH_SIZE < pendingRecipients.length) {
         await sleep(payload?.batchDelayMs ?? SEND_BATCH_DELAY_MS);
@@ -328,20 +373,23 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
     }
 
     const finalStatus = failedCount === recipients.length ? 'failed' : 'sent';
-    await supabase
-      .from('broadcasts')
-      .update({
+    if (fDb) {
+      const finalUpdate = cleanForFirestore({
         status: finalStatus,
         sent_count: sentCount,
-        delivered_count: sentCount,
         failed_count: failedCount,
-      })
-      .eq('id', broadcastId);
+        updated_at: new Date().toISOString(),
+      });
+      await fDb.collection('accounts').doc(accountId).collection('broadcasts').doc(broadcastId).set(finalUpdate, { merge: true }).catch(() => {});
+      await fDb.collection('broadcasts').doc(broadcastId).set(finalUpdate, { merge: true }).catch(() => {});
+    }
 
     console.log(`[runBackgroundLoop] Finished broadcast ${broadcastId}. Sent: ${sentCount}, Failed: ${failedCount}`);
   } catch (e: any) {
     console.error('[runBackgroundLoop] Fatal loop exception:', e);
-    await supabase.from('broadcasts').update({ status: 'failed' }).eq('id', broadcastId);
+    if (fDb) {
+      await fDb.collection('broadcasts').doc(broadcastId).set(cleanForFirestore({ status: 'failed' }), { merge: true }).catch(() => {});
+    }
   } finally {
     activeBroadcastLocks.delete(broadcastId);
   }

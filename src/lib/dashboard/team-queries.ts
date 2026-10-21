@@ -10,30 +10,28 @@ export interface TeamMemberActivity {
   messagesSent: number
 }
 
-export async function loadTeamActivity(db: SupabaseClient, accountId: string): Promise<TeamMemberActivity[]> {
-  const { data, error } = await db
-    .from('profiles')
-    .select('id, full_name, email, role, account_role, avatar_url')
-    .eq('account_id', accountId)
-    
-  if (error) throw error;
-  
-  // Also get some stats for each user
-  const { data: messages } = await db
-    .from('messages')
-    .select('sender_id')
-    .eq('sender_type', 'agent')
-    .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-    
-  const msgCounts: Record<string, number> = {}
-  if (messages) {
-    messages.forEach(m => {
-      msgCounts[m.sender_id] = (msgCounts[m.sender_id] || 0) + 1
-    })
+/**
+ * Loads team activity for the current account.
+ * Uses the secure server-side /api/dashboard/team-activity endpoint
+ * backed by Firebase Auth & Firestore with graceful fallbacks.
+ */
+export async function loadTeamActivity(
+  _db?: SupabaseClient | any,
+  _accountId?: string
+): Promise<TeamMemberActivity[]> {
+  try {
+    const res = await fetch('/api/dashboard/team-activity', { cache: 'no-store' });
+    if (!res.ok) {
+      console.warn(`[loadTeamActivity] endpoint returned status: ${res.status}`);
+      return [];
+    }
+    const data = await res.json();
+    if (Array.isArray(data?.team)) {
+      return data.team;
+    }
+    return [];
+  } catch (err) {
+    console.warn('[loadTeamActivity] fetch warning:', err);
+    return [];
   }
-  
-  return (data || []).map(p => ({
-    ...p,
-    messagesSent: msgCounts[p.id] || 0
-  }))
 }

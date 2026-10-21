@@ -148,14 +148,40 @@ export async function POST(request: Request) {
 
     const accessToken = config.decrypted_access_token
 
-    const supabase = await createClient()
-    const { data: rawTemplateRow } = await supabase
-      .from('message_templates')
-      .select('*')
-      .eq('account_id', accountId)
-      .eq('name', template_name)
-      .eq('language', template_language || 'en_US')
-      .maybeSingle()
+    let rawTemplateRow: any = null;
+    try {
+      const { getAdminDb } = await import('@/lib/firebase/admin');
+      const fDb = getAdminDb();
+      if (fDb) {
+        const tmplSnap = await fDb
+          .collection('message_templates')
+          .where('name', '==', template_name)
+          .limit(1)
+          .get();
+        if (!tmplSnap.empty) {
+          rawTemplateRow = tmplSnap.docs[0].data();
+        }
+      }
+    } catch {}
+
+    if (!rawTemplateRow) {
+      try {
+        const supabase = await createClient();
+        const fetchTmpl = supabase
+          .from('message_templates')
+          .select('*')
+          .eq('account_id', accountId)
+          .eq('name', template_name)
+          .eq('language', template_language || 'en_US')
+          .maybeSingle();
+        const timeout = new Promise<{ data: null }>((res) =>
+          setTimeout(() => res({ data: null }), 1500)
+        );
+        const res = await Promise.race([fetchTmpl, timeout]);
+        if (res?.data) rawTemplateRow = res.data;
+      } catch {}
+    }
+
     if (rawTemplateRow && !isMessageTemplate(rawTemplateRow)) {
       return NextResponse.json(
         {

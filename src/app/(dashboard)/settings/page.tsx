@@ -17,6 +17,7 @@ import { QuickRepliesManager } from '@/components/settings/quick-replies-manager
 import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
 import { DealsSettings } from '@/components/settings/deals-settings';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
+import { MembersTab } from '@/components/settings/members-tab';
 import {
   resolveSection,
   type SettingsSection,
@@ -57,6 +58,7 @@ function SettingsPageInner() {
     overview: <SettingsOverview onSelect={go} />,
     profile: <ProfileForm />,
     security: <SecurityPanel />,
+    members: <MembersTab />,
     appearance: <AppearancePanel />,
     whatsapp: <WhatsAppConfig />,
     templates: <TemplateManager />,

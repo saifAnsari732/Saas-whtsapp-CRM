@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
-import { getAdminDb } from '@/lib/firebase/admin';
+import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin';
 import { getAccountContext } from '@/lib/firebase/auth-helper';
+
+export const dynamic = 'force-dynamic';
 
 export interface InteractiveButton {
   type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
@@ -86,124 +86,176 @@ export const DEMO_TEMPLATES = [
       { type: 'QUICK_REPLY', text: 'Talk to Support' }
     ],
     status: 'Approved'
+  },
+  {
+    name: 'festive_offer_image_banner',
+    category: 'Marketing',
+    language: 'en_US',
+    header_type: 'image',
+    header_content: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200&q=80',
+    header_media_url: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200&q=80',
+    body_text: 'Dear {{name}}, celebrate this special occasion with exclusive offers! Get flat 40% OFF on all products today.\n\nReply to this message or tap below to claim your discount.',
+    footer_text: 'Limited Period Offer • ChatFlyr',
+    buttons: [
+      { type: 'QUICK_REPLY', text: 'Claim 40% OFF 🎉' },
+      { type: 'URL', text: 'View Catalog', url: 'https://chatflyr.com' }
+    ],
+    status: 'Approved'
   }
 ];
 
+export function normalizeTemplateRecord(docId: string, data: any) {
+  const header_type = data.header_type || data.headerType || data.header_format || data.headerFormat || null;
+  const header_media_url = data.header_media_url || data.headerMediaUrl || null;
+  const body_text = data.body_text || data.bodyText || '';
+  const footer_text = data.footer_text || data.footerText || null;
+  const header_content = data.header_content || data.headerContent || null;
+
+  return {
+    ...data,
+    id: docId || data.id,
+    name: data.name,
+    category: data.category || 'Marketing',
+    language: data.language || 'en_US',
+    header_type: header_type ? String(header_type).toLowerCase() : null,
+    headerType: header_type ? String(header_type).toLowerCase() : null,
+    header_format: header_type ? String(header_type).toLowerCase() : null,
+    headerFormat: header_type ? String(header_type).toLowerCase() : null,
+    header_media_url,
+    headerMediaUrl: header_media_url,
+    body_text,
+    bodyText: body_text,
+    footer_text,
+    footerText: footer_text,
+    header_content,
+    headerContent: header_content,
+    buttons: data.buttons || [],
+    status: (data.status || 'APPROVED').toUpperCase(),
+  };
+}
+
 export async function GET(request: Request) {
   try {
-    const accCtx = await getAccountContext(request as any)
-    let user = accCtx?.user
-    let accountId = accCtx?.accountId
+    const accCtx = await getAccountContext(request as any);
+    const user = accCtx?.user;
+    const accountId = accCtx?.accountId;
 
-    if (!user) {
+    if (!user || !accountId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const statusFilter = searchParams.get('status');
+
+    const mergedMap = new Map<string, any>();
+    const db = getAdminDb();
+
+    if (db) {
+      // 1. Fetch from accounts/{accountId}/templates
       try {
-        const supabase = await createClient()
-        const { data: { user: sbUser } } = await supabase.auth.getUser()
-        if (sbUser) {
-          user = { uid: sbUser.id, email: sbUser.email || undefined }
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('account_id')
-            .eq('user_id', sbUser.id)
-            .maybeSingle()
-          accountId = profile?.account_id || `acct-${sbUser.id}`
-        }
-      } catch (_err) {}
-    }
+        const acctSnap = await db
+          .collection('accounts')
+          .doc(accountId)
+          .collection('templates')
+          .get();
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    if (!accountId) {
-      accountId = `acct-${user.uid}`
-    }
-
-    const { searchParams } = new URL(request.url)
-    const statusFilter = searchParams.get('status')
-
-    const mergedMap = new Map<string, any>()
-
-    // 1. Fetch from Firestore
-    try {
-      const db = getAdminDb()
-      const fsSnap = await db
-        .collection('message_templates')
-        .where('account_id', '==', accountId)
-        .get()
-
-      fsSnap.forEach((doc) => {
-        const data = doc.data()
-        const key = `${data.name}_${data.language || 'en_US'}`.toLowerCase()
-        mergedMap.set(key, { id: doc.id, ...data })
-      })
-    } catch (fsErr) {
-      console.warn('[templates GET] Firestore read warning:', fsErr)
-    }
-
-    // 2. Fetch from Supabase
-    try {
-      const supabase = createAdminClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      )
-      const { data: sbTemplates } = await supabase
-        .from('message_templates')
-        .select('*')
-        .eq('account_id', accountId)
-        .order('created_at', { ascending: false })
-
-      if (sbTemplates) {
-        sbTemplates.forEach((t) => {
-          const key = `${t.name}_${t.language || 'en_US'}`.toLowerCase()
-          if (!mergedMap.has(key)) {
-            mergedMap.set(key, t)
-          }
-        })
+        acctSnap.forEach((doc) => {
+          const norm = normalizeTemplateRecord(doc.id, doc.data());
+          const key = `${norm.name}_${norm.language || 'en_US'}`.toLowerCase();
+          mergedMap.set(key, norm);
+        });
+      } catch (acctErr) {
+        console.warn('[templates GET] Account templates read warning:', acctErr);
       }
-    } catch (sbErr) {
-      console.warn('[templates GET] Supabase read warning:', sbErr)
+
+      // 2. Fetch from message_templates where account_id == accountId or accountId == accountId
+      try {
+        const [snap1, snap2] = await Promise.all([
+          db.collection('message_templates').where('account_id', '==', accountId).get(),
+          db.collection('message_templates').where('accountId', '==', accountId).get(),
+        ]);
+
+        const mergeSnapDoc = (doc: any) => {
+          const norm = normalizeTemplateRecord(doc.id, doc.data());
+          const key = `${norm.name}_${norm.language || 'en_US'}`.toLowerCase();
+          if (!mergedMap.has(key)) {
+            mergedMap.set(key, norm);
+          } else {
+            const existing = mergedMap.get(key);
+            mergedMap.set(key, {
+              ...existing,
+              ...norm,
+              header_media_url: norm.header_media_url || existing.header_media_url || null,
+              headerMediaUrl: norm.header_media_url || existing.header_media_url || null,
+              header_type: norm.header_type || existing.header_type || null,
+              headerType: norm.header_type || existing.header_type || null,
+            });
+          }
+        };
+
+        snap1.forEach(mergeSnapDoc);
+        snap2.forEach(mergeSnapDoc);
+      } catch (fsErr) {
+        console.warn('[templates GET] message_templates read warning:', fsErr);
+      }
+
+      // 3. Fallback: Seed DEMO_TEMPLATES into Firestore if account has no templates yet
+      if (mergedMap.size === 0) {
+        for (const dt of DEMO_TEMPLATES) {
+          const docId = `tmpl_${dt.name}_${accountId.slice(0, 8)}`;
+          const tmplData = cleanForFirestore({
+            id: docId,
+            ...dt,
+            account_id: accountId,
+            accountId: accountId,
+            user_id: user.uid,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          mergedMap.set(`${dt.name}_${dt.language}`.toLowerCase(), tmplData);
+
+          // Save asynchronously
+          void Promise.allSettled([
+            db.collection('message_templates').doc(docId).set(tmplData),
+            db.collection('accounts').doc(accountId).collection('templates').doc(docId).set(tmplData),
+          ]).catch(() => {});
+        }
+      }
     }
 
-    let templates = Array.from(mergedMap.values())
+    let templates = Array.from(mergedMap.values());
 
     if (statusFilter && statusFilter !== 'all') {
       templates = templates.filter(
         (t) => (t.status || '').toLowerCase() === statusFilter.toLowerCase()
-      )
+      );
     }
 
-    return NextResponse.json({ success: true, templates })
+    return NextResponse.json({ success: true, templates });
   } catch (error: any) {
-    console.error('Failed to fetch templates:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Failed to fetch templates:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const accCtx = await getAccountContext(request as any);
+    const user = accCtx?.user;
+    const accountId = accCtx?.accountId;
 
-    if (authError || !user) {
+    if (!user || !accountId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .maybeSingle();
-
-    const accountId = profile?.account_id || user.id;
     const body = await request.json();
-
     const {
       name,
       category = 'Marketing',
       language = 'en_US',
       header_type = 'text',
       header_content = '',
+      header_media_url = null,
       body_text,
       footer_text = '',
       buttons = [],
@@ -214,38 +266,40 @@ export async function POST(request: Request) {
     }
 
     const cleanName = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    const docId = `tmpl_${cleanName}_${Date.now()}`;
+    const nowIso = new Date().toISOString();
 
-    const record = {
+    const resolvedHeaderMedia = header_media_url || body.header_media_url || null;
+    const resolvedHeaderType = header_type || (resolvedHeaderMedia ? 'image' : (header_content ? 'text' : null));
+
+    const record = cleanForFirestore({
+      id: docId,
       name: cleanName,
       category,
       language,
-      header_type: header_content ? header_type : null,
+      header_type: resolvedHeaderType,
       header_content: header_content || null,
+      header_media_url: resolvedHeaderMedia,
       body_text,
       footer_text: footer_text || null,
       buttons: Array.isArray(buttons) ? buttons : [],
       status: 'Approved',
       account_id: accountId,
-      user_id: user.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+      accountId: accountId,
+      user_id: user.uid,
+      created_at: nowIso,
+      updated_at: nowIso,
+    });
 
-    const { data: inserted, error: insertError } = await supabase
-      .from('message_templates')
-      .insert([record])
-      .select('*')
-      .single();
-
-    if (insertError) {
-      console.warn('Supabase insert template failed:', insertError);
-      return NextResponse.json({
-        success: true,
-        template: { id: `local-tmpl-${Date.now()}`, ...record }
-      });
+    const db = getAdminDb();
+    if (db) {
+      await Promise.allSettled([
+        db.collection('message_templates').doc(docId).set(record),
+        db.collection('accounts').doc(accountId).collection('templates').doc(docId).set(record),
+      ]);
     }
 
-    return NextResponse.json({ success: true, template: inserted });
+    return NextResponse.json({ success: true, template: record });
   } catch (error: any) {
     console.error('Failed to create template:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -254,15 +308,16 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const accCtx = await getAccountContext(request as any);
+    const user = accCtx?.user;
+    const accountId = accCtx?.accountId;
 
-    if (authError || !user) {
+    if (!user || !accountId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
-    const { id, name, category, language, header_type, header_content, body_text, footer_text, buttons } = body;
+    const { id, name, category, language, header_type, header_content, header_media_url, body_text, footer_text, buttons } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Template ID is required' }, { status: 400 });
@@ -277,26 +332,26 @@ export async function PUT(request: Request) {
     if (language) updatePayload.language = language;
     if (header_type !== undefined) updatePayload.header_type = header_type;
     if (header_content !== undefined) updatePayload.header_content = header_content || null;
+    if (header_media_url !== undefined || body.header_media_url !== undefined) {
+      updatePayload.header_media_url = header_media_url ?? body.header_media_url ?? null;
+    }
     if (body_text) updatePayload.body_text = body_text;
     if (footer_text !== undefined) updatePayload.footer_text = footer_text || null;
     if (buttons !== undefined) updatePayload.buttons = Array.isArray(buttons) ? buttons : [];
 
-    const { data: updated, error: updateError } = await supabase
-      .from('message_templates')
-      .update(updatePayload)
-      .eq('id', id)
-      .select('*')
-      .maybeSingle();
-
-    if (updateError) {
-      console.warn('Supabase update template error:', updateError);
-      return NextResponse.json({
-        success: true,
-        template: { id, ...updatePayload }
-      });
+    const cleanedUpdate = cleanForFirestore(updatePayload);
+    const db = getAdminDb();
+    if (db) {
+      await Promise.allSettled([
+        db.collection('message_templates').doc(id).set(cleanedUpdate, { merge: true }),
+        db.collection('accounts').doc(accountId).collection('templates').doc(id).set(cleanedUpdate, { merge: true }),
+      ]);
     }
 
-    return NextResponse.json({ success: true, template: updated });
+    return NextResponse.json({
+      success: true,
+      template: { id, ...cleanedUpdate },
+    });
   } catch (error: any) {
     console.error('Failed to update template:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -305,10 +360,11 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const accCtx = await getAccountContext(request as any);
+    const user = accCtx?.user;
+    const accountId = accCtx?.accountId;
 
-    if (authError || !user) {
+    if (!user || !accountId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -319,7 +375,13 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Template ID is required' }, { status: 400 });
     }
 
-    await supabase.from('message_templates').delete().eq('id', id);
+    const db = getAdminDb();
+    if (db) {
+      await Promise.allSettled([
+        db.collection('message_templates').doc(id).delete(),
+        db.collection('accounts').doc(accountId).collection('templates').doc(id).delete(),
+      ]);
+    }
 
     return NextResponse.json({ success: true, message: 'Template deleted' });
   } catch (error: any) {

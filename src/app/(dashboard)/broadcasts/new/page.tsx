@@ -46,7 +46,9 @@ import {
   Trash2,
   FileText,
   Tag,
-  Check
+  Check,
+  Image as ImageIcon,
+  Sparkles
 } from 'lucide-react';
 
 export default function NewBroadcastPage() {
@@ -121,7 +123,8 @@ export default function NewBroadcastPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
-  const requiresMedia = selectedTemplate?.header_type && selectedTemplate.header_type !== 'text' && selectedTemplate.header_type !== ('none' as any);
+  const headerType = (selectedTemplate?.header_type || (selectedTemplate as any)?.headerType || (selectedTemplate as any)?.header_format || (selectedTemplate as any)?.headerFormat || '').toLowerCase();
+  const requiresMedia = Boolean(headerType && headerType !== 'text' && headerType !== 'none');
 
   const placeholders = useMemo(() => {
     if (!selectedTemplate) return [];
@@ -210,9 +213,10 @@ export default function NewBroadcastPage() {
 
   // Pre-fill the header media URL if the template already has one saved permanently
   useEffect(() => {
-    if (selectedTemplate && requiresMedia && selectedTemplate.header_media_url) {
-      setHeaderMediaUrl(selectedTemplate.header_media_url);
-    } else {
+    const savedUrl = selectedTemplate?.header_media_url || (selectedTemplate as any)?.headerMediaUrl;
+    if (selectedTemplate && requiresMedia && savedUrl) {
+      setHeaderMediaUrl(savedUrl);
+    } else if (!savedUrl) {
       setHeaderMediaUrl('');
     }
   }, [selectedTemplate, requiresMedia]);
@@ -233,13 +237,46 @@ export default function NewBroadcastPage() {
           t.id === selectedTemplateId ? { ...t, header_media_url: publicUrl } : t
         ));
       }
-      toast.success('Media uploaded successfully!');
+      toast.success('Media uploaded and permanently saved to template!');
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : 'Failed to upload file');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const [isSavingMediaUrl, setIsSavingMediaUrl] = useState(false);
+
+  const handleSaveMediaUrlToTemplate = async (urlToSave?: string) => {
+    const finalUrl = (urlToSave || headerMediaUrl).trim();
+    if (!selectedTemplateId || !finalUrl) {
+      toast.error('Please enter a valid image URL first');
+      return;
+    }
+    try {
+      setIsSavingMediaUrl(true);
+      const res = await fetch('/api/whatsapp/templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedTemplateId,
+          header_media_url: finalUrl,
+        }),
+      });
+      if (res.ok) {
+        setTemplates(prev => prev.map(t => 
+          t.id === selectedTemplateId ? { ...t, header_media_url: finalUrl } : t
+        ));
+        toast.success('Image URL permanently saved to template!');
+      } else {
+        toast.error('Failed to link media URL to template');
+      }
+    } catch {
+      toast.error('Failed to link media URL to template');
+    } finally {
+      setIsSavingMediaUrl(false);
     }
   };
 
@@ -791,17 +828,6 @@ export default function NewBroadcastPage() {
                       </div>
                     </div>
                   )}
-
-                  {/* Smart Validation Explanatory Card */}
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200/80 dark:border-zinc-800/80 text-[11px] space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
-                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                      <span>Smart Number Auto-Correction Active</span>
-                    </div>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Indian 10-digit mobile numbers (e.g. <code>9511450924</code>) automatically receive country code <code>91</code>. Accidental duplicate prefixes (<code>9191...</code>), international zeros (<code>0091...</code>), trunk zeros (<code>0...</code>), hyphens, and spaces are automatically filtered so no message ever fails.
-                    </p>
-                  </div>
                 </TabsContent>
 
                 {/* TAB: Contact Group */}
@@ -1065,74 +1091,169 @@ export default function NewBroadcastPage() {
                       );
                     })}
                   </div>
-
-                  <div className="flex items-start gap-2 text-[11px] text-muted-foreground bg-emerald-50/50 dark:bg-emerald-950/20 p-2.5 rounded-xl border border-emerald-200/50 dark:border-emerald-900/30">
-                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <span>
-                      <strong>Safe Fallback:</strong> If a contact has no name saved, our system automatically supplies <em>&quot;Customer&quot;</em> so WhatsApp Meta API never rejects delivery due to missing parameters.
-                    </span>
-                  </div>
                 </div>
               )}
 
               {/* Header Media Attachment */}
-              {requiresMedia && (
-                <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80">
-                  <Label className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
-                    <UploadCloud className="h-4 w-4 text-emerald-600" />
-                    <span>Header Media Attachment (Required by Template)</span>
-                  </Label>
-                  
-                  <div className="flex flex-col gap-2.5">
-                    <div className="flex gap-2">
-                      <Input 
-                        placeholder="https://example.com/banner.jpg"
-                        value={headerMediaUrl}
-                        onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                        className="bg-slate-50/50 dark:bg-zinc-950 flex-1 text-xs rounded-xl h-10 border-slate-200 dark:border-zinc-800"
-                      />
-                      
-                      {headerMediaUrl && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          onClick={() => setHeaderMediaUrl('')}
-                          title="Remove media attachment"
-                          className="h-10 w-10 border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl shrink-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
+              {requiresMedia ? (
+                <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-zinc-800/80">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <Label className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
+                      <ImageIcon className="h-4 w-4 text-emerald-600" />
+                      <span>Header Media Attachment ({selectedTemplate?.header_type?.toUpperCase() || 'IMAGE'})</span>
+                    </Label>
+                    <Badge variant="outline" className="w-fit bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                      <Sparkles className="h-3 w-3" />
+                      <span>Permanent One-Time Cloud Upload</span>
+                    </Badge>
+                  </div>
 
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        className="hidden"
-                        accept={selectedTemplate?.header_type === 'video' ? 'video/*' : selectedTemplate?.header_type === 'document' ? '.pdf,.doc,.docx' : 'image/*'}
-                        onChange={handleFileUpload}
-                      />
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={() => fileInputRef.current?.click()} 
-                        disabled={isUploading} 
-                        className="gap-1.5 shrink-0 text-xs font-semibold rounded-xl h-10 border-slate-200 dark:border-zinc-800"
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept={selectedTemplate?.header_type === 'video' ? 'video/*' : selectedTemplate?.header_type === 'document' ? '.pdf,.doc,.docx' : 'image/*'}
+                    onChange={handleFileUpload}
+                  />
+
+                  {headerMediaUrl ? (
+                    <div className="p-4 rounded-2xl border border-emerald-200/80 dark:border-emerald-800/60 bg-emerald-50/20 dark:bg-emerald-950/10 space-y-3">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                        {selectedTemplate?.header_type !== 'document' ? (
+                          <div className="relative h-24 w-36 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 shadow-xs shrink-0 bg-slate-100 dark:bg-zinc-900 flex items-center justify-center">
+                            {selectedTemplate?.header_type === 'video' ? (
+                              <video src={headerMediaUrl} className="h-full w-full object-cover" />
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img 
+                                src={headerMediaUrl} 
+                                alt="Header preview" 
+                                className="h-full w-full object-cover" 
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="h-24 w-28 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex flex-col items-center justify-center gap-1.5 shrink-0">
+                            <FileText className="h-8 w-8 text-emerald-600" />
+                            <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">Document</span>
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Permanently Stored in Cloud</span>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">• One-time upload active</span>
+                          </div>
+
+                          <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-slate-300 truncate">
+                            {headerMediaUrl}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={isUploading}
+                              className="h-8 text-xs rounded-xl font-semibold gap-1.5 border-slate-200 dark:border-zinc-800"
+                            >
+                              {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5 text-emerald-600" />}
+                              <span>Replace Image</span>
+                            </Button>
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSaveMediaUrlToTemplate()}
+                              disabled={isSavingMediaUrl}
+                              className="h-8 text-xs rounded-xl font-semibold gap-1.5 text-emerald-700 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-800/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                            >
+                              {isSavingMediaUrl ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                              <span>Save to Template Permanently</span>
+                            </Button>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setHeaderMediaUrl('')}
+                              className="h-8 text-xs rounded-xl text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              <span>Remove</span>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="cursor-pointer border-2 border-dashed border-slate-300 hover:border-emerald-500 dark:border-zinc-700 dark:hover:border-emerald-500 rounded-2xl p-6 text-center bg-slate-50/50 hover:bg-emerald-50/30 dark:bg-zinc-950/40 dark:hover:bg-emerald-950/10 transition-colors space-y-2"
                       >
-                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4 text-emerald-600" />}
-                        <span>Upload File</span>
-                      </Button>
-                    </div>
+                        <div className="h-10 w-10 mx-auto rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                          {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UploadCloud className="h-5 w-5" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">
+                            {isUploading ? 'Uploading to Firebase Storage...' : 'Click to Upload Media / Poster'}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Supports PNG, JPG, WEBP, MP4, PDF • Max 10MB
+                          </p>
+                        </div>
+                        <Badge variant="secondary" className="text-[10px] font-semibold">
+                          Upload Once • Permanently Available
+                        </Badge>
+                      </div>
 
-                    <div className="flex items-start gap-2 text-xs text-muted-foreground bg-slate-50 dark:bg-zinc-950 p-2.5 rounded-xl border border-slate-200/80 dark:border-zinc-800">
-                      <Info className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
-                      <p className="text-[11px] leading-relaxed">
-                        Paste any public HTTPS media link or upload directly. Uploaded media is securely stored in your CRM storage bucket and saved to this template.
-                      </p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex-1 h-px bg-slate-200 dark:border-zinc-800" />
+                        <span className="text-[10px] uppercase font-bold text-slate-400">or paste image url</span>
+                        <div className="flex-1 h-px bg-slate-200 dark:border-zinc-800" />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Input 
+                          placeholder="https://example.com/banner.jpg"
+                          value={headerMediaUrl}
+                          onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                          className="bg-slate-50/50 dark:bg-zinc-950 flex-1 text-xs rounded-xl h-10 border-slate-200 dark:border-zinc-800"
+                        />
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => handleSaveMediaUrlToTemplate()} 
+                          disabled={!headerMediaUrl.trim() || isSavingMediaUrl}
+                          className="shrink-0 text-xs font-semibold rounded-xl h-10 border-slate-200 dark:border-zinc-800 gap-1.5"
+                        >
+                          {isSavingMediaUrl ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 text-emerald-600" />}
+                          <span>Save to Template</span>
+                        </Button>
+                      </div>
                     </div>
+                  )}
+                </div>
+              ) : selectedTemplate ? (
+                <div className="pt-2">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/70 dark:bg-zinc-950 border border-slate-200/60 dark:border-zinc-800/60 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Info className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <span>Template header format: <strong className="text-slate-700 dark:text-slate-300 font-semibold uppercase">{selectedTemplate.header_type || 'Text / None'}</strong></span>
+                    </span>
+                    <span className="text-[11px] text-slate-500">To send images or posters, select a template with Image header (e.g. Kisan Choice).</span>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Step 5: Instant Auto-Reply on Customer Response (Smart Bot) */}
@@ -1182,13 +1303,6 @@ export default function NewBroadcastPage() {
                     onChange={(e) => setAutoReplyText(e.target.value)}
                     className="bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 rounded-xl text-xs leading-relaxed"
                   />
-
-                  <div className="flex items-start gap-2 text-[11px] text-muted-foreground bg-amber-50/50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200/50 dark:border-amber-900/30">
-                    <ShieldCheck className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                    <span>
-                      <strong>Spam Protection Active:</strong> Dispatches immediately when customer texts back. Automatically locked to fire strictly once per recipient so customers are never spammed.
-                    </span>
-                  </div>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground italic">

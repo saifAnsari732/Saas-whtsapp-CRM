@@ -8,6 +8,7 @@ import {
   Shield,
   Tags,
   User,
+  UsersRound,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ export const SETTINGS_SECTIONS = [
   'overview',
   'profile',
   'security',
+  'members',
   'appearance',
   'whatsapp',
   'templates',
@@ -47,6 +49,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   profile: { id: 'profile', label: 'Your profile', icon: User, group: 'account' },
   security: { id: 'security', label: 'Login & security', icon: Shield, group: 'account' },
   appearance: { id: 'appearance', label: 'Appearance', icon: Palette, group: 'account' },
+  members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
   whatsapp: { id: 'whatsapp', label: 'WhatsApp', icon: PlugZap, group: 'workspace' },
   templates: { id: 'templates', label: 'Templates', icon: FileText, group: 'workspace' },
   'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'workspace' },
@@ -67,6 +70,7 @@ function isSection(value: string | null): value is SettingsSection {
 
 export function resolveSection(raw: string | null): SettingsSection {
   if (raw === 'tags' || raw === 'custom-fields') return 'fields';
+  if (raw === 'team') return 'members';
   if (isSection(raw)) return raw;
   return DEFAULT_SECTION;
 }

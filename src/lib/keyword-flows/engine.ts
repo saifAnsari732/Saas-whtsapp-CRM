@@ -1,127 +1,270 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
-import { decrypt } from '@/lib/whatsapp/encryption';
+import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin';
+import { getWhatsAppConfigForAccount } from '@/lib/whatsapp/get-config';
+import { sendTextMessage, sendTemplateMessage } from '@/lib/whatsapp/meta-api';
 import { sanitizePhoneForMeta, isValidE164 } from '@/lib/whatsapp/phone-utils';
 
-let _adminClient: SupabaseClient | null = null;
-function supabaseAdmin() {
-  if (!_adminClient) {
-    _adminClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  }
-  return _adminClient;
-}
-
-interface DispatchKeywordFlowArgs {
+export interface DispatchKeywordFlowArgs {
   accountId: string;
-  configOwnerUserId: string;
+  configOwnerUserId?: string;
   contactId: string;
+  contactPhone?: string;
   conversationId: string;
   inboundText: string;
 }
 
 export async function dispatchKeywordFlow({
   accountId,
-  configOwnerUserId,
   contactId,
+  contactPhone,
+  conversationId,
   inboundText,
-}: DispatchKeywordFlowArgs): Promise<{ consumed: boolean }> {
-  const text = inboundText.trim().toLowerCase();
+}: DispatchKeywordFlowArgs): Promise<{ consumed: boolean; matchedKeyword?: string }> {
+  const text = inboundText?.trim().toLowerCase();
   if (!text) return { consumed: false };
 
-  // Fetch all active keyword flows for this account (using configOwnerUserId)
-  const { data: flows, error } = await supabaseAdmin()
-    .from('keyword_flows')
-    .select('id, keywords, template_id, text_message')
-    .eq('user_id', configOwnerUserId)
-    .eq('is_active', true);
+  const fDb = getAdminDb();
+  let flows: any[] = [];
 
-  if (error || !flows || flows.length === 0) {
+  // 1. Primary: Fetch active keyword flows from Firebase Firestore
+  if (fDb) {
+    try {
+      // Check accounts/{accountId}/keyword_flows
+      const snap = await fDb
+        .collection('accounts')
+        .doc(accountId)
+        .collection('keyword_flows')
+        .where('is_active', '==', true)
+        .get();
+
+      snap.forEach((doc) => {
+        flows.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Also check top-level keyword_flows
+      if (flows.length === 0) {
+        let topSnap = await fDb
+          .collection('keyword_flows')
+          .where('account_id', '==', accountId)
+          .where('is_active', '==', true)
+          .get();
+
+        if (topSnap.empty) {
+          topSnap = await fDb
+            .collection('keyword_flows')
+            .where('accountId', '==', accountId)
+            .where('is_active', '==', true)
+            .get();
+        }
+
+        topSnap.forEach((doc) => {
+          flows.push({ id: doc.id, ...doc.data() });
+        });
+      }
+    } catch (fsErr) {
+      console.warn('[keyword-flow] Firestore keyword flows fetch warning:', fsErr);
+    }
+  }
+
+  // 2. Safe optional fallback to Supabase if Firestore returned nothing
+  if (flows.length === 0) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (sbUrl && sbKey) {
+        const sb = createClient(sbUrl, sbKey);
+        const { data: sbFlows } = await sb
+          .from('keyword_flows')
+          .select('*')
+          .eq('is_active', true);
+        if (sbFlows) {
+          flows = sbFlows;
+        }
+      }
+    } catch {}
+  }
+
+  if (flows.length === 0) {
     return { consumed: false };
   }
 
-  // Find the first flow whose keywords array contains an exact match (case-insensitive) for the inbound text
-  const matchedFlow = flows.find((flow: { keywords: string[], template_id: string, text_message: string }) =>
-    flow.keywords.map((k: string) => k.toLowerCase()).includes(text)
-  );
+  // 3. Match inbound text against keywords
+  // A flow matches if any of its trigger keywords matches the user's text
+  // Supports exact match, word match, or punctuation-stripped match
+  let matchedKeyword = '';
+  const strippedText = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?!]/g, ' ').replace(/\s+/g, ' ').trim();
+  const textWords = strippedText.split(' ').filter(Boolean);
+
+  const matchedFlow = flows.find((flow) => {
+    if (!Array.isArray(flow.keywords)) return false;
+    for (const kw of flow.keywords) {
+      const cleanKw = String(kw).trim().toLowerCase();
+      if (!cleanKw) continue;
+      // Exact match
+      if (text === cleanKw || strippedText === cleanKw) {
+        matchedKeyword = cleanKw;
+        return true;
+      }
+      // Contained word match
+      if (textWords.includes(cleanKw)) {
+        matchedKeyword = cleanKw;
+        return true;
+      }
+      // Word boundary regex match (e.g. "hi" matches "hi" or "hi there")
+      const escaped = cleanKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(^|\\s)${escaped}(\\s|$)`, 'i');
+      if (regex.test(text) || regex.test(strippedText)) {
+        matchedKeyword = cleanKw;
+        return true;
+      }
+    }
+    return false;
+  });
 
   if (!matchedFlow) {
+    console.log(`[keyword-flow] No flow matched text "${text}". Active flows: ${flows.map(f => f.name || f.id).join(', ')}`);
     return { consumed: false };
   }
 
-  // Fetch the contact phone
-  const { data: contact, error: contactErr } = await supabaseAdmin()
-    .from('contacts')
-    .select('phone')
-    .eq('id', contactId)
-    .single();
+  console.log(`[keyword-flow] Matched keyword '${matchedKeyword}' on flow '${matchedFlow.name || matchedFlow.id}'`);
 
-  if (contactErr || !contact) {
+  // 4. Resolve destination phone number
+  let rawPhone = contactPhone || '';
+  if (!rawPhone && fDb && contactId) {
+    try {
+      const cDoc = await fDb.collection('accounts').doc(accountId).collection('contacts').doc(contactId).get();
+      if (cDoc.exists) {
+        rawPhone = cDoc.data()?.phone || '';
+      }
+    } catch {}
+  }
+
+  const phone = sanitizePhoneForMeta(rawPhone);
+  if (!phone || !isValidE164(phone)) {
+    console.warn('[keyword-flow] Invalid destination phone:', rawPhone);
     return { consumed: false };
   }
 
-  const phone = sanitizePhoneForMeta(contact.phone);
-  if (!isValidE164(phone)) {
-    console.error('[keyword-flow] contact phone invalid:', contact.phone);
+  // 5. Fetch WhatsApp configuration
+  const config = await getWhatsAppConfigForAccount(accountId);
+  if (!config || !config.phone_number_id || !config.decrypted_access_token) {
+    console.error('[keyword-flow] WhatsApp config missing or unconfigured for account:', accountId);
     return { consumed: false };
   }
 
-  // Fetch whatsapp config for access token
-  const { data: config, error: configErr } = await supabaseAdmin()
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .single();
+  const accessToken = config.decrypted_access_token;
+  const phoneNumberId = config.phone_number_id;
 
-  if (configErr || !config) {
-    console.error('[keyword-flow] whatsapp config not found');
-    return { consumed: false };
+  // Guard against sending to bot's own number (Meta rejects with #100 Invalid parameter)
+  const botPhoneDigits = (config.display_phone_number || '').replace(/\D/g, '');
+  if (botPhoneDigits && phone === botPhoneDigits) {
+    console.warn(`[keyword-flow] Destination phone ${phone} is the bot's own registered number. Meta rejects sending message to self.`);
+    return { consumed: true, matchedKeyword };
   }
-
-  const accessToken = decrypt(config.access_token);
 
   try {
-    if (matchedFlow.text_message) {
-      // Send raw text message
-      const { sendTextMessage } = await import('@/lib/whatsapp/meta-api');
-      await sendTextMessage({
-        phoneNumberId: config.phone_number_id,
+    const isTextResponse =
+      matchedFlow.response_type === 'text' ||
+      (!matchedFlow.template_id && !matchedFlow.template_name && Boolean(matchedFlow.text_message));
+
+    if (isTextResponse && matchedFlow.text_message) {
+      const textBody = matchedFlow.text_message.trim();
+      const sendRes = await sendTextMessage({
+        phoneNumberId,
         accessToken,
         to: phone,
-        text: matchedFlow.text_message,
+        text: textBody,
       });
-      return { consumed: true };
-    } else if (matchedFlow.template_id) {
-      // Fetch the template details
-      const { data: template, error: tplError } = await supabaseAdmin()
-        .from('message_templates')
-        .select('*')
-        .eq('id', matchedFlow.template_id)
-        .single();
 
-      if (tplError || !template) {
-        console.error('[keyword-flow] matched template not found', tplError);
-        return { consumed: false };
+      console.log(`[keyword-flow] Sent text auto-reply to ${phone}, wamid: ${sendRes?.messageId}`);
+
+      // Record outbound bot message in Firestore conversation thread
+      if (fDb && conversationId) {
+        try {
+          const nowIso = new Date().toISOString();
+          const convRef = fDb.collection('accounts').doc(accountId).collection('conversations').doc(conversationId);
+          await convRef.collection('messages').add(cleanForFirestore({
+            conversation_id: conversationId,
+            sender_type: 'bot',
+            content_type: 'text',
+            content_text: textBody,
+            message_id: sendRes?.messageId || null,
+            status: 'delivered',
+            created_at: nowIso,
+          }));
+
+          await convRef.set(cleanForFirestore({
+            last_message_text: textBody,
+            last_message_at: nowIso,
+            last_sender_type: 'bot',
+            updatedAt: nowIso,
+          }), { merge: true });
+        } catch (msgLogErr) {
+          console.warn('[keyword-flow] Conversation sync warning:', msgLogErr);
+        }
       }
 
-      await sendTemplateMessage({
-        phoneNumberId: config.phone_number_id,
+      return { consumed: true, matchedKeyword };
+    }
+
+    // Template response
+    const templateName = matchedFlow.template_name || matchedFlow.template_id;
+    if (templateName) {
+      let templateObj: any = null;
+      if (fDb) {
+        try {
+          const tDoc = await fDb.collection('message_templates').where('name', '==', templateName).limit(1).get();
+          if (!tDoc.empty) {
+            templateObj = tDoc.docs[0].data();
+          }
+        } catch {}
+      }
+
+      const sendRes = await sendTemplateMessage({
+        phoneNumberId,
         accessToken,
         to: phone,
-        templateName: template.name,
-        language: template.language || 'en_US',
-        template,
+        templateName,
+        language: templateObj?.language || 'en_US',
+        template: templateObj || { name: templateName, language: 'en_US' },
         messageParams: {},
       });
-      return { consumed: true };
+
+      console.log(`[keyword-flow] Sent template '${templateName}' auto-reply to ${phone}, wamid: ${sendRes?.messageId}`);
+
+      // Record outbound bot message in Firestore conversation thread
+      if (fDb && conversationId) {
+        try {
+          const nowIso = new Date().toISOString();
+          const convRef = fDb.collection('accounts').doc(accountId).collection('conversations').doc(conversationId);
+          await convRef.collection('messages').add(cleanForFirestore({
+            conversation_id: conversationId,
+            sender_type: 'bot',
+            content_type: 'template',
+            content_text: `Template: ${templateName}`,
+            template_name: templateName,
+            message_id: sendRes?.messageId || null,
+            status: 'delivered',
+            created_at: nowIso,
+          }));
+
+          await convRef.set(cleanForFirestore({
+            last_message_text: `Template: ${templateName}`,
+            last_message_at: nowIso,
+            last_sender_type: 'bot',
+            updatedAt: nowIso,
+          }), { merge: true });
+        } catch (msgLogErr) {
+          console.warn('[keyword-flow] Conversation sync warning:', msgLogErr);
+        }
+      }
+
+      return { consumed: true, matchedKeyword };
     }
 
     return { consumed: false };
-  } catch (err) {
-    console.error('[keyword-flow] failed to send message:', err);
+  } catch (err: any) {
+    console.error('[keyword-flow] Failed to dispatch keyword flow reply:', err?.message || err);
     return { consumed: false };
   }
 }
-

@@ -136,6 +136,9 @@ export function getAdminDb(): Firestore {
   if (!_adminDb) {
     const app = getAdminApp();
     _adminDb = getFirestore(app);
+    try {
+      _adminDb.settings({ ignoreUndefinedProperties: true });
+    } catch {}
   }
   return _adminDb;
 }
@@ -171,4 +174,34 @@ export function createAdminClient() {
   return getAdminDb();
 }
 
+/**
+ * Deep cleans an object recursively before writing to Firestore.
+ * Removes all undefined properties so Firestore never throws
+ * "Cannot use undefined as a Firestore value".
+ */
+export function cleanForFirestore<T>(data: T): T {
+  if (data === undefined) {
+    return null as any;
+  }
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+  if (data instanceof Date) {
+    return data.toISOString() as any;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter((item) => item !== undefined)
+      .map((item) => cleanForFirestore(item)) as any;
+  }
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      result[key] = cleanForFirestore(value);
+    }
+  }
+  return result as T;
+}
+
 export { admin };
+

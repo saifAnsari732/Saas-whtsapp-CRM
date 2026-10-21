@@ -80,77 +80,89 @@ export function usePresence(enabled = true): UsePresenceResult {
     // Realtime has already delivered (keeping the newer last_seen_at)
     // rather than replacing the map — so an event that lands while the
     // fetch is in flight isn't clobbered by a staler snapshot row.
-    const channel: RealtimeChannel = supabase
-      .channel(`presence:${accountId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "member_presence",
-          filter: `account_id=eq.${accountId}`,
-        },
-        (payload) => {
-          if (payload.eventType === "DELETE") {
-            const old = payload.old as { user_id?: string };
-            if (!old.user_id) return;
-            setRows((prev) => {
-              if (!prev.has(old.user_id!)) return prev;
-              const next = new Map(prev);
-              next.delete(old.user_id!);
-              return next;
-            });
-            return;
-          }
-          applyRow(
-            payload.new as {
-              user_id: string;
-              status: StoredPresence;
-              last_seen_at: string;
-            },
-          );
-        },
-      )
-      .subscribe();
+    let channel: RealtimeChannel | null = null;
+    try {
+      channel = supabase
+        .channel(`presence:${accountId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "member_presence",
+            filter: `account_id=eq.${accountId}`,
+          },
+          (payload) => {
+            if (payload.eventType === "DELETE") {
+              const old = payload.old as { user_id?: string };
+              if (!old.user_id) return;
+              setRows((prev) => {
+                if (!prev.has(old.user_id!)) return prev;
+                const next = new Map(prev);
+                next.delete(old.user_id!);
+                return next;
+              });
+              return;
+            }
+            applyRow(
+              payload.new as {
+                user_id: string;
+                status: StoredPresence;
+                last_seen_at: string;
+              },
+            );
+          },
+        )
+        .subscribe();
+    } catch {}
 
     supabase
       .from("member_presence")
       .select("user_id, status, last_seen_at")
       .eq("account_id", accountId)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          console.error("[usePresence] initial fetch error:", error.message);
-          return;
-        }
-        setRows((prev) => {
-          const next = new Map(prev);
-          for (const r of data ?? []) {
-            const userId = r.user_id as string;
-            const incoming: PresenceRow = {
-              status: r.status as StoredPresence,
-              last_seen_at: r.last_seen_at as string,
-            };
-            const existing = next.get(userId);
-            // A live event that arrived first must win over a staler
-            // snapshot row.
-            if (
-              !existing ||
-              new Date(incoming.last_seen_at) >= new Date(existing.last_seen_at)
-            ) {
-              next.set(userId, incoming);
-            }
+      .then(
+        ({ data, error }) => {
+          if (cancelled) return;
+          if (error) {
+            // Gracefully silent when Supabase is unconfigured / offline
+            return;
           }
-          return next;
-        });
-      });
+          setRows((prev) => {
+            const next = new Map(prev);
+            for (const r of data ?? []) {
+              const userId = r.user_id as string;
+              const incoming: PresenceRow = {
+                status: r.status as StoredPresence,
+                last_seen_at: r.last_seen_at as string,
+              };
+              const existing = next.get(userId);
+              // A live event that arrived first must win over a staler
+              // snapshot row.
+              if (
+                !existing ||
+                new Date(incoming.last_seen_at) >= new Date(existing.last_seen_at)
+              ) {
+                next.set(userId, incoming);
+              }
+            }
+            return next;
+          });
+        },
+        () => {
+          // Silently ignore if offline / pure Firebase setup
+        }
+      );
 
     const tick = setInterval(() => setNow(Date.now()), RE_DERIVE_MS);
 
     return () => {
       cancelled = true;
       clearInterval(tick);
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [active, accountId]);
 

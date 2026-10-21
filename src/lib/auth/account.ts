@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { headers, cookies } from "next/headers";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { hasMinRole, isAccountRole, type AccountRole } from "./roles";
 
 export class UnauthorizedError extends Error {
@@ -129,12 +130,17 @@ export async function getCurrentAccount(): Promise<AccountContext> {
 
   const accountData = accountDoc.data();
 
+  let adminSupabase: any = null;
+  try {
+    adminSupabase = createAdminClient();
+  } catch {}
+
   return {
     userId: uid,
     accountId,
     role: roleToUse as AccountRole,
     account: { id: accountDoc.id, name: accountData?.name || "My Account" },
-    supabase: null,
+    supabase: adminSupabase,
   };
 }
 

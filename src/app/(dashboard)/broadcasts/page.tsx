@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Loader2, Send, Users, CheckCircle2, Clock } from 'lucide-react';
+import { Plus, Loader2, Send, Users, CheckCircle2, Clock, RefreshCcw } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -66,9 +66,10 @@ export default function BroadcastsPage() {
     return [];
   });
   const [loading, setLoading] = useState<boolean>(() => broadcasts.length === 0);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function fetchBroadcasts(isSilent = false) {
     if (!isSilent && broadcasts.length === 0) setLoading(true);
@@ -97,7 +98,13 @@ export default function BroadcastsPage() {
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  }
+
+  async function handleManualRefresh() {
+    setRefreshing(true);
+    await fetchBroadcasts(true);
   }
 
   useEffect(() => {
@@ -110,34 +117,31 @@ export default function BroadcastsPage() {
   );
 
   useEffect(() => {
-    function startPolling() {
-      if (pollTimer.current) return;
-      pollTimer.current = setInterval(() => fetchBroadcasts(true), POLL_INTERVAL_MS);
-    }
-    function stopPolling() {
-      if (!pollTimer.current) return;
-      clearInterval(pollTimer.current);
-      pollTimer.current = null;
-    }
+    let timerId: NodeJS.Timeout | null = null;
+    let isSubscribed = true;
 
-    function handleVisibilityChange() {
-      if (!anySending) return;
-      if (document.visibilityState === 'hidden') {
-        stopPolling();
-      } else {
-        fetchBroadcasts(true);
-        startPolling();
+    async function poll() {
+      if (!isSubscribed) return;
+      if (document.visibilityState === 'visible') {
+        await fetchBroadcasts(true);
       }
+      if (!isSubscribed) return;
+      const delay = anySending ? 2000 : 4000;
+      timerId = setTimeout(poll, delay);
     }
 
-    if (anySending && document.visibilityState === 'visible') {
-      startPolling();
-    } else {
-      stopPolling();
-    }
+    timerId = setTimeout(poll, 3000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBroadcasts(true);
+      }
+    };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
-      stopPolling();
+      isSubscribed = false;
+      if (timerId) clearTimeout(timerId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [anySending]);
@@ -180,25 +184,45 @@ export default function BroadcastsPage() {
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/80">
         <div>
-          <h1 className="text-2xl font-extrabold text-foreground tracking-tight flex items-center gap-2.5">
+          <h1 className="text-2xl font-extrabold text-foreground tracking-tight flex flex-wrap items-center gap-2.5">
             <span>Broadcast Campaigns</span>
             <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30">
               Bulk Messaging
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              <span>Live Tracking Active</span>
             </span>
           </h1>
           <p className="mt-1 text-xs text-muted-foreground">
             Launch multi-recipient campaigns, track live delivery metrics, and automate bulk dispatches.
           </p>
         </div>
-        <GatedButton
-          canAct={canCreate}
-          gateReason="create broadcasts"
-          onClick={() => router.push('/broadcasts/new')}
-          className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-5 rounded-xl shadow-lg shadow-emerald-600/20 gap-2 shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Campaign</span>
-        </GatedButton>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className="h-11 border-border/80 bg-card text-foreground hover:bg-muted font-bold text-xs px-4 rounded-xl shadow-xs gap-1.5"
+            title="Refresh campaigns immediately"
+          >
+            <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </Button>
+          <GatedButton
+            canAct={canCreate}
+            gateReason="create broadcasts"
+            onClick={() => router.push('/broadcasts/new')}
+            className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-5 rounded-xl shadow-lg shadow-emerald-600/20 gap-2 shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Campaign</span>
+          </GatedButton>
+        </div>
       </div>
 
       {/* 3-Step Simple Guide Banner */}
@@ -341,6 +365,7 @@ export default function BroadcastsPage() {
                 </TableHead>
                 <TableHead className="hidden text-muted-foreground lg:table-cell">{t('table.delivery')}</TableHead>
                 <TableHead className="hidden text-muted-foreground lg:table-cell">{t('table.read')}</TableHead>
+                <TableHead className="hidden text-muted-foreground lg:table-cell">Replies</TableHead>
                 <TableHead className="text-muted-foreground">{t('table.status')}</TableHead>
                 <TableHead className="hidden text-muted-foreground sm:table-cell">{t('table.date')}</TableHead>
                 <TableHead className="text-right text-muted-foreground">Actions</TableHead>
@@ -366,16 +391,23 @@ export default function BroadcastsPage() {
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <RateCell
-                        value={broadcast.delivered_count}
-                        total={broadcast.total_recipients}
-                        color="bg-primary"
+                        value={broadcast.delivered_count || 0}
+                        total={broadcast.total_recipients || 0}
+                        color="bg-teal-500"
                       />
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <RateCell
-                        value={broadcast.read_count}
-                        total={broadcast.total_recipients}
+                        value={broadcast.read_count || 0}
+                        total={broadcast.total_recipients || 0}
                         color="bg-blue-500"
+                      />
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <RateCell
+                        value={broadcast.replied_count || 0}
+                        total={broadcast.total_recipients || 0}
+                        color="bg-purple-500"
                       />
                     </TableCell>
                     <TableCell>

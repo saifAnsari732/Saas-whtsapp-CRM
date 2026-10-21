@@ -1,5 +1,6 @@
 import { NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
 import { normalizePhone } from '@/lib/whatsapp/phone-utils'
@@ -33,6 +34,97 @@ function supabaseAdmin() {
     )
   }
   return _adminClient
+}
+
+function resolveAccessToken(rawToken: string): string {
+  if (!rawToken) return '';
+  if (rawToken.startsWith('EAAG') || rawToken.startsWith('EAA')) return rawToken;
+  try {
+    return decrypt(rawToken);
+  } catch {
+    return rawToken;
+  }
+}
+
+async function findWhatsAppConfigByPhoneNumberId(phoneNumberId: string) {
+  const fDb = getAdminDb();
+  if (fDb) {
+    try {
+      // 1. Direct query in whatsapp_configs
+      const snap = await fDb
+        .collection('whatsapp_configs')
+        .where('phone_number_id', '==', phoneNumberId)
+        .limit(1)
+        .get();
+
+      if (!snap.empty) {
+        const d = snap.docs[0].data();
+        return {
+          id: snap.docs[0].id,
+          account_id: d.account_id || snap.docs[0].id,
+          user_id: d.user_id || 'system',
+          phone_number_id: d.phone_number_id,
+          access_token: d.access_token || d.system_user_token || '',
+          verify_token: d.verify_token || null,
+        };
+      }
+
+      // 1b. Scan all whatsapp_configs docs in case phone_number_id type or field casing differs
+      const allConfigs = await fDb.collection('whatsapp_configs').get();
+      for (const cDoc of allConfigs.docs) {
+        const d = cDoc.data();
+        const pId = String(d.phone_number_id || d.phoneNumberId || '');
+        if (pId && (pId === String(phoneNumberId) || pId.replace(/\D/g, '') === String(phoneNumberId).replace(/\D/g, ''))) {
+          return {
+            id: cDoc.id,
+            account_id: d.account_id || cDoc.id,
+            user_id: d.user_id || 'system',
+            phone_number_id: d.phone_number_id || d.phoneNumberId,
+            access_token: d.access_token || d.system_user_token || '',
+            verify_token: d.verify_token || null,
+          };
+        }
+      }
+
+      // 2. Scan accounts nested configs
+      const accSnap = await fDb.collection('accounts').get();
+      for (const aDoc of accSnap.docs) {
+        const nested = await fDb.doc(`accounts/${aDoc.id}/whatsapp_config/config`).get();
+        if (nested.exists) {
+          const nData = nested.data();
+          if (nData) {
+            const pId = String(nData.phone_number_id || nData.phoneNumberId || '');
+            if (pId && (pId === String(phoneNumberId) || pId.replace(/\D/g, '') === String(phoneNumberId).replace(/\D/g, ''))) {
+              return {
+                id: aDoc.id,
+                account_id: aDoc.id,
+                user_id: nData.user_id || 'system',
+                phone_number_id: nData.phone_number_id || nData.phoneNumberId,
+                access_token: nData.access_token || nData.system_user_token || '',
+                verify_token: nData.verify_token || null,
+              };
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[webhook] Firestore config lookup warning:', err);
+    }
+  }
+
+  // 3. Fallback to Supabase
+  try {
+    const { data: configRows } = await supabaseAdmin()
+      .from('whatsapp_config')
+      .select('*')
+      .eq('phone_number_id', phoneNumberId);
+
+    if (configRows && configRows.length > 0) {
+      return configRows[0];
+    }
+  } catch {}
+
+  return null;
 }
 
 interface WhatsAppMessage {
@@ -114,51 +206,27 @@ export async function GET(request: Request) {
       })
     }
 
-    // Fetch all whatsapp configs to check verify tokens
-    const { data: configs, error: configError } = await supabaseAdmin()
-      .from('whatsapp_config')
-      .select('id, verify_token')
-
-    if (!configError && configs) {
-      // Check if any config's verify_token matches. Also collect the
-      // matching row so we can opportunistically upgrade its token to
-      // GCM if it was still in the legacy CBC format.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let matchedConfig: any = null
-      for (const config of configs) {
-        if (!config.verify_token) continue
-        try {
-          if (decrypt(config.verify_token) === verifyToken) {
-            matchedConfig = config
-            break
+    // Check Firestore configs
+    const fDb = getAdminDb();
+    if (fDb) {
+      try {
+        const topConfigs = await fDb.collection('whatsapp_configs').get();
+        for (const doc of topConfigs.docs) {
+          const d = doc.data();
+          const vt = d.verify_token || d.verifyToken;
+          if (vt) {
+            let dec = vt;
+            try { dec = decrypt(vt); } catch {}
+            if (dec === verifyToken || vt === verifyToken) {
+              return new Response(challenge, {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' },
+              });
+            }
           }
-        } catch {
-          // Malformed / wrong-key token row — skip it and keep checking.
         }
-      }
-
-      if (matchedConfig) {
-        // Fire-and-forget GCM upgrade. Safe to run on every subscribe
-        // since it's a no-op once the column is already GCM.
-        if (isLegacyFormat(matchedConfig.verify_token)) {
-          void supabaseAdmin()
-            .from('whatsapp_config')
-            .update({ verify_token: encrypt(verifyToken) })
-            .eq('id', matchedConfig.id)
-            .then(({ error }: { error: unknown }) => {
-              if (error) {
-                console.warn(
-                  '[webhook] verify_token GCM upgrade failed:',
-                  (error as { message?: string })?.message ?? error,
-                )
-              }
-            })
-        }
-        // Return challenge as plain text
-        return new Response(challenge, {
-          status: 200,
-          headers: { 'Content-Type': 'text/plain' },
-        })
+      } catch (fErr) {
+        console.warn('[webhook GET] Firestore verify check warning:', fErr);
       }
     }
 
@@ -256,44 +324,13 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
 
       const phoneNumberId = value.metadata.phone_number_id
 
-      // Find user's config by phone_number_id. `.single()` returns
-      // PGRST116 for both 0 rows AND ≥2 rows — distinguish them so
-      // operators see the real cause in logs. ≥2 rows shouldn't happen
-      // post-migration 013 (UNIQUE constraint), but a row created
-      // before the constraint, or a race, would still surface here.
-      const { data: configRows, error: configError } = await supabaseAdmin()
-        .from('whatsapp_config')
-        .select('*')
-        .eq('phone_number_id', phoneNumberId)
-
-      if (configError) {
-        console.error(
-          'Error fetching whatsapp_config for phone_number_id:',
-          phoneNumberId,
-          configError
-        )
-        continue
-      }
-
-      if (!configRows || configRows.length === 0) {
+      let config: any = await findWhatsAppConfigByPhoneNumberId(phoneNumberId)
+      if (!config) {
         console.error('No config found for phone_number_id:', phoneNumberId)
         continue
       }
 
-      if (configRows.length > 1) {
-        console.error(
-          `Multiple configs (${configRows.length}) found for phone_number_id:`,
-          phoneNumberId,
-          '— inbound message dropped. Resolve duplicates so each number maps to a single account.',
-          'Account owners:',
-          configRows.map((r: { account_id: string; user_id: string }) => `${r.account_id} (admin ${r.user_id})`)
-        )
-        continue
-      }
-
-      const config = configRows[0]
-
-      const decryptedAccessToken = decrypt(config.access_token)
+      const decryptedAccessToken = resolveAccessToken(config.access_token)
 
       for (let i = 0; i < value.messages.length; i++) {
         const message = value.messages[i]
@@ -358,67 +395,145 @@ function isValidStatusTransition(current: string, incoming: string): boolean {
   return ii > ci
 }
 
+async function handleFirestoreStatusUpdate(status: {
+  id: string;
+  status: string;
+  timestamp: string;
+  recipient_id: string;
+}) {
+  const fDb = getAdminDb();
+  if (!fDb) return;
+  try {
+    const tsIso = new Date(parseInt(status.timestamp) * 1000).toISOString();
+
+    // 1. Direct key-value lookup by Meta message ID (No index or collectionGroup required)
+    let lookupData: any = null;
+    try {
+      const lookupDoc = await fDb.collection('whatsapp_message_lookups').doc(status.id).get();
+      if (lookupDoc.exists) {
+        lookupData = lookupDoc.data();
+      }
+    } catch (lErr) {
+      console.warn('[webhook] message lookup warning:', lErr);
+    }
+
+    if (lookupData) {
+      const { broadcast_id, recipient_id, account_id } = lookupData;
+      if (broadcast_id && recipient_id && account_id) {
+        const recRef = fDb
+          .collection('accounts')
+          .doc(account_id)
+          .collection('broadcasts')
+          .doc(broadcast_id)
+          .collection('recipients')
+          .doc(recipient_id);
+
+        const recDoc = await recRef.get();
+        if (recDoc.exists) {
+          const recData = recDoc.data();
+          if (isValidStatusTransition(recData?.status || 'pending', status.status)) {
+            const updateData: Record<string, any> = {
+              status: status.status,
+              updated_at: tsIso,
+            };
+            if (status.status === 'delivered') updateData.delivered_at = tsIso;
+            if (status.status === 'read') updateData.read_at = tsIso;
+            if (status.status === 'failed') {
+              updateData.error_message = (status as any).errors?.[0]?.message || 'Delivery failed';
+            }
+
+            await recRef.set(cleanForFirestore(updateData), { merge: true });
+
+            // Update parent broadcast stats in Firestore
+            const bcastRef = fDb.collection('accounts').doc(account_id).collection('broadcasts').doc(broadcast_id);
+            const bDoc = await bcastRef.get();
+            if (bDoc.exists) {
+              const bData = bDoc.data();
+              const updateBcast: Record<string, any> = { updated_at: tsIso };
+              if (status.status === 'delivered') {
+                updateBcast.delivered_count = (bData?.delivered_count || 0) + 1;
+              } else if (status.status === 'read') {
+                updateBcast.read_count = (bData?.read_count || 0) + 1;
+              } else if (status.status === 'failed') {
+                updateBcast.failed_count = (bData?.failed_count || 0) + 1;
+              }
+              await Promise.allSettled([
+                bcastRef.set(cleanForFirestore(updateBcast), { merge: true }),
+                fDb.collection('broadcasts').doc(broadcast_id).set(cleanForFirestore(updateBcast), { merge: true }),
+              ]);
+              console.log(`[webhook] Real-time status '${status.status}' updated for broadcast ${broadcast_id}, recipient ${recipient_id}`);
+            }
+          }
+        }
+        return;
+      }
+    }
+
+    // Fallback: If not in lookup, check top-level broadcast_recipients
+    try {
+      const topRecSnap = await fDb
+        .collection('broadcast_recipients')
+        .where('whatsapp_message_id', '==', status.id)
+        .limit(1)
+        .get();
+
+      if (!topRecSnap.empty) {
+        const topDoc = topRecSnap.docs[0];
+        const topData = topDoc.data();
+        if (isValidStatusTransition(topData.status || 'pending', status.status)) {
+          const updateData: Record<string, any> = {
+            status: status.status,
+            updated_at: tsIso,
+          };
+          if (status.status === 'delivered') updateData.delivered_at = tsIso;
+          if (status.status === 'read') updateData.read_at = tsIso;
+          await topDoc.ref.set(cleanForFirestore(updateData), { merge: true });
+        }
+      }
+    } catch {}
+  } catch (err) {
+    console.warn('[webhook] Firestore status update warning:', err);
+  }
+}
+
 async function handleStatusUpdate(status: {
   id: string
   status: string
   timestamp: string
   recipient_id: string
 }) {
-  // 1) Mirror onto messages (legacy behavior) — Meta's status values
-  //    already match the CHECK constraint on messages.status. No
-  //    `.select()`: message_id is NOT unique (migration 009 — Meta ids
-  //    repeat across numbers), so this updates 0..N rows and must not
-  //    assume a single row.
-  const { error: msgErr } = await supabaseAdmin()
-    .from('messages')
-    .update({ status: status.status })
-    .eq('message_id', status.id)
+  await handleFirestoreStatusUpdate(status);
 
-  if (msgErr) {
-    console.error('Error updating message status:', msgErr)
-  }
+  try {
+    await supabaseAdmin()
+      .from('messages')
+      .update({ status: status.status })
+      .eq('message_id', status.id)
+  } catch {}
 
-  // Webhook fan-out for this status change happens at the END of this
-  // handler (after the broadcast mirror below), so a slow subscriber
-  // endpoint can't delay the broadcast_recipients update.
-
-  // 2) Mirror onto broadcast_recipients via whatsapp_message_id
-  //    (added in migration 003). The aggregate trigger on
-  //    broadcast_recipients re-derives the parent broadcast's
-  //    sent/delivered/read/failed counts automatically.
   const tsIso = new Date(parseInt(status.timestamp) * 1000).toISOString()
-
-  const { data: recipient, error: recFetchErr } = await supabaseAdmin()
-    .from('broadcast_recipients')
-    .select('id, status')
-    .eq('whatsapp_message_id', status.id)
-    .maybeSingle()
-
-  if (recFetchErr) {
-    console.error('Error fetching broadcast recipient:', recFetchErr)
-  } else if (
-    recipient &&
-    // Guard transitions — forward-only on the success ladder, and
-    // `failed` only from pre-delivered states.
-    isValidStatusTransition(recipient.status, status.status)
-  ) {
-    const update: Record<string, unknown> = { status: status.status }
-    if (status.status === 'failed' && (status as any).errors && (status as any).errors.length > 0) {
-      update.error_message = (status as any).errors[0].message || (status as any).errors[0].title || JSON.stringify((status as any).errors[0]);
-    }
-    if (status.status === 'sent' && !('sent_at' in update)) update.sent_at = tsIso
-    if (status.status === 'delivered') update.delivered_at = tsIso
-    if (status.status === 'read') update.read_at = tsIso
-
-    const { error: recUpdateErr } = await supabaseAdmin()
+  try {
+    const { data: recipient } = await supabaseAdmin()
       .from('broadcast_recipients')
-      .update(update)
-      .eq('id', recipient.id)
+      .select('id, status')
+      .eq('whatsapp_message_id', status.id)
+      .maybeSingle()
 
-    if (recUpdateErr) {
-      console.error('Error updating broadcast recipient status:', recUpdateErr)
+    if (recipient && isValidStatusTransition(recipient.status, status.status)) {
+      const update: Record<string, unknown> = { status: status.status }
+      if (status.status === 'failed' && (status as any).errors && (status as any).errors.length > 0) {
+        update.error_message = (status as any).errors[0].message || (status as any).errors[0].title || JSON.stringify((status as any).errors[0]);
+      }
+      if (status.status === 'sent' && !('sent_at' in update)) update.sent_at = tsIso
+      if (status.status === 'delivered') update.delivered_at = tsIso
+      if (status.status === 'read') update.read_at = tsIso
+
+      await supabaseAdmin()
+        .from('broadcast_recipients')
+        .update(update)
+        .eq('id', recipient.id)
     }
-  }
+  } catch {}
 
   // 3) Webhook fan-out for messages we store (inbox / API sends).
   //    Runs last so a slow subscriber can't delay the mirrors above.
@@ -450,6 +565,100 @@ async function handleStatusUpdate(status: {
 }
 
 /**
+ * Real-time reply tracking for broadcasts in Firebase Firestore.
+ * When a customer texts back or swipe-replies to a broadcast, we find the matching
+ * recipient record, transition their status to 'replied', and bump the broadcast's
+ * `replied_count` in real-time.
+ */
+async function flagBroadcastReplyInFirestore(
+  accountId: string,
+  contactId: string,
+  senderPhone: string,
+  metaMessageId?: string,
+  replyContextId?: string
+) {
+  const fDb = getAdminDb();
+  if (!fDb) return;
+  try {
+    let matchedLookup: any = null;
+
+    // 1. If customer swipe-replied directly to our message, context.id is our message_id
+    if (replyContextId) {
+      try {
+        const snap = await fDb.collection('whatsapp_message_lookups').doc(replyContextId).get();
+        if (snap.exists) {
+          matchedLookup = snap.data();
+        }
+      } catch {}
+    }
+
+    // 2. Lookup by accountId + normalized phone
+    const cleanPhone = senderPhone.replace(/[^0-9]/g, '');
+    if (!matchedLookup && cleanPhone) {
+      try {
+        const snap = await fDb.collection('whatsapp_contact_last_broadcast').doc(`${accountId}_${cleanPhone}`).get();
+        if (snap.exists) {
+          matchedLookup = snap.data();
+        }
+      } catch {}
+    }
+
+    // 3. Lookup by accountId + contactId
+    if (!matchedLookup && contactId) {
+      try {
+        const snap = await fDb.collection('whatsapp_contact_last_broadcast').doc(`${accountId}_${contactId}`).get();
+        if (snap.exists) {
+          matchedLookup = snap.data();
+        }
+      } catch {}
+    }
+
+    if (matchedLookup?.broadcast_id && matchedLookup?.recipient_id) {
+      const { broadcast_id, recipient_id } = matchedLookup;
+      const recRef = fDb
+        .collection('accounts')
+        .doc(accountId)
+        .collection('broadcasts')
+        .doc(broadcast_id)
+        .collection('recipients')
+        .doc(recipient_id);
+
+      const recDoc = await recRef.get();
+      if (recDoc.exists) {
+        const recData = recDoc.data();
+        if (recData?.status !== 'replied') {
+          const nowIso = new Date().toISOString();
+          await recRef.set(cleanForFirestore({
+            status: 'replied',
+            replied_at: nowIso,
+            updated_at: nowIso,
+          }), { merge: true });
+
+          // Update broadcast replied count
+          const bcastRef = fDb.collection('accounts').doc(accountId).collection('broadcasts').doc(broadcast_id);
+          const bDoc = await bcastRef.get();
+          if (bDoc.exists) {
+            const bData = bDoc.data();
+            const currentReplied = (bData?.replied_count || 0) + 1;
+            const bcastUpdate = cleanForFirestore({
+              replied_count: currentReplied,
+              updated_at: nowIso,
+            });
+            await Promise.allSettled([
+              bcastRef.set(bcastUpdate, { merge: true }),
+              fDb.collection('broadcasts').doc(broadcast_id).set(bcastUpdate, { merge: true }),
+            ]);
+            console.log(`[webhook] Real-time customer REPLY recorded for broadcast ${broadcast_id}, recipient ${recipient_id}`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[webhook] Error flagging broadcast reply in Firestore:', err);
+  }
+}
+
+/**
  * If an inbound message's sender is on a still-unreplied
  * broadcast_recipients row, flip it to `replied` so the reply count
  * advances on the parent broadcast.
@@ -457,12 +666,24 @@ async function handleStatusUpdate(status: {
  * Runs on a best-effort basis — failures here must not break the
  * main inbound-message flow, so errors are swallowed with a log.
  */
-async function flagBroadcastReplyIfAny(accountId: string, contactId: string) {
+async function flagBroadcastReplyIfAny(
+  accountId: string,
+  contactId: string,
+  senderPhone?: string,
+  metaMessageId?: string,
+  replyContextId?: string
+) {
+  // 1. Primary: Firestore real-time reply tracking
+  await flagBroadcastReplyInFirestore(
+    accountId,
+    contactId,
+    senderPhone || '',
+    metaMessageId,
+    replyContextId
+  );
+
+  // 2. Optional Supabase mirror
   try {
-    // Most recent outbound broadcast in this account that hasn't
-    // been replied to yet. Account-scoped so a shared inbox reply
-    // marks the broadcast as replied regardless of which teammate
-    // sent it.
     const { data: recs, error } = await supabaseAdmin()
       .from('broadcast_recipients')
       .select('id, status, broadcast_id, broadcasts!inner(account_id)')
@@ -481,10 +702,10 @@ async function flagBroadcastReplyIfAny(accountId: string, contactId: string) {
       .eq('id', row.id)
 
     if (updErr) {
-      console.error('Error marking broadcast recipient replied:', updErr)
+      console.error('Error marking broadcast recipient replied in Supabase:', updErr)
     }
   } catch (err) {
-    console.error('flagBroadcastReplyIfAny failed:', err)
+    // Non-blocking
   }
 }
 
@@ -671,116 +892,180 @@ async function processMessage(
   // BEFORE we insert, so the count is accurate. Covers the case where
   // the contact row already exists (manual add / CSV import) but they've
   // never messaged us before — which new_contact_created wouldn't catch.
-  const { count: priorCustomerMsgCount } = await supabaseAdmin()
-    .from('messages')
-    .select('id', { count: 'exact', head: true })
-    .eq('conversation_id', conversation.id)
-    .eq('sender_type', 'customer')
-  const isFirstInboundMessage = (priorCustomerMsgCount ?? 0) === 0
-
-  const { error: msgError } = await supabaseAdmin().from('messages').insert({
-    conversation_id: conversation.id,
-    sender_type: 'customer',
-    content_type: contentType,
-    content_text: contentText,
-    media_url: mediaUrl,
-    message_id: message.id,
-    status: 'delivered',
-    created_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-    reply_to_message_id: replyToInternalId,
-    // Only populated for content_type='interactive'. Migration 010 added
-    // the column; null for every other content_type so existing inserts
-    // behave identically.
-    interactive_reply_id: interactiveReplyId,
-  })
-
-  if (msgError) {
-    console.error('Error inserting message:', msgError)
-    return
+  let isFirstInboundMessage = false
+  const fDb = getAdminDb()
+  if (fDb) {
+    try {
+      const priorSnap = await fDb
+        .collection('accounts')
+        .doc(accountId)
+        .collection('conversations')
+        .doc(conversation.id)
+        .collection('messages')
+        .where('sender_type', '==', 'customer')
+        .limit(1)
+        .get()
+      isFirstInboundMessage = priorSnap.empty
+    } catch (fsErr) {
+      console.warn('[webhook] Firestore prior customer msg check warning:', fsErr)
+    }
+  } else {
+    try {
+      const { count: priorCustomerMsgCount } = await supabaseAdmin()
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conversation.id)
+        .eq('sender_type', 'customer')
+      isFirstInboundMessage = (priorCustomerMsgCount ?? 0) === 0
+    } catch {}
   }
 
-  // Update conversation
-  const { error: convError } = await supabaseAdmin()
-    .from('conversations')
-    .update({
-      last_message_text: contentText || `[${message.type}]`,
-      last_message_at: new Date().toISOString(),
-      unread_count: (conversation.unread_count || 0) + 1,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', conversation.id)
+  // Primary: Store message in Firebase Firestore
+  if (fDb) {
+    try {
+      const convRef = fDb.collection('accounts').doc(accountId).collection('conversations').doc(conversation.id);
+      const nowIso = new Date().toISOString();
 
-  if (convError) {
-    console.error('Error updating conversation:', convError)
+      await convRef.collection('messages').add(cleanForFirestore({
+        conversation_id: conversation.id,
+        sender_type: 'customer',
+        content_type: contentType,
+        content_text: contentText,
+        media_url: mediaUrl,
+        message_id: message.id,
+        status: 'delivered',
+        created_at: nowIso,
+      }));
+
+      await convRef.set(cleanForFirestore({
+        last_message_text: contentText || `[${message.type}]`,
+        last_message_at: nowIso,
+        unread_count: ((conversation.unread_count || 0) + 1),
+        updatedAt: nowIso,
+      }), { merge: true });
+    } catch (fsMsgErr) {
+      console.warn('[webhook] Firestore message write warning:', fsMsgErr);
+    }
   }
 
-  // If this contact was a recent broadcast recipient, check if the broadcast
-  // has an automated custom reply configured, flag the reply counter,
-  // and immediately dispatch the custom message.
-  const broadcastAutoReplyResult = await handleBroadcastAutoReplyIfEligible({
-    accountId,
-    contactId: contactRecord.id,
-    conversationId: conversation.id,
-    configOwnerUserId,
-    contactName,
-    inboundText: contentText ?? message.text?.body ?? '',
-  })
+  // Non-blocking mirror to Supabase if reachable
+  try {
+    await supabaseAdmin().from('messages').insert({
+      conversation_id: conversation.id,
+      sender_type: 'customer',
+      content_type: contentType,
+      content_text: contentText,
+      media_url: mediaUrl,
+      message_id: message.id,
+      status: 'delivered',
+      created_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+      reply_to_message_id: replyToInternalId,
+      interactive_reply_id: interactiveReplyId,
+    });
 
-  // ============================================================
-  // Flow runner dispatch.
-  //
-  // If the runner consumes the message (it either advanced an active
-  // run or started a new one), we suppress the `new_message_received`
-  // + `keyword_match` automation triggers for this inbound. Customer
-  // is navigating the bot menu, not sending a fresh trigger word
-  // that should fork into automations.
-  //
-  // The relationship-level triggers (`new_contact_created`,
-  // `first_inbound_message`) still fire even when consumed — those
-  // are about WHO is messaging, not what they said.
-  //
-  // Awaited (not fire-and-forget) because we need the `consumed`
-  // result before deciding whether to dispatch automations. The
-  // runner has its own try/catch and never throws. Accounts with
-  // no active flows take the runner's early-exit "no_match" path
-  // basically for free (one indexed SELECT for the active run).
-  // ============================================================
-  const flowResult = await dispatchInboundToFlows({
+    await supabaseAdmin()
+      .from('conversations')
+      .update({
+        last_message_text: contentText || `[${message.type}]`,
+        last_message_at: new Date().toISOString(),
+        unread_count: (conversation.unread_count || 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversation.id);
+  } catch {}
+
+  // Real-time reply tracking: Mark broadcast recipient as 'replied' and bump replied_count
+  await flagBroadcastReplyIfAny(
     accountId,
-    userId: configOwnerUserId,
-    contactId: contactRecord.id,
-    conversationId: conversation.id,
-    message:
-      interactiveReplyId
-        ? {
-            kind: 'interactive_reply',
-            reply_id: interactiveReplyId,
-            reply_title: contentText ?? '',
-            meta_message_id: message.id,
-          }
-        : {
-            kind: 'text',
-            text: contentText ?? message.text?.body ?? '',
-            meta_message_id: message.id,
-          },
-    isFirstInboundMessage,
-  })
-  let flowConsumed = flowResult.consumed || broadcastAutoReplyResult.replied
+    contactRecord.id,
+    senderPhone,
+    message.id,
+    message.context?.id
+  );
 
   const inboundText = contentText ?? message.text?.body ?? ''
+  let flowConsumed = false
 
-  // Keyword Flow Dispatch
-  // We run this only if neither the visual Flow runner nor broadcast auto-reply consumed it.
+  // ============================================================
+  // 1. PRIMARY: Keyword Flow Dispatch (Firebase Firestore Native)
+  //
+  // Checked immediately so custom keyword triggers (e.g. "hii" -> "txxx")
+  // execute instantly with zero delay and zero Supabase dependency.
+  // ============================================================
+  if (inboundText) {
+    try {
+      console.log(`[webhook] Checking keyword flow for text: "${inboundText}" on account: ${accountId}`);
+      const kfResult = await dispatchKeywordFlow({
+        accountId,
+        configOwnerUserId,
+        contactId: contactRecord.id,
+        contactPhone: senderPhone,
+        conversationId: conversation.id,
+        inboundText,
+      })
+      if (kfResult.consumed) {
+        flowConsumed = true;
+        console.log(`[webhook] Keyword flow CONSUMED message with keyword: "${kfResult.matchedKeyword}"`);
+      }
+    } catch (kfErr) {
+      console.error('[webhook] Error in dispatchKeywordFlow:', kfErr);
+    }
+  }
+
+  // ============================================================
+  // 2. Broadcast Auto-Reply
+  // If contact was a recent broadcast recipient and broadcast has
+  // an automated custom reply configured.
+  // ============================================================
   if (!flowConsumed) {
-    const kfResult = await dispatchKeywordFlow({
-      accountId,
-      configOwnerUserId,
-      contactId: contactRecord.id,
-      conversationId: conversation.id,
-      inboundText,
-    })
-    if (kfResult.consumed) {
-      flowConsumed = true; // Mark consumed so AI & Automations don't trigger.
+    try {
+      const broadcastAutoReplyResult = await handleBroadcastAutoReplyIfEligible({
+        accountId,
+        contactId: contactRecord.id,
+        contactPhone: senderPhone,
+        conversationId: conversation.id,
+        configOwnerUserId,
+        contactName,
+        inboundText,
+      })
+      if (broadcastAutoReplyResult.replied) {
+        flowConsumed = true
+      }
+    } catch (barErr) {
+      console.warn('[webhook] Broadcast auto-reply warning:', barErr)
+    }
+  }
+
+  // ============================================================
+  // 3. Visual Flow Runner Dispatch (Secondary / fallback)
+  // ============================================================
+  if (!flowConsumed) {
+    try {
+      const flowResult = await dispatchInboundToFlows({
+        accountId,
+        userId: configOwnerUserId,
+        contactId: contactRecord.id,
+        conversationId: conversation.id,
+        message:
+          interactiveReplyId
+            ? {
+                kind: 'interactive_reply',
+                reply_id: interactiveReplyId,
+                reply_title: contentText ?? '',
+                meta_message_id: message.id,
+              }
+            : {
+                kind: 'text',
+                text: inboundText,
+                meta_message_id: message.id,
+              },
+        isFirstInboundMessage,
+      })
+      if (flowResult.consumed) {
+        flowConsumed = true
+      }
+    } catch (flowErr) {
+      console.warn('[webhook] Visual flow runner warning:', flowErr)
     }
   }
 
@@ -1035,58 +1320,81 @@ async function findOrCreateContact(
   phone: string,
   name: string
 ): Promise<ContactOutcome | null> {
-  // Find an existing contact for this account by phone. The shared
-  // helper pre-filters in SQL by the last-8-digit suffix (so we don't
-  // pull every contact on every inbound message) then applies the
-  // strict `phonesMatch` in JS on the small candidate set. The same
-  // helper backs the manual contact form and CSV import, so all three
-  // paths agree on what "same number" means (issue #212).
-  const existingContact = await findExistingContact(
-    supabaseAdmin(),
-    accountId,
-    phone,
-  )
+  const fDb = getAdminDb();
+  if (fDb) {
+    try {
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const contactsRef = fDb.collection('accounts').doc(accountId).collection('contacts');
 
-  if (existingContact) {
-    // Update name if it changed
-    if (name && name !== existingContact.name) {
-      await supabaseAdmin()
-        .from('contacts')
-        .update({ name, updated_at: new Date().toISOString() })
-        .eq('id', existingContact.id)
+      // 1. Direct doc ID
+      const directRef = contactsRef.doc(`c_${cleanPhone}`);
+      const directDoc = await directRef.get();
+      if (directDoc.exists) {
+        const data = directDoc.data();
+        if (name && name !== data?.name) {
+          await directRef.set({ name, updatedAt: new Date().toISOString() }, { merge: true });
+        }
+        return { contact: { id: directDoc.id, ...data, name: name || data?.name }, wasCreated: false };
+      }
+
+      // 2. Query where phone == phone
+      const qSnap = await contactsRef.where('phone', '==', phone).limit(1).get();
+      if (!qSnap.empty) {
+        const doc = qSnap.docs[0];
+        const data = doc.data();
+        if (name && name !== data?.name) {
+          await doc.ref.set({ name, updatedAt: new Date().toISOString() }, { merge: true });
+        }
+        return { contact: { id: doc.id, ...data, name: name || data?.name }, wasCreated: false };
+      }
+
+      // 3. Query where phone == cleanPhone
+      if (cleanPhone !== phone) {
+        const qClean = await contactsRef.where('phone', '==', cleanPhone).limit(1).get();
+        if (!qClean.empty) {
+          const doc = qClean.docs[0];
+          const data = doc.data();
+          if (name && name !== data?.name) {
+            await doc.ref.set({ name, updatedAt: new Date().toISOString() }, { merge: true });
+          }
+          return { contact: { id: doc.id, ...data, name: name || data?.name }, wasCreated: false };
+        }
+      }
+
+      // 4. Create new contact
+      const contactId = `c_${cleanPhone}`;
+      const nowIso = new Date().toISOString();
+      const contactObj = cleanForFirestore({
+        id: contactId,
+        phone,
+        name: name || phone,
+        accountId,
+        userId: configOwnerUserId,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+      await directRef.set(contactObj);
+      return { contact: contactObj, wasCreated: true };
+    } catch (fsErr) {
+      console.warn('[webhook] Firestore findOrCreateContact warning:', fsErr);
     }
-    return { contact: existingContact, wasCreated: false }
   }
 
-  // Create new contact. account_id is the tenancy column;
-  // user_id is the NOT NULL FK audit column (no inbound message
-  // has a single "user who created" it — we attribute to the
-  // WhatsApp config owner as a stable default).
-  const { data: newContact, error: createError } = await supabaseAdmin()
-    .from('contacts')
-    .insert({
-      account_id: accountId,
-      user_id: configOwnerUserId,
-      phone,
-      name: name || phone,
-    })
-    .select()
-    .single()
-
-  if (createError) {
-    // Lost a race: a concurrent inbound delivery (or another path)
-    // created this contact between our lookup and insert, and the
-    // unique index (migration 022) rejected the duplicate. Re-resolve
-    // the existing row instead of dropping the message.
-    if (isUniqueViolation(createError)) {
-      const raced = await findExistingContact(supabaseAdmin(), accountId, phone)
-      if (raced) return { contact: raced, wasCreated: false }
+  // Fallback to Supabase if reachable
+  try {
+    const existingContact = await findExistingContact(supabaseAdmin(), accountId, phone);
+    if (existingContact) {
+      return { contact: existingContact, wasCreated: false };
     }
-    console.error('Error creating contact:', createError)
-    return null
-  }
+    const { data: newContact } = await supabaseAdmin()
+      .from('contacts')
+      .insert({ account_id: accountId, user_id: configOwnerUserId, phone, name: name || phone })
+      .select()
+      .single();
+    if (newContact) return { contact: newContact, wasCreated: true };
+  } catch {}
 
-  return { contact: newContact, wasCreated: true }
+  return { contact: { id: `c_${phone.replace(/[^0-9]/g, '')}`, phone, name: name || phone }, wasCreated: false };
 }
 
 async function findOrCreateConversation(
@@ -1094,68 +1402,59 @@ async function findOrCreateConversation(
   configOwnerUserId: string,
   contactId: string,
 ) {
-  // Look for an existing conversation in this account, oldest-first.
-  //
-  // We deliberately do NOT use `.single()` here. `.single()` errors on
-  // *both* 0 rows and ≥2 rows, and the old code treated any error as
-  // "none found" and inserted a new row. So once two conversations
-  // existed for a contact (from a race — Meta retries a delivery, or a
-  // batch fans out to concurrent runs), every subsequent inbound
-  // message errored on the lookup and created yet another conversation,
-  // snowballing into a wall of duplicate chats (issue #363).
-  //
-  // Ordering oldest-first and taking one row makes the lookup resolve to
-  // the same canonical survivor the dedup migration (036) keeps, so any
-  // pre-existing duplicates converge instead of compounding.
-  const { data: existingRows, error: findError } = await supabaseAdmin()
-    .from('conversations')
-    .select('*')
-    .eq('account_id', accountId)
-    .eq('contact_id', contactId)
-    .order('created_at', { ascending: true })
-    .limit(1)
+  const fDb = getAdminDb();
+  if (fDb) {
+    try {
+      const convId = `conv_${contactId}`;
+      const convRef = fDb.collection('accounts').doc(accountId).collection('conversations').doc(convId);
+      const convDoc = await convRef.get();
 
-  if (findError) {
-    console.error('Error finding conversation:', findError)
-    return null
-  }
-
-  if (existingRows && existingRows.length > 0) {
-    return { conversation: existingRows[0], created: false }
-  }
-
-  // Create new conversation. Same tenancy + audit split as
-  // findOrCreateContact above.
-  const { data: newConv, error: createError } = await supabaseAdmin()
-    .from('conversations')
-    .insert({
-      account_id: accountId,
-      user_id: configOwnerUserId,
-      contact_id: contactId,
-    })
-    .select()
-    .single()
-
-  if (createError) {
-    // Lost a race: a concurrent inbound delivery created the
-    // conversation between our lookup and insert, and the unique index
-    // (migration 036) rejected the duplicate. Re-resolve the winning
-    // row instead of dropping the message — mirrors findOrCreateContact.
-    if (isUniqueViolation(createError)) {
-      const { data: raced } = await supabaseAdmin()
-        .from('conversations')
-        .select('*')
-        .eq('account_id', accountId)
-        .eq('contact_id', contactId)
-        .order('created_at', { ascending: true })
-        .limit(1)
-      if (raced && raced.length > 0) {
-        return { conversation: raced[0], created: false }
+      if (convDoc.exists) {
+        return { conversation: { id: convDoc.id, ...convDoc.data() }, created: false };
       }
+
+      const nowIso = new Date().toISOString();
+      const newConv = cleanForFirestore({
+        id: convId,
+        account_id: accountId,
+        user_id: configOwnerUserId,
+        contact_id: contactId,
+        unread_count: 0,
+        status: 'open',
+        created_at: nowIso,
+        updatedAt: nowIso,
+      });
+      await convRef.set(newConv);
+      return { conversation: newConv, created: true };
+    } catch (fsErr) {
+      console.warn('[webhook] Firestore findOrCreateConversation warning:', fsErr);
     }
-    console.error('Error creating conversation:', createError)
-    return null
   }
 
-  return { conversation: newConv, created: true }
+  // Fallback to Supabase
+  try {
+    const { data: existingRows } = await supabaseAdmin()
+      .from('conversations')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('contact_id', contactId)
+      .limit(1);
+
+    if (existingRows && existingRows.length > 0) {
+      return { conversation: existingRows[0], created: false };
+    }
+
+    const { data: newConv } = await supabaseAdmin()
+      .from('conversations')
+      .insert({ account_id: accountId, user_id: configOwnerUserId, contact_id: contactId })
+      .select()
+      .single();
+
+    if (newConv) return { conversation: newConv, created: true };
+  } catch {}
+
+  return {
+    conversation: { id: `conv_${contactId}`, account_id: accountId, contact_id: contactId, unread_count: 0 },
+    created: false,
+  };
 }

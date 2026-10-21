@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { Broadcast, BroadcastRecipient, RecipientStatus } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -161,41 +160,75 @@ export default function BroadcastDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [resending, setResending] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const { createAndSendBroadcast } = useBroadcastSending();
 
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-
-    async function fetchData() {
-      try {
-        const res = await fetch(`/api/whatsapp/broadcasts/${broadcastId}`);
-        if (!res.ok) {
-          let errorMsg = `Server error (${res.status})`;
-          try {
-            const errorData = await res.json();
-            if (errorData?.error) errorMsg = errorData.error;
-          } catch {}
-          throw new Error(errorMsg);
-        }
-        const data = await res.json();
-
-        setBroadcast(data.broadcast);
-        setRecipients(data.recipients ?? []);
-
-        if (data.broadcast?.status === 'sending' || data.broadcast?.status === 'scheduled') {
-          timeoutId = setTimeout(fetchData, 2000);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : t('notFound'));
-      } finally {
-        setLoading(false);
+  async function fetchData(silent = false) {
+    if (!silent && !broadcast) setLoading(true);
+    try {
+      const res = await fetch(`/api/whatsapp/broadcasts/${broadcastId}`);
+      if (!res.ok) {
+        let errorMsg = `Server error (${res.status})`;
+        try {
+          const errorData = await res.json();
+          if (errorData?.error) errorMsg = errorData.error;
+        } catch {}
+        throw new Error(errorMsg);
       }
+      const data = await res.json();
+      setBroadcast(data.broadcast);
+      setRecipients(data.recipients ?? []);
+      setError(null);
+    } catch (err) {
+      if (!broadcast) {
+        setError(err instanceof Error ? err.message : t('notFound'));
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  async function handleManualRefresh() {
+    setRefreshing(true);
+    await fetchData(true);
+  }
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    let isSubscribed = true;
+
+    async function runPolling() {
+      if (!isSubscribed) return;
+      if (document.visibilityState === 'visible') {
+        await fetchData(true);
+      }
+      if (!isSubscribed) return;
+      const isSending = broadcast?.status === 'sending' || broadcast?.status === 'scheduled';
+      const delay = isSending ? 2000 : 3500;
+      timeoutId = setTimeout(runPolling, delay);
     }
 
-    fetchData();
+    // Initial load
+    fetchData(false).then(() => {
+      if (isSubscribed) {
+        timeoutId = setTimeout(runPolling, 2000);
+      }
+    });
 
-    return () => clearTimeout(timeoutId);
-  }, [broadcastId, t]);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isSubscribed = false;
+      if (timeoutId) clearTimeout(timeoutId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [broadcastId, broadcast?.status]);
 
   const filteredRecipients = useMemo(
     () =>
@@ -214,6 +247,7 @@ export default function BroadcastDetailPage() {
       t('table.sent'),
       t('table.delivered'),
       t('table.read'),
+      'Replied',
       t('table.error'),
     ];
     const rows = recipients.map((r) => [
@@ -223,6 +257,7 @@ export default function BroadcastDetailPage() {
       r.sent_at ?? '',
       r.delivered_at ?? '',
       r.read_at ?? '',
+      r.replied_at ?? '',
       r.error_message ?? '',
     ]);
     const csv = toCsv([header, ...rows]);
@@ -254,17 +289,21 @@ export default function BroadcastDetailPage() {
     if (!broadcast) return;
     setResending(true);
     try {
-      const supabase = createClient();
-      
-      const { data: template, error: templateError } = await supabase
-        .from('message_templates')
-        .select('*')
-        .eq('name', broadcast.template_name)
-        .eq('language', broadcast.template_language)
-        .single();
-        
-      if (templateError || !template) {
-        throw new Error('Original template not found. Cannot resend.');
+      const res = await fetch('/api/whatsapp/templates');
+      let template: any = null;
+      if (res.ok) {
+        const data = await res.json();
+        const templates = data.templates || [];
+        template = templates.find((t: any) =>
+          t.name?.toLowerCase() === broadcast.template_name?.toLowerCase() &&
+          (!broadcast.template_language || t.language === broadcast.template_language)
+        );
+      }
+      if (!template) {
+        template = {
+          name: broadcast.template_name,
+          language: broadcast.template_language || 'en_US',
+        };
       }
 
       const newBroadcastId = await createAndSendBroadcast({
@@ -347,13 +386,20 @@ export default function BroadcastDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold text-foreground">{broadcast.name}</h1>
               <span
                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${status.classes}`}
               >
                 {tStatus(status.label)}
               </span>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                <span>Live Real-Time Active</span>
+              </div>
             </div>
             <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
               <span>{t('template', { name: broadcast.template_name })}</span>
@@ -367,6 +413,19 @@ export default function BroadcastDetailPage() {
 
         {/* Actions group */}
         <div className="flex items-center gap-2">
+          {/* Refresh button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className="border-border bg-transparent text-foreground hover:bg-muted"
+            title="Refresh stats immediately"
+          >
+            <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+
           {/* Resend button */}
           <Button
             variant="outline"
@@ -378,7 +437,7 @@ export default function BroadcastDetailPage() {
             {resending ? (
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             ) : (
-              <RefreshCcw className="mr-2 h-3.5 w-3.5" />
+              <Send className="mr-2 h-3.5 w-3.5" />
             )}
             {t('resend', { fallback: 'Resend' })}
           </Button>
@@ -558,6 +617,7 @@ export default function BroadcastDetailPage() {
                   <TableHead className="text-muted-foreground">{t('table.sent')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.delivered')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.read')}</TableHead>
+                  <TableHead className="text-muted-foreground">Replied</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.error')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -592,6 +652,11 @@ export default function BroadcastDetailPage() {
                       <TableCell className="text-muted-foreground">
                         {recipient.read_at
                           ? new Date(recipient.read_at).toLocaleString()
+                          : '-'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {recipient.replied_at
+                          ? new Date(recipient.replied_at).toLocaleString()
                           : '-'}
                       </TableCell>
                       <TableCell className="max-w-xs truncate text-xs text-red-400">
