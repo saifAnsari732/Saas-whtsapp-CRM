@@ -466,9 +466,31 @@ export default function NewBroadcastPage() {
       }
 
       const isVideo = selectedMediaType === 'video' || /\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(headerMediaUrl);
+      const templateHeaderType = (selectedTemplate?.header_type || (selectedTemplate as any)?.headerType || 'text').toLowerCase();
+
+      // Guard: Meta Template Format Mismatch Validation
+      if (requiresMedia && isVideo && templateHeaderType === 'image') {
+        const videoTemplate = templates.find(t => (t.header_type || (t as any)?.headerType || '').toLowerCase() === 'video');
+        if (videoTemplate) {
+          toast.error(`"${selectedTemplate.name}" is approved on Meta for IMAGES only. Please select "${videoTemplate.name}" to send this Video.`, {
+            duration: 6000,
+          });
+        } else {
+          toast.error(`"${selectedTemplate.name}" is approved for IMAGES only. Meta Cloud API rejects videos with error #132012. Please select a Video template.`, {
+            duration: 6000,
+          });
+        }
+        return;
+      }
+
+      if (requiresMedia && !isVideo && templateHeaderType === 'video') {
+        toast.error(`"${selectedTemplate.name}" requires a Video attachment. Please upload an .mp4 video or select an Image template.`);
+        return;
+      }
+
       const effectiveTemplate = selectedTemplate ? {
         ...selectedTemplate,
-        header_type: isVideo ? 'video' : (selectedTemplate.header_type || 'image'),
+        header_type: templateHeaderType,
         header_media_url: requiresMedia ? headerMediaUrl : undefined,
       } : selectedTemplate;
 
@@ -1031,18 +1053,48 @@ export default function NewBroadcastPage() {
                 <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v || '')} disabled={isLoadingTemplates}>
                   <SelectTrigger className="bg-slate-50/50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 font-medium rounded-xl h-11 text-xs">
                     <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Choose an approved template..."}>
-                      {selectedTemplate ? `${selectedTemplate.name} (${selectedTemplate.category || 'Utility'}) — ${selectedTemplate.language || 'en'}` : undefined}
+                      {selectedTemplate ? (
+                        <span className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-900 dark:text-white">{selectedTemplate.name}</span>
+                          <span className="text-muted-foreground text-[11px]">({selectedTemplate.category || 'Utility'}) — {selectedTemplate.language || 'en'}</span>
+                          <span className={cn(
+                            "text-[10px] font-bold px-1.5 py-0.5 rounded-md",
+                            (selectedTemplate.header_type || '').toLowerCase() === 'video'
+                              ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                              : (selectedTemplate.header_type || '').toLowerCase() === 'image'
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                : "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-slate-300"
+                          )}>
+                            {(selectedTemplate.header_type || '').toLowerCase() === 'video' ? '🎬 Video / Reels' : (selectedTemplate.header_type || '').toLowerCase() === 'image' ? '🖼️ Image' : '📝 Text'}
+                          </span>
+                        </span>
+                      ) : undefined}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
                     {templates.length === 0 && !isLoadingTemplates && (
                       <SelectItem value="none" disabled>No approved templates found</SelectItem>
                     )}
-                    {templates.map(t => (
-                      <SelectItem key={t.id} value={t.id} className="text-xs">
-                        {t.name} ({t.category || 'Utility'}) — {t.language || 'en'}
-                      </SelectItem>
-                    ))}
+                    {templates.map(t => {
+                      const hType = (t.header_type || (t as any).headerType || '').toLowerCase();
+                      const formatBadge = hType === 'video' ? '🎬 Video / Reels' : hType === 'image' ? '🖼️ Image' : hType === 'document' ? '📄 Doc' : '📝 Text';
+                      return (
+                        <SelectItem key={t.id} value={t.id} className="text-xs">
+                          <span className="font-semibold text-slate-900 dark:text-white">{t.name}</span>
+                          <span className="text-muted-foreground ml-1.5 text-[11px]">({t.category || 'Utility'}) — {t.language || 'en'}</span>
+                          <span className={cn(
+                            "ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-md",
+                            hType === 'video' 
+                              ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
+                              : hType === 'image'
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                : "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-slate-300"
+                          )}>
+                            {formatBadge}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
 
@@ -1192,20 +1244,39 @@ export default function NewBroadcastPage() {
                   </div>
 
                   {/* Meta Template Format Warning */}
-                  {selectedTemplate && selectedTemplate.header_type === 'image' && isCurrentVideo && (
-                    <div className="p-3.5 rounded-2xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-300/80 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 shadow-2xs">
-                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                      <div className="space-y-1">
-                        <p className="font-bold text-amber-900 dark:text-amber-300">Meta Template Format Mismatch Alert</p>
-                        <p className="text-[11px] leading-relaxed text-amber-800/90 dark:text-amber-300/90">
-                          Template <strong className="font-semibold text-amber-950 dark:text-amber-100">{selectedTemplate.name}</strong> Meta WhatsApp Manager me <strong className="uppercase">IMAGE</strong> format me approved hai. Meta ke niyam anusar IMAGE template me sirf Image (.jpg, .png) ja sakti hai.
-                        </p>
-                        <p className="text-[11px] leading-relaxed font-semibold text-amber-900 dark:text-amber-200 pt-0.5">
-                          💡 Solution: Is template ke sath Image attach karein, ya video bhejne ke liye WhatsApp Manager me ek naya template banayein jiska Header <strong>VIDEO</strong> ho.
-                        </p>
+                  {selectedTemplate && (selectedTemplate.header_type || '').toLowerCase() === 'image' && isCurrentVideo && (() => {
+                    const videoTmpl = templates.find(t => (t.header_type || (t as any).headerType || '').toLowerCase() === 'video');
+                    return (
+                      <div className="p-4 rounded-2xl bg-amber-50/95 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs space-y-2.5 shadow-xs">
+                        <div className="flex items-start gap-2.5">
+                          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                            <p className="font-bold text-amber-950 dark:text-amber-200">Meta Template Format Mismatch Alert</p>
+                            <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+                              Template <strong className="font-bold text-amber-950 dark:text-amber-100">{selectedTemplate.name}</strong> Meta WhatsApp Cloud API me <strong className="uppercase underline">IMAGE</strong> format me approved hai. Agar aap is template ke sath Video bhejenge to Meta reject kar dega (Error #132012).
+                            </p>
+                          </div>
+                        </div>
+                        {videoTmpl && (
+                          <div className="pt-1 flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedTemplateId(videoTmpl.id);
+                                setSelectedMediaType('video');
+                                toast.success(`Switched to approved video template: ${videoTmpl.name}`);
+                              }}
+                              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl h-8 px-3.5 flex items-center gap-1.5 shadow-xs cursor-pointer"
+                            >
+                              <VideoIcon className="h-3.5 w-3.5" />
+                              <span>Switch to {videoTmpl.name} (Approved Video Template)</span>
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   <input
                     type="file"

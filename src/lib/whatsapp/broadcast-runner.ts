@@ -121,14 +121,27 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
     if (!template && fDb) {
       try {
         const tmplSnap = await fDb
-          .collection('message_templates')
+          .collection('accounts')
+          .doc(accountId)
+          .collection('templates')
           .where('name', '==', broadcast.template_name)
           .limit(1)
           .get();
         if (!tmplSnap.empty) {
           template = tmplSnap.docs[0].data();
+        } else {
+          const topTmplSnap = await fDb
+            .collection('message_templates')
+            .where('name', '==', broadcast.template_name)
+            .limit(1)
+            .get();
+          if (!topTmplSnap.empty) {
+            template = topTmplSnap.docs[0].data();
+          }
         }
-      } catch {}
+      } catch (tmplErr) {
+        console.warn('[runBackgroundLoop] Template lookup warning:', tmplErr);
+      }
     }
 
     if (!template) {
@@ -200,17 +213,44 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
     let sentCount = recipients.filter((r: any) => r.status === 'sent').length;
     let failedCount = recipients.filter((r: any) => r.status === 'failed').length;
 
-    const rawHeaderType = (template?.header_type || '').toLowerCase();
+    let rawHeaderType = (template?.header_type || '').toLowerCase();
     const headerMediaUrl = (payload?.headerMediaUrl || template?.header_media_url || broadcast.header_media_url)?.trim();
     const isVideoUrl = /\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(headerMediaUrl || '');
+
+    let activeTemplate = template;
+    let templateName = template?.name || broadcast.template_name;
+
+    // Resilience: If broadcast targets an IMAGE template but attached media is a VIDEO,
+    // auto-route to an approved VIDEO template for this account if one exists (e.g. kisan_choice_video).
+    if (rawHeaderType === 'image' && isVideoUrl && fDb) {
+      try {
+        const videoTmplSnap = await fDb
+          .collection('accounts')
+          .doc(accountId)
+          .collection('templates')
+          .where('name', '==', `${template.name}_video`)
+          .where('status', '==', 'APPROVED')
+          .limit(1)
+          .get();
+        if (!videoTmplSnap.empty) {
+          activeTemplate = videoTmplSnap.docs[0].data();
+          templateName = activeTemplate.name;
+          rawHeaderType = 'video';
+          console.log(`[runBackgroundLoop] Auto-routed video broadcast from '${template.name}' to approved video template '${templateName}'`);
+        }
+      } catch (autoRouteErr) {
+        console.warn('[runBackgroundLoop] Auto-route to video template error:', autoRouteErr);
+      }
+    }
+
     // Match the exact format registered in Meta (IMAGE / VIDEO / DOCUMENT).
     // Never blindly override an approved template's header_type because Meta error 132012 rejects format mismatches.
     const headerType = rawHeaderType || (isVideoUrl ? 'video' : 'image');
     const isMediaHeader =
       headerType === 'image' || headerType === 'video' || headerType === 'document';
     const messageParams = isMediaHeader && headerMediaUrl ? { headerMediaUrl } : undefined;
-    const activeTemplate = template
-      ? { ...template, header_type: headerType }
+    activeTemplate = activeTemplate
+      ? { ...activeTemplate, header_type: headerType }
       : undefined;
     const variables = payload?.variables ?? broadcast.template_variables ?? {};
 
@@ -244,8 +284,8 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
             phoneNumberId: config.phone_number_id,
             accessToken: config.decrypted_access_token,
             to: sanitized,
-            templateName: template.name,
-            language: template.language ?? 'en_US',
+            templateName: templateName,
+            language: activeTemplate?.language ?? template?.language ?? 'en',
             template: activeTemplate,
             messageParams,
             params,
