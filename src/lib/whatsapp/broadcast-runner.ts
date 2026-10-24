@@ -200,17 +200,17 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
     let sentCount = recipients.filter((r: any) => r.status === 'sent').length;
     let failedCount = recipients.filter((r: any) => r.status === 'failed').length;
 
-    let headerType = template?.header_type;
+    const rawHeaderType = (template?.header_type || '').toLowerCase();
     const headerMediaUrl = (payload?.headerMediaUrl || template?.header_media_url || broadcast.header_media_url)?.trim();
     const isVideoUrl = /\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(headerMediaUrl || '');
-    if (isVideoUrl && headerType !== 'video') {
-      headerType = 'video';
-    }
+    // Match the exact format registered in Meta (IMAGE / VIDEO / DOCUMENT).
+    // Never blindly override an approved template's header_type because Meta error 132012 rejects format mismatches.
+    const headerType = rawHeaderType || (isVideoUrl ? 'video' : 'image');
     const isMediaHeader =
-      headerType === 'image' || headerType === 'video' || headerType === 'document' || Boolean(headerMediaUrl);
+      headerType === 'image' || headerType === 'video' || headerType === 'document';
     const messageParams = isMediaHeader && headerMediaUrl ? { headerMediaUrl } : undefined;
     const activeTemplate = template
-      ? { ...template, header_type: headerType || (isVideoUrl ? 'video' : 'image') }
+      ? { ...template, header_type: headerType }
       : undefined;
     const variables = payload?.variables ?? broadcast.template_variables ?? {};
 

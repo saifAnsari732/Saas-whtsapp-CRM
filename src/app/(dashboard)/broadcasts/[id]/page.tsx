@@ -311,6 +311,7 @@ export default function BroadcastDetailPage() {
         template: template,
         audience: broadcast.audience_filter as any,
         variables: broadcast.template_variables as any,
+        headerMediaUrl: broadcast.header_media_url,
       });
       
       toast.success(t('toastResent', { fallback: 'Broadcast duplicated and sent successfully' }));
