@@ -1,6 +1,6 @@
 import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin';
 import { getWhatsAppConfigForAccount } from '@/lib/whatsapp/get-config';
-import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
+import { sendTemplateMessage, uploadMediaToMeta } from '@/lib/whatsapp/meta-api';
 import { sanitizePhoneForMeta, isValidE164 } from '@/lib/whatsapp/phone-utils';
 
 const SEND_BATCH_SIZE = 10;
@@ -248,7 +248,26 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
     const headerType = rawHeaderType || (isVideoUrl ? 'video' : 'image');
     const isMediaHeader =
       headerType === 'image' || headerType === 'video' || headerType === 'document';
-    const messageParams = isMediaHeader && headerMediaUrl ? { headerMediaUrl } : undefined;
+
+    let headerMediaId: string | undefined;
+    if (isMediaHeader && headerMediaUrl) {
+      try {
+        console.log(`[runBackgroundLoop] Pre-uploading ${headerType} to Meta /media endpoint...`);
+        headerMediaId = await uploadMediaToMeta({
+          phoneNumberId: config.phone_number_id,
+          accessToken: config.decrypted_access_token,
+          mediaUrl: headerMediaUrl,
+          filename: headerType === 'video' ? 'video.mp4' : headerType === 'image' ? 'image.jpg' : 'document.pdf',
+        });
+        console.log(`[runBackgroundLoop] Pre-uploaded to Meta successfully, mediaId: ${headerMediaId}`);
+      } catch (mediaErr) {
+        console.warn(`[runBackgroundLoop] Direct Meta media upload failed, falling back to URL:`, mediaErr);
+      }
+    }
+
+    const messageParams = isMediaHeader && (headerMediaId || headerMediaUrl)
+      ? { headerMediaId, headerMediaUrl: headerMediaId ? undefined : headerMediaUrl }
+      : undefined;
     activeTemplate = activeTemplate
       ? { ...activeTemplate, header_type: headerType }
       : undefined;

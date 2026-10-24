@@ -1048,3 +1048,53 @@ export async function downloadMedia(
   const buffer = Buffer.from(await response.arrayBuffer())
   return { buffer, contentType }
 }
+
+
+/**
+ * Upload a media file (video/image/document) directly to WhatsApp Cloud API's
+ * POST /{phone_number_id}/media endpoint.
+ *
+ * Returns the Meta `id` (valid for 30 days) which can be passed directly as
+ * `headerMediaId` in template sends or media messages.
+ * This avoids downstream delivery delays and failures caused by Meta trying to
+ * asynchronously crawl large remote URLs (e.g. 15MB videos on Firebase Storage).
+ */
+export async function uploadMediaToMeta(args: {
+  phoneNumberId: string;
+  accessToken: string;
+  mediaUrl: string;
+  filename?: string;
+}): Promise<string> {
+  const { phoneNumberId, accessToken, mediaUrl, filename } = args;
+
+  const res = await fetch(mediaUrl);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch media from URL (${res.status}): ${mediaUrl}`);
+  }
+  const blob = await res.blob();
+  const contentType = blob.type || 'video/mp4';
+
+  const formData = new FormData();
+  formData.append('messaging_product', 'whatsapp');
+  formData.append('type', contentType);
+  formData.append('file', blob, filename || 'media.mp4');
+
+  const uploadRes = await fetch(`${META_API_BASE}/${phoneNumberId}/media`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: formData,
+  });
+
+  if (!uploadRes.ok) {
+    await throwMetaError(uploadRes, `Meta media upload failed: ${uploadRes.status}`);
+  }
+
+  const data = (await uploadRes.json()) as { id?: string };
+  if (!data.id) {
+    throw new Error('Meta media upload succeeded but returned no id.');
+  }
+
+  return data.id;
+}
