@@ -48,6 +48,8 @@ import {
   Tag,
   Check,
   Image as ImageIcon,
+  Video as VideoIcon,
+  Play,
   Sparkles
 } from 'lucide-react';
 
@@ -125,6 +127,18 @@ export default function NewBroadcastPage() {
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
   const headerType = (selectedTemplate?.header_type || (selectedTemplate as any)?.headerType || (selectedTemplate as any)?.header_format || (selectedTemplate as any)?.headerFormat || '').toLowerCase();
   const requiresMedia = Boolean(headerType && headerType !== 'text' && headerType !== 'none');
+  const [selectedMediaType, setSelectedMediaType] = useState<'image' | 'video' | 'document'>('image');
+  const [videoAspectRatio, setVideoAspectRatio] = useState<'reels' | 'standard'>('reels');
+
+  useEffect(() => {
+    if (headerType === 'video') {
+      setSelectedMediaType('video');
+    } else if (headerType === 'document') {
+      setSelectedMediaType('document');
+    } else {
+      setSelectedMediaType('image');
+    }
+  }, [headerType, selectedTemplateId]);
 
   const placeholders = useMemo(() => {
     if (!selectedTemplate) return [];
@@ -216,28 +230,43 @@ export default function NewBroadcastPage() {
     const savedUrl = selectedTemplate?.header_media_url || (selectedTemplate as any)?.headerMediaUrl;
     if (selectedTemplate && requiresMedia && savedUrl) {
       setHeaderMediaUrl(savedUrl);
+      if (/\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(savedUrl)) {
+        setSelectedMediaType('video');
+      }
     } else if (!savedUrl) {
       setHeaderMediaUrl('');
     }
   }, [selectedTemplate, requiresMedia]);
 
+  const isCurrentVideo = selectedMediaType === 'video' || /\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(headerMediaUrl);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const isVideo = file.type.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv|3gp)$/i.test(file.name);
+    const chosenType: 'image' | 'video' | 'document' = isVideo ? 'video' : selectedMediaType === 'video' ? 'video' : 'image';
+
+    if (isVideo && file.size > 16 * 1024 * 1024) {
+      toast.error('Video size exceeds 16MB Meta limit. Please select a smaller video file.');
+      return;
+    }
+
     try {
       setIsUploading(true);
-      toast.info('Uploading media attachment...');
+      toast.info(isVideo ? 'Uploading video to Cloud...' : 'Uploading media attachment...');
       
-      const { publicUrl } = await uploadAccountMedia('chat-media', file, selectedTemplateId);
+      const { publicUrl, mediaType } = await uploadAccountMedia('chat-media', file, selectedTemplateId);
       setHeaderMediaUrl(publicUrl);
+      const activeType = mediaType || chosenType;
+      setSelectedMediaType(activeType);
 
       if (selectedTemplateId) {
         setTemplates(prev => prev.map(t => 
-          t.id === selectedTemplateId ? { ...t, header_media_url: publicUrl } : t
+          t.id === selectedTemplateId ? { ...t, header_media_url: publicUrl, header_type: activeType } : t
         ));
       }
-      toast.success('Media uploaded and permanently saved to template!');
+      toast.success(`${activeType === 'video' ? 'Video' : 'Media'} uploaded and permanently saved to template!`);
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : 'Failed to upload file');
@@ -252,9 +281,12 @@ export default function NewBroadcastPage() {
   const handleSaveMediaUrlToTemplate = async (urlToSave?: string) => {
     const finalUrl = (urlToSave || headerMediaUrl).trim();
     if (!selectedTemplateId || !finalUrl) {
-      toast.error('Please enter a valid image URL first');
+      toast.error('Please enter a valid media URL first');
       return;
     }
+    const isVideo = selectedMediaType === 'video' || /\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(finalUrl);
+    const targetType = isVideo ? 'video' : 'image';
+
     try {
       setIsSavingMediaUrl(true);
       const res = await fetch('/api/whatsapp/templates', {
@@ -263,13 +295,15 @@ export default function NewBroadcastPage() {
         body: JSON.stringify({
           id: selectedTemplateId,
           header_media_url: finalUrl,
+          header_type: targetType,
         }),
       });
       if (res.ok) {
+        setSelectedMediaType(targetType);
         setTemplates(prev => prev.map(t => 
-          t.id === selectedTemplateId ? { ...t, header_media_url: finalUrl } : t
+          t.id === selectedTemplateId ? { ...t, header_media_url: finalUrl, header_type: targetType } : t
         ));
-        toast.success('Image URL permanently saved to template!');
+        toast.success(`${isVideo ? 'Video' : 'Image'} URL permanently saved to template!`);
       } else {
         toast.error('Failed to link media URL to template');
       }
@@ -322,7 +356,7 @@ export default function NewBroadcastPage() {
         
         if (numbers.length > 0) {
           const { data: existingContacts } = await supabase.from('contacts').select('id, phone').eq('account_id', profile.account_id).in('phone', numbers);
-          const existingPhones = new Set((existingContacts || []).map(c => c.phone));
+          const existingPhones = new Set((existingContacts || []).map((c: any) => c.phone));
           
           const newNumbers = numbers.filter(n => !existingPhones.has(n));
           if (newNumbers.length > 0) {
@@ -342,7 +376,7 @@ export default function NewBroadcastPage() {
           const { data: allContacts } = await supabase.from('contacts').select('id').eq('account_id', profile.account_id).in('phone', numbers);
           
           if (allContacts && tagId) {
-             const contactTags = allContacts.map(c => ({
+             const contactTags = allContacts.map((c: any) => ({
                contact_id: c.id,
                tag_id: tagId
              }));
@@ -431,9 +465,16 @@ export default function NewBroadcastPage() {
         };
       }
 
+      const isVideo = selectedMediaType === 'video' || /\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(headerMediaUrl);
+      const effectiveTemplate = selectedTemplate ? {
+        ...selectedTemplate,
+        header_type: isVideo ? 'video' : (selectedTemplate.header_type || 'image'),
+        header_media_url: requiresMedia ? headerMediaUrl : undefined,
+      } : selectedTemplate;
+
       const id = await createBroadcastAndStart({
         name,
-        template: selectedTemplate,
+        template: effectiveTemplate,
         audience,
         variables,
         headerMediaUrl: requiresMedia ? headerMediaUrl : undefined,
@@ -1098,47 +1139,103 @@ export default function NewBroadcastPage() {
               {requiresMedia ? (
                 <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-zinc-800/80">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <Label className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
-                      <ImageIcon className="h-4 w-4 text-emerald-600" />
-                      <span>Header Media Attachment ({selectedTemplate?.header_type?.toUpperCase() || 'IMAGE'})</span>
-                    </Label>
-                    <Badge variant="outline" className="w-fit bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 text-[10px] font-bold flex items-center gap-1">
-                      <Sparkles className="h-3 w-3" />
-                      <span>Permanent One-Time Cloud Upload</span>
-                    </Badge>
+                    <div className="space-y-0.5">
+                      <Label className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
+                        {isCurrentVideo ? (
+                          <VideoIcon className="h-4 w-4 text-emerald-600" />
+                        ) : (
+                          <ImageIcon className="h-4 w-4 text-emerald-600" />
+                        )}
+                        <span>Header Media Attachment ({isCurrentVideo ? 'VIDEO' : selectedMediaType.toUpperCase()})</span>
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Attach an Image or Video to appear at the top of your broadcast message
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Media Format Switcher: Image / Video */}
+                      <div className="flex items-center bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-lg border border-slate-200 dark:border-zinc-700">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedMediaType('image')}
+                          className={cn(
+                            "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer",
+                            !isCurrentVideo
+                              ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
+                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                          )}
+                        >
+                          <ImageIcon className="h-3 w-3" />
+                          <span>Image</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedMediaType('video')}
+                          className={cn(
+                            "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer",
+                            isCurrentVideo
+                              ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
+                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                          )}
+                        >
+                          <VideoIcon className="h-3 w-3" />
+                          <span>Video</span>
+                        </button>
+                      </div>
+
+                      <Badge variant="outline" className="w-fit bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        <span>Cloud Upload Active</span>
+                      </Badge>
+                    </div>
                   </div>
 
                   <input
                     type="file"
                     ref={fileInputRef}
                     className="hidden"
-                    accept={selectedTemplate?.header_type === 'video' ? 'video/*' : selectedTemplate?.header_type === 'document' ? '.pdf,.doc,.docx' : 'image/*'}
+                    accept={selectedMediaType === 'video' ? 'video/*,.mp4,.mov,.webm,.3gp' : selectedMediaType === 'document' ? '.pdf,.doc,.docx' : 'image/*,.png,.jpg,.jpeg,.webp'}
                     onChange={handleFileUpload}
                   />
 
                   {headerMediaUrl ? (
                     <div className="p-4 rounded-2xl border border-emerald-200/80 dark:border-emerald-800/60 bg-emerald-50/20 dark:bg-emerald-950/10 space-y-3">
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                        {selectedTemplate?.header_type !== 'document' ? (
-                          <div className="relative h-24 w-36 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 shadow-xs shrink-0 bg-slate-100 dark:bg-zinc-900 flex items-center justify-center">
-                            {selectedTemplate?.header_type === 'video' ? (
-                              <video src={headerMediaUrl} className="h-full w-full object-cover" />
-                            ) : (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img 
-                                src={headerMediaUrl} 
-                                alt="Header preview" 
-                                className="h-full w-full object-cover" 
-                                onError={(e) => {
-                                  (e.target as HTMLElement).style.display = 'none';
-                                }}
-                              />
-                            )}
+                        {isCurrentVideo ? (
+                          <div className={cn(
+                            "relative rounded-2xl overflow-hidden border-2 border-emerald-500/30 shadow-md shrink-0 bg-black flex items-center justify-center transition-all",
+                            videoAspectRatio === 'reels' 
+                              ? "w-36 sm:w-44 aspect-[9/16] max-h-72" 
+                              : "h-28 w-44 aspect-[16/9]"
+                          )}>
+                            <video 
+                              src={headerMediaUrl} 
+                              controls 
+                              playsInline
+                              className="h-full w-full object-cover" 
+                            />
+                            <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-white/10 shadow-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                              <span>{videoAspectRatio === 'reels' ? 'Reels 9:16' : '16:9'}</span>
+                            </div>
                           </div>
-                        ) : (
+                        ) : selectedTemplate?.header_type === 'document' ? (
                           <div className="h-24 w-28 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex flex-col items-center justify-center gap-1.5 shrink-0">
                             <FileText className="h-8 w-8 text-emerald-600" />
                             <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">Document</span>
+                          </div>
+                        ) : (
+                          <div className="relative h-24 w-36 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 shadow-xs shrink-0 bg-slate-100 dark:bg-zinc-900 flex items-center justify-center">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img 
+                              src={headerMediaUrl} 
+                              alt="Header preview" 
+                              className="h-full w-full object-cover" 
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
                           </div>
                         )}
 
@@ -1146,7 +1243,7 @@ export default function NewBroadcastPage() {
                           <div className="flex items-center gap-2">
                             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
                               <CheckCircle2 className="h-3.5 w-3.5" />
-                              <span>Permanently Stored in Cloud</span>
+                              <span>Permanently Stored in Cloud ({isCurrentVideo ? 'Video MP4' : 'Image'})</span>
                             </span>
                             <span className="text-[10px] text-muted-foreground">• One-time upload active</span>
                           </div>
@@ -1154,6 +1251,39 @@ export default function NewBroadcastPage() {
                           <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-slate-300 truncate">
                             {headerMediaUrl}
                           </div>
+
+                          {/* Aspect Ratio Format Switcher for Video */}
+                          {isCurrentVideo && (
+                            <div className="flex items-center gap-2 pt-1">
+                              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Display Size:</span>
+                              <div className="flex items-center bg-white dark:bg-zinc-900 p-0.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-[11px]">
+                                <button
+                                  type="button"
+                                  onClick={() => setVideoAspectRatio('reels')}
+                                  className={cn(
+                                    "px-2.5 py-1 rounded-md font-semibold transition-all flex items-center gap-1 cursor-pointer",
+                                    videoAspectRatio === 'reels'
+                                      ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 shadow-2xs font-bold"
+                                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                                  )}
+                                >
+                                  <span>📱 Reels (9:16)</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setVideoAspectRatio('standard')}
+                                  className={cn(
+                                    "px-2.5 py-1 rounded-md font-semibold transition-all flex items-center gap-1 cursor-pointer",
+                                    videoAspectRatio === 'standard'
+                                      ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 shadow-2xs font-bold"
+                                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                                  )}
+                                >
+                                  <span>📺 Landscape (16:9)</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
 
                           <div className="flex flex-wrap items-center gap-2 pt-1">
                             <Button
@@ -1165,7 +1295,7 @@ export default function NewBroadcastPage() {
                               className="h-8 text-xs rounded-xl font-semibold gap-1.5 border-slate-200 dark:border-zinc-800"
                             >
                               {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5 text-emerald-600" />}
-                              <span>Replace Image</span>
+                              <span>Replace {isCurrentVideo ? 'Video' : 'Image'}</span>
                             </Button>
 
                             <Button
@@ -1201,33 +1331,53 @@ export default function NewBroadcastPage() {
                         className="cursor-pointer border-2 border-dashed border-slate-300 hover:border-emerald-500 dark:border-zinc-700 dark:hover:border-emerald-500 rounded-2xl p-6 text-center bg-slate-50/50 hover:bg-emerald-50/30 dark:bg-zinc-950/40 dark:hover:bg-emerald-950/10 transition-colors space-y-2"
                       >
                         <div className="h-10 w-10 mx-auto rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                          {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UploadCloud className="h-5 w-5" />}
+                          {isUploading ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : isCurrentVideo ? (
+                            <VideoIcon className="h-5 w-5" />
+                          ) : (
+                            <UploadCloud className="h-5 w-5" />
+                          )}
                         </div>
                         <div>
                           <p className="text-xs font-bold text-slate-900 dark:text-white">
-                            {isUploading ? 'Uploading to Firebase Storage...' : 'Click to Upload Media / Poster'}
+                            {isUploading 
+                              ? 'Uploading to Firebase Storage...' 
+                              : isCurrentVideo 
+                                ? 'Click to Upload WhatsApp Video (.MP4, .MOV)' 
+                                : 'Click to Upload Media / Poster (Image or Video)'}
                           </p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
-                            Supports PNG, JPG, WEBP, MP4, PDF • Max 10MB
+                            {isCurrentVideo
+                              ? 'Supports MP4, MOV, WebM • Max 16MB'
+                              : 'Supports PNG, JPG, WEBP, MP4 • Max 16MB'}
                           </p>
                         </div>
                         <Badge variant="secondary" className="text-[10px] font-semibold">
-                          Upload Once • Permanently Available
+                          Upload Once • Permanently Stored in Cloud
                         </Badge>
                       </div>
 
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <div className="flex-1 h-px bg-slate-200 dark:border-zinc-800" />
-                        <span className="text-[10px] uppercase font-bold text-slate-400">or paste image url</span>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">
+                          or paste {isCurrentVideo ? 'video' : 'image'} url
+                        </span>
                         <div className="flex-1 h-px bg-slate-200 dark:border-zinc-800" />
                       </div>
 
                       <div className="flex gap-2">
                         <Input 
-                          placeholder="https://example.com/banner.jpg"
+                          placeholder={isCurrentVideo ? "https://example.com/promo-video.mp4" : "https://example.com/banner.jpg"}
                           value={headerMediaUrl}
-                          onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                          className="bg-slate-50/50 dark:bg-zinc-950 flex-1 text-xs rounded-xl h-10 border-slate-200 dark:border-zinc-800"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setHeaderMediaUrl(val);
+                            if (/\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(val)) {
+                              setSelectedMediaType('video');
+                            }
+                          }}
+                          className="bg-slate-50/50 dark:bg-zinc-950 flex-1 text-xs rounded-xl h-10 border-slate-200 dark:border-zinc-800 font-mono"
                         />
                         <Button 
                           type="button" 
@@ -1354,9 +1504,13 @@ export default function NewBroadcastPage() {
               {/* Realistic High-End Smartphone Device Mockup */}
               <WhatsAppPhoneMockup 
                 businessName="ChatFlyr Business"
-                template={selectedTemplate}
+                template={selectedTemplate ? {
+                  ...selectedTemplate,
+                  header_type: isCurrentVideo ? 'video' : selectedTemplate.header_type,
+                } : selectedTemplate}
                 bodyText={previewBodyText}
                 headerMediaUrl={headerMediaUrl}
+                videoAspectRatio={videoAspectRatio}
               />
 
               {/* Campaign Quick Summary & Launch Box */}

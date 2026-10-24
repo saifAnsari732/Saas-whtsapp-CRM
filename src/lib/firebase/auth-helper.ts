@@ -49,18 +49,22 @@ function parseFirebaseJwt(token: string): FirebaseUser | null {
  * Verify Firebase ID token from Authorization header or session cookie.
  * Drop-in replacement for supabase.auth.getUser() in API routes.
  */
-export async function getFirebaseUser(req: NextRequest): Promise<FirebaseUser | null> {
+export async function getFirebaseUser(req: any): Promise<FirebaseUser | null> {
   try {
     const auth = getAdminAuth();
 
     // 1. Try Authorization: Bearer <token> header first
-    const authHeader = req.headers.get('authorization');
+    const authHeader = req?.headers?.get ? req.headers.get('authorization') : null;
     let token: string | undefined;
 
     if (authHeader?.startsWith('Bearer ')) {
       token = authHeader.slice(7);
-    } else {
+    } else if (req?.cookies?.get) {
       token = req.cookies.get('__session')?.value;
+    } else if (req?.headers?.get) {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const match = cookieHeader.match(/(?:^|;\s*)__session=([^;]+)/);
+      token = match ? decodeURIComponent(match[1]) : undefined;
     }
 
     if (!token) return null;

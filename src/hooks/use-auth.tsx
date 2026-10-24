@@ -118,8 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let userSnap: any = null;
       try {
         userSnap = await getDoc(userDocRef);
-      } catch (firestoreErr: any) {
-        console.warn("[AuthProvider] Client Firestore permission fallback active:", firestoreErr?.message || firestoreErr);
+      } catch (_firestoreErr: any) {
+        // Quiet fallback when client Firestore rules are in default/pending state
       }
 
       const adminEmails = [

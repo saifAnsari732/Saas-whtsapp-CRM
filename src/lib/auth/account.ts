@@ -26,11 +26,16 @@ export class ForbiddenError extends Error {
 }
 
 export function toErrorResponse(err: unknown): NextResponse {
-  if (err instanceof UnauthorizedError || err instanceof ForbiddenError) {
-    return NextResponse.json({ error: err.message }, { status: err.status });
+  const status = (err as any)?.status;
+  const name = (err as any)?.name;
+  if (err instanceof UnauthorizedError || status === 401 || name === "UnauthorizedError") {
+    return NextResponse.json({ error: (err as any)?.message || "Unauthorized" }, { status: 401 });
+  }
+  if (err instanceof ForbiddenError || status === 403 || name === "ForbiddenError") {
+    return NextResponse.json({ error: (err as any)?.message || "Forbidden" }, { status: 403 });
   }
   console.error("[toErrorResponse] uncategorized error:", err);
-  return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  return NextResponse.json({ error: (err as any)?.message || "Internal server error" }, { status: 500 });
 }
 
 export interface AccountContext {
@@ -76,6 +81,15 @@ export async function getCurrentAccount(): Promise<AccountContext> {
     try {
       const cookieStore = await cookies();
       token = cookieStore.get("__session")?.value;
+    } catch {}
+  }
+
+  if (!token) {
+    try {
+      const headerStore = await headers();
+      const cookieHeader = headerStore.get("cookie") || "";
+      const match = cookieHeader.match(/(?:^|;\s*)__session=([^;]+)/);
+      if (match) token = decodeURIComponent(match[1]);
     } catch {}
   }
 

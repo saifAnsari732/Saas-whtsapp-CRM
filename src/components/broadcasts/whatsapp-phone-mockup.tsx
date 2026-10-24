@@ -30,6 +30,7 @@ interface WhatsAppPhoneMockupProps {
   template?: MessageTemplate | null;
   bodyText?: string;
   headerMediaUrl?: string;
+  videoAspectRatio?: 'reels' | 'standard';
   className?: string;
 }
 
@@ -38,6 +39,7 @@ export function WhatsAppPhoneMockup({
   template,
   bodyText,
   headerMediaUrl,
+  videoAspectRatio = 'reels',
   className
 }: WhatsAppPhoneMockupProps) {
   const displayText = bodyText || template?.body_text || '';
@@ -151,29 +153,48 @@ export function WhatsAppPhoneMockup({
                   {/* Header Media */}
                   {headerMediaUrl && (
                     <div className="relative bg-slate-100 dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-700/50 overflow-hidden">
-                      {template.header_type === 'video' ? (
-                        <div className="relative">
-                          <video 
-                            src={headerMediaUrl} 
-                            controls 
-                            className="w-full max-h-48 object-cover bg-black" 
-                          />
-                          <div className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full pointer-events-none">
-                            <Play className="h-3 w-3 fill-current" />
-                          </div>
-                        </div>
-                      ) : template.header_type === 'document' ? (
-                        <div className="p-3 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/80">
-                          <div className="h-10 w-10 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
-                            <FileText className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold truncate text-slate-800 dark:text-slate-200">Document Attachment</p>
-                            <p className="text-[10px] text-slate-400">PDF • Click to open</p>
-                          </div>
-                        </div>
-                      ) : (
-                        !hasImgError ? (
+                      {(() => {
+                        const isVideo = template.header_type === 'video' || /\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(headerMediaUrl);
+                        const isDoc = template.header_type === 'document' || /\.(pdf|docx?)($|\?)/i.test(headerMediaUrl);
+                        if (isVideo) {
+                          const isReels = videoAspectRatio !== 'standard';
+                          return (
+                            <div className="relative bg-black overflow-hidden rounded-t-xl">
+                              <video 
+                                src={headerMediaUrl} 
+                                controls 
+                                playsInline
+                                className={cn(
+                                  "w-full object-cover bg-black transition-all",
+                                  isReels 
+                                    ? "aspect-[9/16] max-h-[380px] sm:max-h-[420px]" 
+                                    : "aspect-[16/9] max-h-56"
+                                )} 
+                              />
+                              <div className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full pointer-events-none">
+                                <Play className="h-3 w-3 fill-current" />
+                              </div>
+                              <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 pointer-events-none border border-white/10 shadow-xs">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>{isReels ? 'Reels (9:16)' : '16:9 Banner'}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        if (isDoc) {
+                          return (
+                            <div className="p-3 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/80">
+                              <div className="h-10 w-10 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
+                                <FileText className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold truncate text-slate-800 dark:text-slate-200">Document Attachment</p>
+                                <p className="text-[10px] text-slate-400">PDF • Click to open</p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return !hasImgError ? (
                           <img 
                             src={headerMediaUrl} 
                             alt="Template Header Media" 
@@ -185,8 +206,8 @@ export function WhatsAppPhoneMockup({
                             <Camera className="h-6 w-6 text-slate-400" />
                             <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Media Header Attached</span>
                           </div>
-                        )
-                      )}
+                        );
+                      })()}
                     </div>
                   )}
 

@@ -226,14 +226,9 @@ export async function GET(request: Request) {
 
     if (conversationsStarted7d === 0 && accountId) {
       try {
-        const sevenDaysAgoDate = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
-        const { count } = await supabaseAdmin()
-          .from('conversations')
-          .select('id', { count: 'exact', head: true })
-          .eq('account_id', accountId)
-          .gte('last_message_at', sevenDaysAgoDate)
-        if (count && count > 0) {
-          conversationsStarted7d = count
+        const snap = await db.collection('accounts').doc(accountId).collection('conversations').count().get().catch(() => null)
+        if (snap && snap.data().count > 0) {
+          conversationsStarted7d = snap.data().count
         }
       } catch {}
     }

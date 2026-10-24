@@ -114,7 +114,7 @@ export async function POST(request: Request) {
         } else if (audience.type === 'tags' && audience.tagIds?.length > 0) {
           const { data: contactTags } = await supabaseAdmin.from('contact_tags').select('contact_id').in('tag_id', audience.tagIds);
           if (contactTags && contactTags.length > 0) {
-            const uniqueContactIds = [...new Set(contactTags.map((ct) => ct.contact_id))];
+            const uniqueContactIds = [...new Set(contactTags.map((ct: any) => ct.contact_id))];
             const { data } = await supabaseAdmin.from('contacts').select('*').in('id', uniqueContactIds);
             contacts = data ?? [];
           }

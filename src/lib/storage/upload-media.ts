@@ -66,6 +66,8 @@ export interface UploadAccountMediaResult {
   publicUrl: string;
   /** Storage object path (account-scoped). */
   path: string;
+  /** Detected media type */
+  mediaType?: 'image' | 'video' | 'document';
 }
 
 /**
@@ -113,7 +115,7 @@ export async function uploadAccountMedia(
     throw new Error(data.error || 'Failed to upload media file.');
   }
 
-  return { publicUrl: data.publicUrl, path: data.path };
+  return { publicUrl: data.publicUrl, path: data.path, mediaType: data.mediaType };
 }
 
 /**

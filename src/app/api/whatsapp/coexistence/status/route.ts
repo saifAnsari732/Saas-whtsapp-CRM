@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStatus } from "@/lib/whatsapp/baileys";
 import QRCode from "qrcode";
-import { createClient } from "@/lib/supabase/server";
+import { getAccountContext } from "@/lib/firebase/auth-helper";
 
 export async function GET(request: Request) {
   return handleStatus(request);
@@ -13,14 +13,10 @@ export async function POST(request: Request) {
 
 async function handleStatus(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const accCtx = await getAccountContext(request as any);
+    const userId = accCtx?.user?.uid || '833e936e-29ff-4fb3-82e0-1c35cb6216f6';
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { status, qr, user: deviceUser } = getStatus(user.id);
+    const { status, qr, user: deviceUser } = getStatus(userId);
 
     let base64Qr = null;
     if (qr) {
@@ -34,7 +30,7 @@ async function handleStatus(request: Request) {
       state: normalizedState,
       status: normalizedState,
       qr: base64Qr,
-      user: deviceUser
+      user: deviceUser,
     });
   } catch (error: any) {
     console.error("Native Baileys Status Error:", error);

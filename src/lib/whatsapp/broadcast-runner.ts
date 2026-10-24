@@ -200,11 +200,18 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
     let sentCount = recipients.filter((r: any) => r.status === 'sent').length;
     let failedCount = recipients.filter((r: any) => r.status === 'failed').length;
 
-    const headerType = template?.header_type;
-    const isMediaHeader =
-      headerType === 'image' || headerType === 'video' || headerType === 'document';
+    let headerType = template?.header_type;
     const headerMediaUrl = (payload?.headerMediaUrl || template?.header_media_url || broadcast.header_media_url)?.trim();
+    const isVideoUrl = /\.(mp4|mov|webm|mkv|3gp)($|\?)/i.test(headerMediaUrl || '');
+    if (isVideoUrl && headerType !== 'video') {
+      headerType = 'video';
+    }
+    const isMediaHeader =
+      headerType === 'image' || headerType === 'video' || headerType === 'document' || Boolean(headerMediaUrl);
     const messageParams = isMediaHeader && headerMediaUrl ? { headerMediaUrl } : undefined;
+    const activeTemplate = template
+      ? { ...template, header_type: headerType || (isVideoUrl ? 'video' : 'image') }
+      : undefined;
     const variables = payload?.variables ?? broadcast.template_variables ?? {};
 
     for (let i = 0; i < pendingRecipients.length; i += SEND_BATCH_SIZE) {
@@ -239,7 +246,7 @@ export async function runBackgroundLoop(broadcastId: string, payload?: any) {
             to: sanitized,
             templateName: template.name,
             language: template.language ?? 'en_US',
-            template,
+            template: activeTemplate,
             messageParams,
             params,
           });

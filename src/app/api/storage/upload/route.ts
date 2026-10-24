@@ -71,12 +71,16 @@ export async function POST(request: Request) {
     }
 
     // Store permanent header_media_url for template ID if provided
+    const isVideo = file.type.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv|3gp)$/i.test(file.name);
+    const isDoc = file.type.includes('pdf') || file.type.includes('doc') || /\.(pdf|docx?)$/i.test(file.name);
+    const detectedType = isVideo ? 'video' : isDoc ? 'document' : 'image';
+
     if (templateId && publicUrl) {
       try {
         const firestore = getAdminDb();
         const updateDoc = {
           header_media_url: publicUrl,
-          header_type: 'image',
+          header_type: detectedType,
           updated_at: new Date().toISOString(),
         };
 
@@ -85,13 +89,13 @@ export async function POST(request: Request) {
           firestore.collection('accounts').doc(accCtx.accountId).collection('templates').doc(templateId).set(updateDoc, { merge: true }),
         ]);
 
-        console.log(`[POST /api/storage/upload] Successfully bound media to template: ${templateId}`);
+        console.log(`[POST /api/storage/upload] Successfully bound media (${detectedType}) to template: ${templateId}`);
       } catch (fsErr) {
         console.warn('[POST /api/storage/upload] Firestore template update warning:', fsErr);
       }
     }
 
-    return NextResponse.json({ publicUrl, path });
+    return NextResponse.json({ publicUrl, path, mediaType: detectedType });
   } catch (err: any) {
     console.error('[POST /api/storage/upload] Exception:', err);
     return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 });

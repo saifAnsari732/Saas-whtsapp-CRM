@@ -58,24 +58,26 @@ export async function GET() {
     const account = accountDoc.data() || {};
     account.id = accountDoc.id;
 
-    // Fetch live usage metrics for trial / account report
-    const [
-      contactsSnap,
-      messagesSnap,
-      broadcastsSnap,
-      templatesSnap
-    ] = await Promise.all([
-      db.collection('contacts').where('accountId', '==', ctx.accountId).count().get(),
-      db.collection('messages').where('accountId', '==', ctx.accountId).count().get(),
-      db.collection('broadcasts').where('accountId', '==', ctx.accountId).count().get(),
-      db.collection('message_templates').where('accountId', '==', ctx.accountId).count().get(),
-    ]);
+    // Fetch live usage metrics for trial / account report safely
+    let messagesSent = 0;
+    let contactsCreated = 0;
+    let broadcastsSent = 0;
+    let templatesUsed = 0;
+
+    try {
+      const [contactsSnap, broadcastsSnap] = await Promise.all([
+        db.collection('accounts').doc(ctx.accountId).collection('contacts').count().get().catch(() => null),
+        db.collection('accounts').doc(ctx.accountId).collection('broadcasts').count().get().catch(() => null),
+      ]);
+      if (contactsSnap) contactsCreated = contactsSnap.data().count || 0;
+      if (broadcastsSnap) broadcastsSent = broadcastsSnap.data().count || 0;
+    } catch {}
 
     const trialUsage = {
-      messagesSent: messagesSnap.data().count || 0,
-      contactsCreated: contactsSnap.data().count || 0,
-      broadcastsSent: broadcastsSnap.data().count || 0,
-      templatesUsed: templatesSnap.data().count || 0,
+      messagesSent,
+      contactsCreated,
+      broadcastsSent,
+      templatesUsed,
     };
 
     const now = new Date();
