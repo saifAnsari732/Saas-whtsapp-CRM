@@ -84,10 +84,11 @@ async function handleTestSend(request: Request) {
     const bodyVarMatches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
     const bodyVarCount = new Set(bodyVarMatches).size;
 
-    // Media URL from broadcast or sample
+    // Media URL from query param, broadcast, or sample
     const mediaUrl =
+      url.searchParams.get('mediaUrl') ||
       latestBroadcast?.header_media_url ||
-      'https://firebasestorage.googleapis.com/v0/b/whatsapp-saas-7ab44.firebasestorage.app/o/chat-media%2Faccount-61740bf8-b21e-42dd-9ab3-9118bca90bc6%2Fsample.mp4?alt=media';
+      'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80';
 
     // 5. Construct payload exactly according to Meta's registered template
     const sendComponents: any[] = [];

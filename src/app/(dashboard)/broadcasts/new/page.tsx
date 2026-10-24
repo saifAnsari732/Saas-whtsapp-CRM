@@ -1191,6 +1191,22 @@ export default function NewBroadcastPage() {
                     </div>
                   </div>
 
+                  {/* Meta Template Format Warning */}
+                  {selectedTemplate && selectedTemplate.header_type === 'image' && isCurrentVideo && (
+                    <div className="p-3.5 rounded-2xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-300/80 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 shadow-2xs">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-bold text-amber-900 dark:text-amber-300">Meta Template Format Mismatch Alert</p>
+                        <p className="text-[11px] leading-relaxed text-amber-800/90 dark:text-amber-300/90">
+                          Template <strong className="font-semibold text-amber-950 dark:text-amber-100">{selectedTemplate.name}</strong> Meta WhatsApp Manager me <strong className="uppercase">IMAGE</strong> format me approved hai. Meta ke niyam anusar IMAGE template me sirf Image (.jpg, .png) ja sakti hai.
+                        </p>
+                        <p className="text-[11px] leading-relaxed font-semibold text-amber-900 dark:text-amber-200 pt-0.5">
+                          💡 Solution: Is template ke sath Image attach karein, ya video bhejne ke liye WhatsApp Manager me ek naya template banayein jiska Header <strong>VIDEO</strong> ho.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <input
                     type="file"
                     ref={fileInputRef}
