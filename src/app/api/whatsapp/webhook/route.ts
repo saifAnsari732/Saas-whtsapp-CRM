@@ -281,13 +281,11 @@ export async function POST(request: Request) {
   // (see issue #301). `after()` hands the callback to the runtime, which
   // keeps the function alive until it resolves (within the route's
   // maxDuration).
-  after(async () => {
-    try {
-      await processWebhook(body)
-    } catch (error) {
-      console.error('Error processing webhook:', error)
-    }
-  })
+  try {
+    await processWebhook(body)
+  } catch (error) {
+    console.error('Error processing webhook:', error)
+  }
 
   return NextResponse.json({ status: 'received' }, { status: 200 })
 }
