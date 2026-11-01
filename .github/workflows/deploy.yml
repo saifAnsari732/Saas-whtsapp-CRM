@@ -16,7 +16,7 @@ jobs:
       - name: Deploy to AWS EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 65.0.27.77
+          host: 13.126.130.73
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
@@ -35,4 +35,5 @@ jobs:
             
             pm2 start ecosystem.config.js --cwd $(pwd)
             pm2 save
+            sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu || true
             sudo systemctl restart nginx
