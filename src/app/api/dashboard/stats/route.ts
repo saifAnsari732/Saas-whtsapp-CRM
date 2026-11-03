@@ -104,7 +104,10 @@ export async function GET(request: Request) {
       }
     }
 
+    const allTotalSent = Math.max(totalSent, totalDelivered + totalFailed + totalPending);
+
     const msgAnalytics = {
+      totalSent: allTotalSent,
       delivered: totalDelivered,
       seen: totalDelivered,
       failed: totalFailed,

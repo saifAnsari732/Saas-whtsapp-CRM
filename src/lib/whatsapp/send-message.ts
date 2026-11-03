@@ -36,6 +36,7 @@ import {
 } from '@/lib/whatsapp/interactive';
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
+import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin';
 import { getWhatsAppConfigForAccount } from '@/lib/whatsapp/get-config';
 import {
   sanitizePhoneForMeta,
@@ -218,19 +219,78 @@ export async function sendMessageToConversation(
 
   const isMediaKind = (MEDIA_KINDS as readonly string[]).includes(messageType);
 
-  // Conversation + contact, account-scoped.
-  const { data: conversation, error: convError } = await db
-    .from('conversations')
-    .select('*, contact:contacts(*)')
-    .eq('id', conversationId)
-    .eq('account_id', accountId)
-    .single();
+  // Conversation + contact, account-scoped (Supabase or Firebase Firestore)
+  let conversation: any = null;
+  let contact: any = null;
 
-  if (convError || !conversation) {
+  // 1. Try Supabase
+  try {
+    const { data: conv, error: convError } = await db
+      .from('conversations')
+      .select('*, contact:contacts(*)')
+      .eq('id', conversationId)
+      .eq('account_id', accountId)
+      .maybeSingle();
+
+    if (!convError && conv) {
+      conversation = conv;
+      contact = conv.contact;
+    }
+  } catch (sbConvErr) {
+    console.warn('[send-message] Supabase conversation resolve warning:', sbConvErr);
+  }
+
+  // 2. Fallback to Firebase Firestore (Primary CRM store)
+  if (!conversation || !contact?.phone) {
+    try {
+      const fDb = getAdminDb();
+      if (fDb) {
+        const convDoc = await fDb
+          .collection('accounts')
+          .doc(accountId)
+          .collection('conversations')
+          .doc(conversationId)
+          .get();
+
+        if (convDoc.exists) {
+          conversation = { id: convDoc.id, ...convDoc.data() };
+          const contactId = conversation.contact_id || conversation.contactId;
+
+          if (contactId) {
+            const contactDoc = await fDb
+              .collection('accounts')
+              .doc(accountId)
+              .collection('contacts')
+              .doc(contactId)
+              .get();
+
+            if (contactDoc.exists) {
+              contact = { id: contactDoc.id, ...contactDoc.data() };
+            }
+          }
+
+          // If still no contact phone, inspect conversation fields directly
+          if (!contact?.phone) {
+            const rawPhone = conversation.phone || conversation.contact_phone || (contactId ? String(contactId).replace(/\D/g, '') : null);
+            if (rawPhone) {
+              contact = {
+                id: contactId || `c_${rawPhone}`,
+                phone: rawPhone,
+                name: conversation.contact_name || 'Customer'
+              };
+            }
+          }
+        }
+      }
+    } catch (fsErr) {
+      console.warn('[send-message] Firestore conversation resolve warning:', fsErr);
+    }
+  }
+
+  if (!conversation) {
     throw new SendMessageError('not_found', 'Conversation not found', 404);
   }
 
-  const contact = conversation.contact;
   if (!contact?.phone) {
     throw new SendMessageError(
       'bad_request',
@@ -494,46 +554,84 @@ export async function sendMessageToConversation(
   const interactiveBody =
     messageType === 'interactive' ? interactivePayload!.body : null;
 
-  const { data: messageRecord, error: msgError } = await db
-    .from('messages')
-    .insert({
-      conversation_id: conversationId,
-      sender_type: 'agent',
-      content_type: messageType,
-      content_text: interactiveBody ?? contentText ?? null,
-      media_url: mediaUrl || null,
-      template_name: templateName || null,
-      interactive_payload:
-        messageType === 'interactive' ? interactivePayload : null,
-      message_id: waMessageId,
-      status: 'sent',
-      reply_to_message_id: replyToMessageId || null,
-    })
-    .select()
-    .single();
-
-  if (msgError) {
-    console.error('[send-message] error inserting sent message:', msgError);
-    throw new SendMessageError(
-      'db_error',
-      `Message sent to Meta but failed to save to DB: ${msgError.message}`,
-      500
-    );
-  }
-
   const lastMessageText =
     messageType === 'interactive'
       ? interactivePayloadPreviewText(interactivePayload!)
       : contentText || `[${messageType}]`;
+  const nowIso = new Date().toISOString();
 
-  await db
-    .from('conversations')
-    .update({
-      last_message_text: lastMessageText,
-      last_message_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', conversationId);
+  // 1. Primary: Save sent message to Firebase Firestore
+  let fsMsgId = `msg_${Date.now()}`;
+  try {
+    const fDb = getAdminDb();
+    if (fDb) {
+      const convRef = fDb
+        .collection('accounts')
+        .doc(accountId)
+        .collection('conversations')
+        .doc(conversationId);
+
+      const fsMsgDoc = await convRef.collection('messages').add(cleanForFirestore({
+        conversation_id: conversationId,
+        sender_type: 'agent',
+        content_type: messageType,
+        content_text: interactiveBody ?? contentText ?? null,
+        media_url: mediaUrl || null,
+        template_name: templateName || null,
+        message_id: waMessageId,
+        status: 'sent',
+        reply_to_message_id: replyToMessageId || null,
+        created_at: nowIso,
+      }));
+      fsMsgId = fsMsgDoc.id;
+
+      await convRef.set(cleanForFirestore({
+        last_message_text: lastMessageText,
+        last_message_at: nowIso,
+        last_sender_type: 'agent',
+        updatedAt: nowIso,
+      }), { merge: true });
+    }
+  } catch (fsSaveErr) {
+    console.warn('[send-message] Firestore message persist warning:', fsSaveErr);
+  }
+
+  // 2. Secondary: Mirror to Supabase if conversation row exists
+  let sbMessageRecordId = fsMsgId;
+  try {
+    const { data: messageRecord, error: msgError } = await db
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        sender_type: 'agent',
+        content_type: messageType,
+        content_text: interactiveBody ?? contentText ?? null,
+        media_url: mediaUrl || null,
+        template_name: templateName || null,
+        interactive_payload:
+          messageType === 'interactive' ? interactivePayload : null,
+        message_id: waMessageId,
+        status: 'sent',
+        reply_to_message_id: replyToMessageId || null,
+      })
+      .select()
+      .maybeSingle();
+
+    if (!msgError && messageRecord?.id) {
+      sbMessageRecordId = messageRecord.id;
+    }
+
+    await db
+      .from('conversations')
+      .update({
+        last_message_text: lastMessageText,
+        last_message_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq('id', conversationId);
+  } catch (sbErr) {
+    console.warn('[send-message] Supabase mirror non-fatal error:', sbErr);
+  }
 
   // Pause any active Flow run for this contact — the agent stepping in
   // is the strongest "yield, human is here" signal. Best-effort.
@@ -558,5 +656,5 @@ export async function sendMessageToConversation(
     );
   }
 
-  return { messageId: messageRecord.id, whatsappMessageId: waMessageId };
+  return { messageId: sbMessageRecordId, whatsappMessageId: waMessageId };
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStatus } from "@/lib/whatsapp/baileys";
 import QRCode from "qrcode";
-import { getAccountContext } from "@/lib/firebase/auth-helper";
+import { getCoexistenceUser } from "@/lib/whatsapp/coexistence-auth";
 
 export async function GET(request: Request) {
   return handleStatus(request);
@@ -13,8 +13,7 @@ export async function POST(request: Request) {
 
 async function handleStatus(request: Request) {
   try {
-    const accCtx = await getAccountContext(request as any);
-    const userId = accCtx?.user?.uid || '833e936e-29ff-4fb3-82e0-1c35cb6216f6';
+    const { userId } = await getCoexistenceUser(request);
 
     const { status, qr, user: deviceUser } = getStatus(userId);
 

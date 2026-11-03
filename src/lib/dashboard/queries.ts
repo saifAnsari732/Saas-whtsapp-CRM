@@ -99,20 +99,27 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
   }
 }
 
-// --- Message Analytics (Delivered, Read, Failed, Pending) ---
+// --- Message Analytics (TotalSent, Delivered, Read, Failed, Pending) ---
 export async function loadMessageAnalytics(db: DB) {
-  const [delivered, seen, failed, pending] = await Promise.all([
+  const [totalSent, delivered, seen, failed, pending] = await Promise.all([
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('direction', 'outbound'),
     db.from('messages').select('id', { count: 'exact', head: true }).in('status', ['delivered', 'DELIVERED']),
     db.from('messages').select('id', { count: 'exact', head: true }).in('status', ['read', 'READ', 'seen', 'SEEN']),
     db.from('messages').select('id', { count: 'exact', head: true }).in('status', ['failed', 'FAILED', 'error', 'ERROR']),
     db.from('messages').select('id', { count: 'exact', head: true }).in('status', ['sending', 'sent', 'SENT', 'pending', 'PENDING'])
   ]);
 
+  const sentCount = totalSent.count ?? 0;
+  const delCount = delivered.count ?? 0;
+  const failCount = failed.count ?? 0;
+  const pendCount = pending.count ?? 0;
+
   return {
-    delivered: delivered.count ?? 0,
+    totalSent: Math.max(sentCount, delCount + failCount + pendCount),
+    delivered: delCount,
     seen: seen.count ?? 0,
-    failed: failed.count ?? 0,
-    pending: pending.count ?? 0,
+    failed: failCount,
+    pending: pendCount,
   }
 }
 

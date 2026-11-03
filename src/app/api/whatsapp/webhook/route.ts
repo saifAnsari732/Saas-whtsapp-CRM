@@ -23,6 +23,19 @@ import { handleBroadcastAutoReplyIfEligible } from '@/lib/whatsapp/broadcast-aut
 // plan's ceiling). Tune as needed.
 export const maxDuration = 60
 
+// In-memory LRU deduplication cache to prevent duplicate processing on Meta retries
+const processedMessageIdCache = new Set<string>();
+function markMessageProcessed(id: string): boolean {
+  if (!id) return true;
+  if (processedMessageIdCache.has(id)) return false;
+  if (processedMessageIdCache.size > 10000) {
+    const firstKey = processedMessageIdCache.keys().next().value;
+    if (firstKey) processedMessageIdCache.delete(firstKey);
+  }
+  processedMessageIdCache.add(id);
+  return true;
+}
+
 // Lazy-initialized to avoid build-time crash when env vars are missing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _adminClient: any = null
@@ -834,6 +847,14 @@ async function processMessage(
     })
   }
 
+  // Deduplicate incoming message by Meta message_id
+  if (message.id) {
+    if (!markMessageProcessed(message.id)) {
+      console.log(`[webhook] Skipping duplicate message already in cache: ${message.id}`);
+      return;
+    }
+  }
+
   // Reactions short-circuit here — they aren't messages. We never insert
   // into `messages`, never bump unread_count, never update last_message_text.
   // Done before parseMessageContent so the media-URL fetch is skipped.
@@ -922,6 +943,21 @@ async function processMessage(
   if (fDb) {
     try {
       const convRef = fDb.collection('accounts').doc(accountId).collection('conversations').doc(conversation.id);
+
+      // Guard: Check if message.id is already stored in Firestore for this conversation
+      if (message.id) {
+        const existingSnap = await convRef
+          .collection('messages')
+          .where('message_id', '==', message.id)
+          .limit(1)
+          .get();
+
+        if (!existingSnap.empty) {
+          console.log('[webhook] Duplicate message ignored (already in Firestore):', message.id);
+          return;
+        }
+      }
+
       const nowIso = new Date().toISOString();
 
       await convRef.collection('messages').add(cleanForFirestore({

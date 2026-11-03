@@ -1,15 +1,13 @@
+import { getCoexistenceUser } from '@/lib/whatsapp/coexistence-auth';
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendTextMessage, sendTemplateMessage } from "@/lib/whatsapp/meta-api";
 
 export async function POST(request: Request) {
   try {
+    const { userId } = await getCoexistenceUser(request);
+    const user = { id: userId };
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const body = await request.json();
     const { to, message, mediaUrl, mediaType, templateName, templateLanguage, buttons } = body;

@@ -29,9 +29,36 @@ export async function GET(request: Request) {
         const snap = await msgsRef.get();
         if (!snap.empty) {
           const msgs: any[] = [];
+          const seenIds = new Set<string>();
+          const seenKeyWindow = new Set<string>();
+          const dupDocIds: string[] = [];
+
           snap.forEach((doc) => {
-            msgs.push({ id: doc.id, ...doc.data() });
+            const data = doc.data();
+            const rawId = data.message_id || data.id;
+            const timeMin = data.created_at ? Math.floor(new Date(data.created_at).getTime() / 60000) : 0;
+            const contentKey = `${data.sender_type || ''}_${data.content_text || ''}_${timeMin}`;
+
+            let isDup = false;
+            if (rawId && seenIds.has(rawId)) {
+              isDup = true;
+            } else if (data.content_text && seenKeyWindow.has(contentKey)) {
+              isDup = true;
+            }
+
+            if (isDup) {
+              dupDocIds.push(doc.id);
+            } else {
+              if (rawId) seenIds.add(rawId);
+              if (data.content_text) seenKeyWindow.add(contentKey);
+              msgs.push({ id: doc.id, ...data });
+            }
           });
+
+          // Background self-healing cleanup of duplicate documents from Firestore
+          if (dupDocIds.length > 0) {
+            Promise.allSettled(dupDocIds.map((dId) => msgsRef.doc(dId).delete())).catch(() => {});
+          }
 
           // Sort ascending by created_at
           msgs.sort((a, b) => {

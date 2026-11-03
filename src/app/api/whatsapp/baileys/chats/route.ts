@@ -1,3 +1,4 @@
+import { getCoexistenceUser } from '@/lib/whatsapp/coexistence-auth';
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import fs from "fs";
@@ -12,13 +13,10 @@ const CHAT_CACHE_TTL_MS = 45000; // 45 seconds TTL for instant retrieval
 export async function GET(request: Request) {
   let currentUserId: string | null = null;
   try {
+    const { userId } = await getCoexistenceUser(request);
+    currentUserId = userId;
+    const user = { id: userId };
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    currentUserId = user.id;
 
     const { searchParams } = new URL(request.url);
     const force = searchParams.get("force") === "true";

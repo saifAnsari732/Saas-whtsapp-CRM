@@ -1,26 +1,21 @@
 import { NextResponse } from "next/server";
 import { connectToWhatsApp, getStatus } from "@/lib/whatsapp/baileys";
 import QRCode from "qrcode";
-import { createClient } from "@/lib/supabase/server";
+import { getCoexistenceUser } from "@/lib/whatsapp/coexistence-auth";
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { userId } = await getCoexistenceUser(request);
 
     // Fire and forget connection start
-    connectToWhatsApp(user.id);
+    connectToWhatsApp(userId);
 
     // Wait for QR code to generate (up to 8 seconds) to prevent returning null too early
-    let currentStatus = getStatus(user.id);
+    let currentStatus = getStatus(userId);
     let attempts = 0;
     while (!currentStatus.qr && currentStatus.status !== 'connected' && attempts < 16) {
       await new Promise(resolve => setTimeout(resolve, 500));
-      currentStatus = getStatus(user.id);
+      currentStatus = getStatus(userId);
       attempts++;
     }
 
@@ -29,9 +24,13 @@ export async function POST(request: Request) {
       base64Qr = await QRCode.toDataURL(currentStatus.qr);
     }
 
+    const normalizedState = currentStatus.status === "connected" ? "open" : currentStatus.status;
+
     return NextResponse.json({
       success: true,
-      state: currentStatus.status,
+      state: normalizedState,
+      status: normalizedState,
+      qr: base64Qr,
       data: {
         qrcode: {
           base64: base64Qr

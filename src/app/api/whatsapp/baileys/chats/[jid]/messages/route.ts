@@ -1,15 +1,13 @@
+import { getCoexistenceUser } from '@/lib/whatsapp/coexistence-auth';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import fs from 'fs';
 
 export async function GET(req: Request, { params }: { params: Promise<{ jid: string }> }) {
   try {
+    const { userId } = await getCoexistenceUser(req);
+    const user = { id: userId };
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     const { jid } = await params;
     const decodedJid = decodeURIComponent(jid);

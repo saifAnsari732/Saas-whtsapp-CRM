@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAccountContext } from '@/lib/firebase/auth-helper'
+import { getAdminDb } from '@/lib/firebase/admin'
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -109,20 +110,44 @@ export async function POST(request: Request) {
     let conversationId: string | null = null
 
     if (conversationIdInput) {
-      const { data, error: convError } = await admin
-        .from('conversations')
-        .select('id')
-        .eq('id', conversationIdInput)
-        .eq('account_id', accountId)
-        .single()
+      let foundInFs = false;
+      const fDb = getAdminDb();
+      if (fDb) {
+        try {
+          const convDoc = await fDb
+            .collection('accounts')
+            .doc(accountId)
+            .collection('conversations')
+            .doc(conversationIdInput)
+            .get();
+          if (convDoc.exists) {
+            foundInFs = true;
+            conversationId = convDoc.id;
+          }
+        } catch (fsConvErr) {
+          console.warn('[send] Firestore conversation lookup warning:', fsConvErr);
+        }
+      }
 
-      if (convError || !data) {
+      if (!foundInFs) {
+        const { data, error: convError } = await admin
+          .from('conversations')
+          .select('id')
+          .eq('id', conversationIdInput)
+          .eq('account_id', accountId)
+          .maybeSingle();
+
+        if (data?.id) {
+          conversationId = data.id;
+        }
+      }
+
+      if (!conversationId) {
         return NextResponse.json(
           { error: 'Conversation not found' },
           { status: 404 }
-        )
+        );
       }
-      conversationId = data.id
     } else {
       // contact_id path: verify the contact is in this account first so a
       // caller can't open a conversation against someone else's contact.
