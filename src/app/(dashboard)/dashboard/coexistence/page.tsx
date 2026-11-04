@@ -409,10 +409,10 @@ export default function CoexistenceSetupPage() {
     };
   }, [user?.id]);
 
-  // Advanced One-Time WhatsApp Chat Sync & Persistent Cache Algorithm
-  const fetchChatsAndGroups = useCallback(async (notify = false, force = false) => {
+  // Advanced Seamless WhatsApp Chat Sync & Persistent Cache Algorithm
+  const fetchChatsAndGroups = useCallback(async (notify = false, force = false, isBackground = false) => {
     // If not forced and we already have cached chats, NEVER re-sync automatically!
-    if (!force && chats.length > 0) {
+    if (!force && chats.length > 0 && !isBackground) {
       return;
     }
 
@@ -420,7 +420,10 @@ export default function CoexistenceSetupPage() {
     if (isSyncingRef.current) return;
 
     isSyncingRef.current = true;
-    setFetchingChats(true);
+    // Only show full loading spinner if user has 0 chats or explicitly clicked manual refresh
+    if (!isBackground && chats.length === 0) {
+      setFetchingChats(true);
+    }
     try {
       const url = force ? "/api/whatsapp/baileys/chats?force=true" : "/api/whatsapp/baileys/chats";
       const res = await fetch(url);
@@ -504,16 +507,27 @@ export default function CoexistenceSetupPage() {
     }
   }, [activeChatId, fetchLiveMessages]);
 
-  // Periodic background chat refresh to keep conversation ordering & last message up to date
+  // Periodic silent background chat refresh to keep conversation ordering & last message up to date
   useEffect(() => {
     if (!isConnected) return;
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        fetchChatsAndGroups(false, true);
+        fetchChatsAndGroups(false, true, true);
       }
-    }, 10000);
+    }, 6000);
     return () => clearInterval(interval);
   }, [isConnected, fetchChatsAndGroups]);
+
+  // Seamless active chat JID auto-normalization (converts legacy 10-digit JID to E.164 91 format)
+  useEffect(() => {
+    if (activeLiveChat && !activeLiveChat.id.endsWith('@g.us')) {
+      const cleanDigits = activeLiveChat.id.split('@')[0].replace(/\D/g, '');
+      if (cleanDigits.length === 10) {
+        const normalizedId = `91${cleanDigits}@s.whatsapp.net`;
+        setActiveLiveChat(prev => prev && prev.id === activeLiveChat.id ? { ...prev, id: normalizedId } : prev);
+      }
+    }
+  }, [activeLiveChat]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1595,7 +1609,7 @@ export default function CoexistenceSetupPage() {
 
                     {/* Chats Scroll Area */}
                     <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain divide-y divide-slate-100/80 dark:divide-zinc-800/60">
-                        {fetchingChats ? (
+                        {fetchingChats && chats.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
                             <Loader2 className="h-7 w-7 animate-spin text-[#008069]" />
                             <p className="text-xs font-semibold">Syncing phone chats...</p>

@@ -14,45 +14,64 @@ export async function GET(req: Request, { params }: { params: Promise<{ jid: str
 
     const { jid } = await params;
     const decodedJid = decodeURIComponent(jid);
+    const isGroup = decodedJid.endsWith('@g.us');
     const cleanPhone = decodedJid.split('@')[0].replace(/\D/g, '');
     const shortPhone = cleanPhone.startsWith('91') && cleanPhone.length === 12 ? cleanPhone.slice(2) : cleanPhone;
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const altJid = decodedJid.endsWith('@s.whatsapp.net') 
-      ? (cleanPhone.length === 10 ? `${fullPhone}@s.whatsapp.net` : `${shortPhone}@s.whatsapp.net`)
-      : decodedJid;
 
-    // 1. Check in-memory Baileys store (both primary JID and alternative JID format)
+    // List of candidate JIDs to check so replies with/without country code always merge
+    const candidateJids = isGroup
+      ? [decodedJid]
+      : Array.from(new Set([
+          decodedJid,
+          `${fullPhone}@s.whatsapp.net`,
+          `${shortPhone}@s.whatsapp.net`,
+          `${cleanPhone}@s.whatsapp.net`,
+        ]));
+
+    const msgMap = new Map<string, any>();
+
+    // 1. Gather all messages across candidate JIDs in memory store
     const store = global.waStores?.[user.id];
-    let messages: any[] = [];
-
-    if (store?.messages?.[decodedJid] && Array.isArray(store.messages[decodedJid])) {
-      messages = [...store.messages[decodedJid]];
-    } else if (store?.messages?.[altJid] && Array.isArray(store.messages[altJid])) {
-      messages = [...store.messages[altJid]];
+    if (store?.messages) {
+      for (const candidate of candidateJids) {
+        const list = store.messages[candidate];
+        if (Array.isArray(list)) {
+          for (const m of list) {
+            const id = m?.key?.id || `${m.messageTimestamp}-${Math.random()}`;
+            msgMap.set(id, m);
+          }
+        }
+      }
     }
 
     // 2. Check disk file store if memory is empty
-    if (messages.length === 0) {
+    if (msgMap.size === 0) {
       const storeFile = `baileys_store_${user.id}.json`;
       if (fs.existsSync(storeFile)) {
         try {
           const diskData = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
-          if (diskData?.messages?.[decodedJid] && Array.isArray(diskData.messages[decodedJid])) {
-            messages = [...diskData.messages[decodedJid]];
-          } else if (diskData?.messages?.[altJid] && Array.isArray(diskData.messages[altJid])) {
-            messages = [...diskData.messages[altJid]];
+          if (diskData?.messages) {
+            for (const candidate of candidateJids) {
+              const list = diskData.messages[candidate];
+              if (Array.isArray(list)) {
+                for (const m of list) {
+                  const id = m?.key?.id || `${m.messageTimestamp}-${Math.random()}`;
+                  msgMap.set(id, m);
+                }
+              }
+            }
           }
         } catch {}
       }
     }
 
-    // 3. Fallback to Firebase Firestore conversation messages
-    if (messages.length === 0 && cleanPhone.length >= 7 && process.env.FIREBASE_ADMIN_PROJECT_ID) {
+    // 3. Fallback to Firebase Firestore conversation messages if store has no messages
+    if (msgMap.size === 0 && cleanPhone.length >= 7 && process.env.FIREBASE_ADMIN_PROJECT_ID) {
       try {
         const { getAdminDb } = await import('@/lib/firebase/admin');
         const fDb = getAdminDb();
         if (fDb) {
-          // Look up conversation by standard id formats across full & short phone
           const possibleConvIds = [
             `conv_c_${cleanPhone}`,
             `conv_c_${fullPhone}`,
@@ -83,14 +102,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ jid: str
             const msgsSnap = await convDoc.ref
               .collection('messages')
               .orderBy('created_at', 'asc')
-              .limit(60)
+              .limit(80)
               .get()
               .catch(() => null);
 
             if (msgsSnap && !msgsSnap.empty) {
-              messages = msgsSnap.docs.map((doc: any) => {
+              msgsSnap.docs.forEach((doc: any) => {
                 const m = doc.data();
-                return {
+                msgMap.set(doc.id, {
                   key: {
                     id: doc.id,
                     fromMe: m.sender_type === 'agent' || m.direction === 'outbound',
@@ -103,7 +122,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ jid: str
                     ? Math.floor(new Date(m.created_at).getTime() / 1000)
                     : Math.floor(Date.now() / 1000),
                   status: m.status === 'read' ? 'READ' : m.status === 'delivered' ? 'DELIVERY_ACK' : 'SERVER_ACK',
-                };
+                });
               });
             }
           }
@@ -113,48 +132,60 @@ export async function GET(req: Request, { params }: { params: Promise<{ jid: str
       }
     }
 
-    // 4. Fallback: Query Supabase messages table if still empty
-    if (messages.length === 0 && cleanPhone.length >= 7) {
+    // 4. Fallback to Supabase messages
+    if (msgMap.size === 0 && cleanPhone.length >= 7) {
       try {
-        const { data: contact } = await supabase
-          .from('contacts')
-          .select('id, name')
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('id')
           .eq('account_id', effectiveAccountId)
-          .or(`phone.eq.${cleanPhone},phone.eq.+${cleanPhone}`)
+          .or(`contact_phone.eq.${cleanPhone},contact_phone.eq.${fullPhone}`)
           .maybeSingle();
 
-        if (contact?.id) {
+        if (conv?.id) {
           const { data: dbMessages } = await supabase
             .from('messages')
-            .select('id, content, direction, status, created_at')
-            .eq('account_id', effectiveAccountId)
-            .eq('contact_id', contact.id)
+            .select('*')
+            .eq('conversation_id', conv.id)
             .order('created_at', { ascending: true })
-            .limit(50);
+            .limit(80);
 
           if (dbMessages && dbMessages.length > 0) {
-            messages = dbMessages.map((m: any) => ({
-              key: {
-                id: m.id,
-                fromMe: m.direction === 'outbound',
-                remoteJid: decodedJid,
-              },
-              message: {
-                conversation: m.content || '',
-              },
-              messageTimestamp: Math.floor(new Date(m.created_at).getTime() / 1000),
-              status: m.status === 'read' ? 'READ' : m.status === 'delivered' ? 'DELIVERY_ACK' : 'SERVER_ACK',
-            }));
+            for (const m of dbMessages) {
+              msgMap.set(m.id, {
+                key: {
+                  id: m.id,
+                  fromMe: m.sender_type === 'agent',
+                  remoteJid: decodedJid,
+                },
+                message: {
+                  conversation: m.content_text || '',
+                },
+                messageTimestamp: m.created_at
+                  ? Math.floor(new Date(m.created_at).getTime() / 1000)
+                  : Math.floor(Date.now() / 1000),
+                status: m.status === 'read' ? 'READ' : m.status === 'delivered' ? 'DELIVERY_ACK' : 'SERVER_ACK',
+              });
+            }
           }
         }
-      } catch (dbErr) {
-        console.warn('Could not query Supabase messages for jid:', dbErr);
-      }
+      } catch {}
     }
 
-    return NextResponse.json({ success: true, messages });
-  } catch (error: any) {
-    console.error('Failed to get chat messages:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const messages = Array.from(msgMap.values()).sort((a, b) => {
+      const tsA = typeof a.messageTimestamp === 'number' ? a.messageTimestamp : (a.messageTimestamp?.low || 0);
+      const tsB = typeof b.messageTimestamp === 'number' ? b.messageTimestamp : (b.messageTimestamp?.low || 0);
+      return tsA - tsB;
+    });
+
+    return NextResponse.json({
+      success: true,
+      jid: decodedJid,
+      count: messages.length,
+      messages,
+    });
+  } catch (err: any) {
+    console.error('Error in Baileys chat messages GET:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
