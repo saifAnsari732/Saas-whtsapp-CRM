@@ -61,7 +61,34 @@ import { ChatbotStudio } from "@/components/chatbot/chatbot-studio";
 import { CoexistenceGuide } from "@/components/dashboard/coexistence-guide";
 
 type Schedule = { id: string; group_jid: string; group_name: string; message_text: string; schedule_time: string; is_active: boolean; last_sent_at: string | null; created_at: string };
-type BaileysChat = { id: string; name?: string; type?: string; unreadCount?: number; conversationTimestamp?: number };
+type BaileysChat = { id: string; name?: string; type?: string; unreadCount?: number; conversationTimestamp?: number; lastMessage?: string };
+
+function getBaileysMessageText(msg: any): string {
+  if (!msg) return "";
+  if (typeof msg === "string") return msg;
+  if (msg.content_text) return msg.content_text;
+  if (msg.content) return msg.content;
+  
+  let m = msg.message;
+  if (m?.ephemeralMessage?.message) m = m.ephemeralMessage.message;
+  if (m?.viewOnceMessage?.message) m = m.viewOnceMessage.message;
+  if (m?.viewOnceMessageV2?.message) m = m.viewOnceMessageV2.message;
+  if (m?.documentWithCaptionMessage?.message) m = m.documentWithCaptionMessage.message;
+
+  if (m?.conversation) return m.conversation;
+  if (m?.extendedTextMessage?.text) return m.extendedTextMessage.text;
+  if (m?.imageMessage?.caption) return m.imageMessage.caption;
+  if (m?.videoMessage?.caption) return m.videoMessage.caption;
+  if (m?.documentMessage?.caption) return m.documentMessage.caption;
+  if (m?.documentMessage?.fileName) return `📄 ${m.documentMessage.fileName}`;
+  if (m?.audioMessage) return "🎵 Voice Note";
+  if (m?.stickerMessage) return "🎨 Sticker";
+  if (m?.contactMessage?.displayName) return `👤 Contact: ${m.contactMessage.displayName}`;
+  if (m?.locationMessage) return "📍 Shared Location";
+  if (m?.imageMessage) return "📷 Photo";
+  if (m?.videoMessage) return "🎥 Video";
+  return "[Message]";
+}
 
 interface Template {
   id: string;
@@ -470,13 +497,23 @@ export default function CoexistenceSetupPage() {
     }
   }, [isConnected, chats.length, fetchChatsAndGroups]);
 
-  // Stable Auto-select active chat: preserves current selection and prevents re-render loops
+  // Stable Auto-select active chat: preserves current selection across country code normalizations
   useEffect(() => {
     if (filteredChats.length > 0) {
       setActiveLiveChat((prev) => {
         if (!prev) return filteredChats[0];
-        const stillExists = filteredChats.some((c) => c.id === prev.id);
-        return stillExists ? prev : filteredChats[0];
+        const isSameChat = (idA: string, idB: string) => {
+          if (idA === idB) return true;
+          if (idA.endsWith('@g.us') || idB.endsWith('@g.us')) return idA === idB;
+          const digA = idA.split('@')[0].replace(/\D/g, '');
+          const digB = idB.split('@')[0].replace(/\D/g, '');
+          if (digA === digB) return true;
+          const normA = digA.length === 10 ? `91${digA}` : digA;
+          const normB = digB.length === 10 ? `91${digB}` : digB;
+          return normA === normB;
+        };
+        const match = filteredChats.find((c) => isSameChat(c.id, prev.id));
+        return match || prev;
       });
     }
   }, [filteredChats]);
@@ -487,7 +524,13 @@ export default function CoexistenceSetupPage() {
       const res = await fetch(`/api/whatsapp/baileys/chats/${encodeURIComponent(chatId)}/messages`);
       const data = await res.json();
       if (data.success && Array.isArray(data.messages)) {
-        setActiveLiveMessages(data.messages);
+        setActiveLiveMessages((prev) => {
+          if (prev.length !== data.messages.length) return data.messages;
+          const prevLast = prev[prev.length - 1]?.key?.id;
+          const newLast = data.messages[data.messages.length - 1]?.key?.id;
+          if (prevLast !== newLast) return data.messages;
+          return prev;
+        });
       }
     } catch {}
   }, []);
@@ -502,7 +545,7 @@ export default function CoexistenceSetupPage() {
         if (typeof document !== "undefined" && document.visibilityState === "visible") {
           fetchLiveMessages(activeChatId);
         }
-      }, 2000);
+      }, 1500);
       return () => clearInterval(interval);
     }
   }, [activeChatId, fetchLiveMessages]);
@@ -1660,7 +1703,7 @@ export default function CoexistenceSetupPage() {
                                   <div className="flex items-center justify-between gap-2 mt-0.5">
                                     <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
                                       <CheckCheck className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
-                                      <span className="truncate">{info.subtitle}</span>
+                                      <span className="truncate">{chat.lastMessage || info.subtitle}</span>
                                     </p>
                                     {chat.unreadCount ? (
                                       <span className="h-4 min-w-4 px-1.5 rounded-full bg-[#25D366] text-white text-[10px] font-black flex items-center justify-center shrink-0">
@@ -1805,7 +1848,7 @@ export default function CoexistenceSetupPage() {
                             </div>
 
                             {/* Messages List */}
-                            {fetchingLiveMessages ? (
+                            {fetchingLiveMessages && activeLiveMessages.length === 0 ? (
                               <div className="flex flex-col items-center justify-center py-16 space-y-2">
                                 <Loader2 className="h-6 w-6 animate-spin text-[#008069]" />
                                 <span className="text-xs text-muted-foreground font-medium">Loading live messages...</span>
@@ -1825,7 +1868,7 @@ export default function CoexistenceSetupPage() {
                             ) : (
                               activeLiveMessages.map((msg, i) => {
                                 const isMe = msg.key?.fromMe;
-                                const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Media / Attachment]";
+                                const text = getBaileysMessageText(msg);
                                 const time = msg.messageTimestamp 
                                   ? new Date(msg.messageTimestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                                   : "Now";

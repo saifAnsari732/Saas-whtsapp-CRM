@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendTextMessage, sendTemplateMessage } from "@/lib/whatsapp/meta-api";
 import { connectToWhatsApp } from "@/lib/whatsapp/baileys";
+import fs from "fs";
 
 export async function POST(request: Request) {
   try {
@@ -125,24 +126,66 @@ export async function POST(request: Request) {
         status: "SERVER_ACK",
       };
 
-      if (!global.waStores) global.waStores = {};
-      if (!global.waStores[user.id]) global.waStores[user.id] = { chats: {}, messages: {} };
-      if (!global.waStores[user.id].messages) global.waStores[user.id].messages = {};
-      if (!global.waStores[user.id].messages[jid]) global.waStores[user.id].messages[jid] = [];
-      global.waStores[user.id].messages[jid].push(sentMsg);
+      // Record message into all active Baileys stores for real-time live conversation view
+      const isGroup = jid.endsWith('@g.us');
+      const cleanDigits = isGroup ? '' : jid.split('@')[0].replace(/\D/g, '');
+      const altDigits = !isGroup
+        ? (cleanDigits.length === 10 ? `91${cleanDigits}` : (cleanDigits.startsWith('91') && cleanDigits.length === 12 ? cleanDigits.slice(2) : cleanDigits))
+        : '';
+      const altJid = altDigits ? `${altDigits}@s.whatsapp.net` : null;
 
-      if (!global.waStores[user.id].chats) global.waStores[user.id].chats = {};
-      if (global.waStores[user.id].chats[jid]) {
-        global.waStores[user.id].chats[jid].conversationTimestamp = Math.floor(Date.now() / 1000);
-      } else {
-        global.waStores[user.id].chats[jid] = {
+      const storeKeys = Array.from(new Set([
+        user.id,
+        effectiveAccountId,
+        '61740bf8-b21e-42dd-9ab3-9118bca90bc6',
+        '833e936e-29ff-4fb3-82e0-1c35cb6216f6'
+      ]));
+
+      for (const k of storeKeys) {
+        if (!global.waStores) global.waStores = {};
+        if (!global.waStores[k]) global.waStores[k] = { chats: {}, messages: {} };
+        if (!global.waStores[k].messages) global.waStores[k].messages = {};
+        if (!global.waStores[k].messages[jid]) global.waStores[k].messages[jid] = [];
+        global.waStores[k].messages[jid].push(sentMsg);
+
+        if (altJid && altJid !== jid) {
+          if (!global.waStores[k].messages[altJid]) global.waStores[k].messages[altJid] = [];
+          global.waStores[k].messages[altJid].push(sentMsg);
+        }
+
+        if (!global.waStores[k].chats) global.waStores[k].chats = {};
+        const existingChat = global.waStores[k].chats[jid] || {};
+        global.waStores[k].chats[jid] = {
+          ...existingChat,
           id: jid,
-          name: jid.endsWith('@g.us') ? 'WhatsApp Group' : jid.split('@')[0],
+          name: existingChat.name || (isGroup ? 'WhatsApp Group' : jid.split('@')[0]),
+          lastMessage: finalMessage,
           conversationTimestamp: Math.floor(Date.now() / 1000),
           unreadCount: 0,
-          type: jid.endsWith('@g.us') ? 'group' : 'direct',
+          type: isGroup ? 'group' : 'direct',
         };
+
+        if (altJid && altJid !== jid) {
+          const existingAlt = global.waStores[k].chats[altJid] || {};
+          global.waStores[k].chats[altJid] = {
+            ...existingAlt,
+            id: altJid,
+            name: existingAlt.name || altJid.split('@')[0],
+            lastMessage: finalMessage,
+            conversationTimestamp: Math.floor(Date.now() / 1000),
+            unreadCount: 0,
+            type: 'direct',
+          };
+        }
       }
+
+      // Persist to disk so restarts preserve conversation history
+      try {
+        const storeFile = `baileys_store_${user.id}.json`;
+        if (global.waStores[user.id]) {
+          fs.writeFileSync(storeFile, JSON.stringify(global.waStores[user.id]));
+        }
+      } catch {}
 
       // Sync outbound message to Firestore for real-time CRM Inbox updates
       if (process.env.FIREBASE_ADMIN_PROJECT_ID && !jid.endsWith('@g.us')) {

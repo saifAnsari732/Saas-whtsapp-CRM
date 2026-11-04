@@ -1,7 +1,33 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, Browsers } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, Browsers, jidNormalizedUser, extractMessageContent } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import fs from 'fs';
+
+export function extractCleanMessageText(msg: any): string {
+  if (!msg?.message) return '';
+  const inner = extractMessageContent(msg.message) || msg.message;
+  let m: any = inner;
+  if (m?.ephemeralMessage?.message) m = m.ephemeralMessage.message;
+  if (m?.viewOnceMessage?.message) m = m.viewOnceMessage.message;
+  if (m?.viewOnceMessageV2?.message) m = m.viewOnceMessageV2.message;
+  if (m?.documentWithCaptionMessage?.message) m = m.documentWithCaptionMessage.message;
+
+  return (
+    m?.conversation ||
+    m?.extendedTextMessage?.text ||
+    m?.imageMessage?.caption ||
+    m?.videoMessage?.caption ||
+    m?.documentMessage?.caption ||
+    (m?.documentMessage?.fileName ? `📄 ${m.documentMessage.fileName}` : '') ||
+    (m?.audioMessage ? '🎵 Voice Note / Audio' : '') ||
+    (m?.stickerMessage ? '🎨 Sticker' : '') ||
+    (m?.contactMessage?.displayName ? `👤 Contact: ${m.contactMessage.displayName}` : '') ||
+    (m?.locationMessage ? '📍 Shared Location' : '') ||
+    (m?.imageMessage ? '📷 Photo' : '') ||
+    (m?.videoMessage ? '🎥 Video' : '') ||
+    ''
+  );
+}
 
 // Global state to hold socket, credentials and locks across hot reloads in Next.js
 declare global {
@@ -294,12 +320,19 @@ export async function connectToWhatsApp(userId: string) {
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
       for (const msg of messages || []) {
-        const jid = msg.key?.remoteJid;
-        if (jid && (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@g.us'))) {
-          if (!global.waStores[userId]) global.waStores[userId] = { chats: {}, messages: {} };
-          if (!global.waStores[userId].chats) global.waStores[userId].chats = {};
+        const rawJid = msg.key?.remoteJid;
+        if (!rawJid || rawJid === 'status@broadcast') continue;
+        const jid = jidNormalizedUser(rawJid);
+        if (msg.key) msg.key.remoteJid = jid;
 
-          const existing = global.waStores[userId].chats[jid] || {};
+        if (jid && (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@g.us'))) {
+          const isGroup = jid.endsWith('@g.us');
+          const cleanDigits = isGroup ? '' : jid.split('@')[0].replace(/\D/g, '');
+          const altDigits = !isGroup
+            ? (cleanDigits.length === 10 ? `91${cleanDigits}` : (cleanDigits.startsWith('91') && cleanDigits.length === 12 ? cleanDigits.slice(2) : cleanDigits))
+            : '';
+          const altJid = altDigits ? `${altDigits}@s.whatsapp.net` : null;
+
           const pushName = msg.pushName;
           const ts = typeof msg.messageTimestamp === 'number' 
             ? msg.messageTimestamp 
@@ -307,71 +340,110 @@ export async function connectToWhatsApp(userId: string) {
               ? (msg.messageTimestamp as any).low 
               : Math.floor(Date.now() / 1000);
 
-          global.waStores[userId].chats[jid] = {
-            ...existing,
-            id: jid,
-            name: existing.name || pushName || jid.split('@')[0],
-            conversationTimestamp: Math.max(existing.conversationTimestamp || 0, ts),
-            unreadCount: (existing.unreadCount || 0) + (msg.key?.fromMe ? 0 : 1),
-            type: jid.endsWith('@g.us') ? 'group' : 'direct',
-          };
+          const msgText = extractCleanMessageText(msg) || (msg.key?.fromMe ? '[Sent Message]' : '[Received Message]');
 
-          if (!global.waStores[userId].messages) global.waStores[userId].messages = {};
-          if (!global.waStores[userId].messages[jid]) global.waStores[userId].messages[jid] = [];
-          global.waStores[userId].messages[jid].push(msg);
+          // Broadcast to all active store keys so any session or account context reads the reply
+          const storeKeys = Array.from(new Set([
+            userId,
+            '61740bf8-b21e-42dd-9ab3-9118bca90bc6',
+            '833e936e-29ff-4fb3-82e0-1c35cb6216f6'
+          ]));
 
-          // Also mirror to normalized 91 / short JID so live UI gets real-time message stream
-          if (jid.endsWith('@s.whatsapp.net')) {
-            const cleanDigits = jid.split('@')[0].replace(/\D/g, '');
-            const altDigits = cleanDigits.length === 10 ? `91${cleanDigits}` : (cleanDigits.startsWith('91') && cleanDigits.length === 12 ? cleanDigits.slice(2) : cleanDigits);
-            const altJid = `${altDigits}@s.whatsapp.net`;
-            if (altJid !== jid) {
-              if (!global.waStores[userId].messages[altJid]) global.waStores[userId].messages[altJid] = [];
-              global.waStores[userId].messages[altJid].push(msg);
+          for (const sKey of storeKeys) {
+            if (!global.waStores[sKey]) global.waStores[sKey] = { chats: {}, messages: {} };
+            if (!global.waStores[sKey].chats) global.waStores[sKey].chats = {};
+            if (!global.waStores[sKey].messages) global.waStores[sKey].messages = {};
+
+            // Store under normalized JID
+            if (!global.waStores[sKey].messages[jid]) global.waStores[sKey].messages[jid] = [];
+            const msgList = global.waStores[sKey].messages[jid];
+            if (!msgList.some((m: any) => m.key?.id === msg.key?.id)) {
+              msgList.push(msg);
             }
 
-            // Sync incoming message to Firestore for real-time CRM Inbox updates
-            if (process.env.FIREBASE_ADMIN_PROJECT_ID && !msg.key?.fromMe) {
-              (async () => {
-                try {
-                  const { getAdminDb } = await import('@/lib/firebase/admin');
-                  const fDb = getAdminDb();
-                  if (fDb) {
-                    const effectiveAccountId = '61740bf8-b21e-42dd-9ab3-9118bca90bc6';
-                    const digits = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
-                    const convRef = fDb.collection('accounts').doc(effectiveAccountId).collection('conversations').doc(`conv_c_${digits}`);
-                    const msgText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || (msg.message?.imageMessage ? '[Image]' : '[Message]');
-                    await convRef.set({
-                      id: `conv_c_${digits}`,
-                      contact_phone: digits,
-                      contact_name: pushName || undefined,
-                      last_message_at: new Date().toISOString(),
-                      last_message_text: msgText,
-                      status: 'open',
-                      unread_count: 1,
-                      updatedAt: new Date().toISOString(),
-                    }, { merge: true });
+            // Mirror to alternate JID (short / full 91)
+            if (altJid && altJid !== jid) {
+              if (!global.waStores[sKey].messages[altJid]) global.waStores[sKey].messages[altJid] = [];
+              const altList = global.waStores[sKey].messages[altJid];
+              if (!altList.some((m: any) => m.key?.id === msg.key?.id)) {
+                altList.push(msg);
+              }
+            }
 
-                    const msgId = msg.key?.id || `msg-${Date.now()}`;
-                    await convRef.collection('messages').doc(msgId).set({
-                      id: msgId,
-                      content_text: msgText,
-                      sender_type: 'customer',
-                      direction: 'inbound',
-                      status: 'delivered',
-                      created_at: new Date().toISOString(),
-                    }, { merge: true });
-                  }
-                } catch (fsSyncErr) {
-                  console.warn('[Baileys Inbound] Firestore sync warning:', fsSyncErr);
-                }
-              })();
+            // Update chat last message, timestamp and unread count
+            const existing = global.waStores[sKey].chats[jid] || {};
+            global.waStores[sKey].chats[jid] = {
+              ...existing,
+              id: jid,
+              name: existing.name || pushName || jid.split('@')[0],
+              lastMessage: msgText,
+              conversationTimestamp: Math.max(existing.conversationTimestamp || 0, ts),
+              unreadCount: (existing.unreadCount || 0) + (msg.key?.fromMe ? 0 : 1),
+              type: isGroup ? 'group' : 'direct',
+            };
+
+            if (altJid && altJid !== jid) {
+              const existingAlt = global.waStores[sKey].chats[altJid] || {};
+              global.waStores[sKey].chats[altJid] = {
+                ...existingAlt,
+                id: altJid,
+                name: existingAlt.name || pushName || altJid.split('@')[0],
+                lastMessage: msgText,
+                conversationTimestamp: Math.max(existingAlt.conversationTimestamp || 0, ts),
+                unreadCount: (existingAlt.unreadCount || 0) + (msg.key?.fromMe ? 0 : 1),
+                type: 'direct',
+              };
             }
           }
 
-          // Invalidate cached chats on new message
+          // Debounced disk flush
+          try {
+            const storeFile = `baileys_store_${userId}.json`;
+            fs.writeFileSync(storeFile, JSON.stringify(global.waStores[userId]));
+          } catch {}
+
+          // Invalidate chat caches across all store keys
           if (global.cachedBaileysChats) {
-            delete global.cachedBaileysChats[userId];
+            for (const sKey of storeKeys) {
+              delete global.cachedBaileysChats[sKey];
+            }
+          }
+
+          // Sync incoming message to Firestore for real-time CRM Inbox updates
+          if (process.env.FIREBASE_ADMIN_PROJECT_ID && !msg.key?.fromMe && !isGroup) {
+            (async () => {
+              try {
+                const { getAdminDb } = await import('@/lib/firebase/admin');
+                const fDb = getAdminDb();
+                if (fDb) {
+                  const effectiveAccountId = '61740bf8-b21e-42dd-9ab3-9118bca90bc6';
+                  const digits = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+                  const convRef = fDb.collection('accounts').doc(effectiveAccountId).collection('conversations').doc(`conv_c_${digits}`);
+                  await convRef.set({
+                    id: `conv_c_${digits}`,
+                    contact_phone: digits,
+                    contact_name: pushName || undefined,
+                    last_message_at: new Date().toISOString(),
+                    last_message_text: msgText,
+                    status: 'open',
+                    unread_count: 1,
+                    updatedAt: new Date().toISOString(),
+                  }, { merge: true });
+
+                  const msgId = msg.key?.id || `msg-${Date.now()}`;
+                  await convRef.collection('messages').doc(msgId).set({
+                    id: msgId,
+                    content_text: msgText,
+                    sender_type: 'customer',
+                    direction: 'inbound',
+                    status: 'delivered',
+                    created_at: new Date().toISOString(),
+                  }, { merge: true });
+                }
+              } catch (fsSyncErr) {
+                console.warn('[Baileys Inbound] Firestore sync warning:', fsSyncErr);
+              }
+            })();
           }
 
           // Auto-Reply Chatbot Processor (Triggered for incoming direct customer messages)

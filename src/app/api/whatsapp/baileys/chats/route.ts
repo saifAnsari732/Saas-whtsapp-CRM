@@ -153,6 +153,7 @@ export async function GET(request: Request) {
               conversationTimestamp:
                 typeof ts === "number" && !isNaN(ts) ? ts : Math.floor(Date.now() / 1000),
               type: isGroup ? "group" : "direct",
+              lastMessage: c.lastMessage || c.last_message_text || undefined,
             };
           });
       }
