@@ -15,13 +15,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ jid: str
     const { jid } = await params;
     const decodedJid = decodeURIComponent(jid);
     const cleanPhone = decodedJid.split('@')[0].replace(/\D/g, '');
+    const shortPhone = cleanPhone.startsWith('91') && cleanPhone.length === 12 ? cleanPhone.slice(2) : cleanPhone;
+    const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const altJid = decodedJid.endsWith('@s.whatsapp.net') 
+      ? (cleanPhone.length === 10 ? `${fullPhone}@s.whatsapp.net` : `${shortPhone}@s.whatsapp.net`)
+      : decodedJid;
 
-    // 1. Check in-memory Baileys store
+    // 1. Check in-memory Baileys store (both primary JID and alternative JID format)
     const store = global.waStores?.[user.id];
     let messages: any[] = [];
 
     if (store?.messages?.[decodedJid] && Array.isArray(store.messages[decodedJid])) {
       messages = [...store.messages[decodedJid]];
+    } else if (store?.messages?.[altJid] && Array.isArray(store.messages[altJid])) {
+      messages = [...store.messages[altJid]];
     }
 
     // 2. Check disk file store if memory is empty
@@ -32,6 +39,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ jid: str
           const diskData = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
           if (diskData?.messages?.[decodedJid] && Array.isArray(diskData.messages[decodedJid])) {
             messages = [...diskData.messages[decodedJid]];
+          } else if (diskData?.messages?.[altJid] && Array.isArray(diskData.messages[altJid])) {
+            messages = [...diskData.messages[altJid]];
           }
         } catch {}
       }
@@ -43,12 +52,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ jid: str
         const { getAdminDb } = await import('@/lib/firebase/admin');
         const fDb = getAdminDb();
         if (fDb) {
-          // Look up conversation by standard id formats
+          // Look up conversation by standard id formats across full & short phone
           const possibleConvIds = [
             `conv_c_${cleanPhone}`,
+            `conv_c_${fullPhone}`,
+            `conv_c_${shortPhone}`,
             `c_${cleanPhone}`,
+            `c_${fullPhone}`,
             `conv_${cleanPhone}`,
-            cleanPhone
+            cleanPhone,
+            fullPhone
           ];
 
           let convDoc: any = null;

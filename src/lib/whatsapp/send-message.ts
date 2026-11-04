@@ -406,10 +406,14 @@ export async function sendMessageToConversation(
     // -----------------------------------------------------
     // NATIVE BAILEYS INTERCEPT
     // -----------------------------------------------------
-    if (global.waSockets && global.waSockets[accountId]) {
+    const userSocket = (global.waSockets && (global.waSockets[accountId] || (config?.account_id && global.waSockets[config.account_id]) || Object.values(global.waSockets)[0])) || null;
+    if (userSocket) {
       try {
-        const userSocket = global.waSockets[accountId];
-        const jid = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
+
+        let cleanDigits = phone.split('@')[0].replace(/\D/g, '');
+        if (cleanDigits.startsWith('0') && cleanDigits.length === 11) cleanDigits = cleanDigits.slice(1);
+        if (cleanDigits.length === 10) cleanDigits = `91${cleanDigits}`;
+        const jid = phone.includes('@g.us') ? phone : `${cleanDigits}@s.whatsapp.net`;
         let content: any = {};
         
         if (messageType === 'text') {

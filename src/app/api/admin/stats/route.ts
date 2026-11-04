@@ -57,9 +57,9 @@ export async function GET(request: Request) {
         .lt('trial_ends_at', new Date().toISOString())
     ).catch(() => {});
 
-    const totalRevenue = (txs || []).reduce((sum, tx) => sum + (tx.amount || 0), 0);
+    const totalRevenue = (txs || []).reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
 
-    const accountIds = Array.from(new Set((rawTxs || []).map(t => t.account_id).filter(Boolean)));
+    const accountIds = Array.from(new Set((rawTxs || []).map((t: any) => t.account_id).filter(Boolean)));
     
     // Batch fetch account names & profiles in parallel
     const [{ data: accounts }, { data: profiles }] = await Promise.all([
@@ -71,12 +71,12 @@ export async function GET(request: Request) {
         : Promise.resolve({ data: [] })
     ]);
 
-    const accountsMap = new Map((accounts || []).map(a => [a.id, a]));
-    const profilesMap = new Map((profiles || []).map(p => [p.account_id, p]));
+    const accountsMap = new Map((accounts || []).map((a: any) => [a.id, a]));
+    const profilesMap = new Map((profiles || []).map((p: any) => [p.account_id, p]));
 
-    const recentTransactions = (rawTxs || []).map(t => {
-      const acc = accountsMap.get(t.account_id);
-      const prof = profilesMap.get(t.account_id);
+    const recentTransactions = (rawTxs || []).map((t: any) => {
+      const acc = accountsMap.get(t.account_id) as any;
+      const prof = profilesMap.get(t.account_id) as any;
       return {
         id: t.id,
         amount: t.amount,

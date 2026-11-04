@@ -282,8 +282,13 @@ export default function CoexistenceSetupPage() {
   const detectedNumbersList = useMemo(() => {
     return pastedNumbers
       .split(/[\n,]+/)
-      .map((n) => n.trim().replace(/\D/g, ""))
-      .filter((n) => n.length >= 8);
+      .map((n) => {
+        let clean = n.trim().replace(/\D/g, "");
+        if (clean.startsWith("0") && clean.length === 11) clean = clean.slice(1);
+        if (clean.length === 10) clean = `91${clean}`;
+        return clean;
+      })
+      .filter((n) => n.length >= 10);
   }, [pastedNumbers]);
   const detectedNumbersCount = detectedNumbersList.length;
 
@@ -494,10 +499,21 @@ export default function CoexistenceSetupPage() {
         if (typeof document !== "undefined" && document.visibilityState === "visible") {
           fetchLiveMessages(activeChatId);
         }
-      }, 4000);
+      }, 2000);
       return () => clearInterval(interval);
     }
   }, [activeChatId, fetchLiveMessages]);
+
+  // Periodic background chat refresh to keep conversation ordering & last message up to date
+  useEffect(() => {
+    if (!isConnected) return;
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchChatsAndGroups(false, true);
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [isConnected, fetchChatsAndGroups]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -2524,8 +2540,7 @@ export default function CoexistenceSetupPage() {
                               onClick={() => {
                                 setSelectedGroups([group.id]);
                                 setDispatchMode("groups");
-                                const btn = document.querySelector('[data-state="inactive"][value="messaging"]') as HTMLElement;
-                                if (btn) btn.click();
+                                setActiveTab("messaging");
                               }}
                               className="text-xs font-bold text-violet-600 border-violet-500/30 hover:bg-violet-500/10 rounded-xl w-full gap-1.5 h-8"
                             >

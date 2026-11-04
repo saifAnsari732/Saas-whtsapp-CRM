@@ -159,7 +159,7 @@ export function ContactDetailView({
     if (fieldsRes.data) setCustomFields(fieldsRes.data);
     if (valuesRes.data) {
       const map: Record<string, string> = {};
-      valuesRes.data.forEach((v) => {
+      valuesRes.data.forEach((v: any) => {
         map[v.custom_field_id] = v.value ?? '';
       });
       setCustomValues(map);

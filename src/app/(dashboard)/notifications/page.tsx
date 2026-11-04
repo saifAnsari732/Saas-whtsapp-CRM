@@ -56,7 +56,7 @@ export default function NotificationsPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications" },
-        (payload) => {
+        (payload: any) => {
           if (payload.eventType === "INSERT") {
             const row = payload.new as Notification;
             setNotifications((prev) => {

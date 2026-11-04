@@ -190,14 +190,14 @@ export function ConversationList({
          return;
        }
        
-       const contactIds = Array.from(new Set(contactTags.map(ct => ct.contact_id)));
+       const contactIds = Array.from(new Set(contactTags.map((ct: any) => ct.contact_id)));
        const { data: contacts } = await supabase
          .from('contacts')
          .select('*, tags(*)')
          .in('id', contactIds);
          
        if (contacts && !cancelled) {
-         const stubs = contacts.map(c => ({
+         const stubs = contacts.map((c: any) => ({
            id: "stub-" + c.id,
            contact_id: c.id,
            contact: c,
@@ -331,7 +331,7 @@ export function ConversationList({
         if (numbers.length > 0) {
           // Find existing contacts
           const { data: existingContacts } = await supabase.from('contacts').select('id, phone').eq('account_id', profile.account_id).in('phone', numbers);
-          const existingPhones = new Set((existingContacts || []).map(c => c.phone));
+          const existingPhones = new Set((existingContacts || []).map((c: any) => c.phone));
           
           // Insert new ones
           const newNumbers = numbers.filter(n => !existingPhones.has(n));
@@ -353,7 +353,7 @@ export function ConversationList({
           const { data: allContacts } = await supabase.from('contacts').select('id').eq('account_id', profile.account_id).in('phone', numbers);
           
           if (allContacts && tagId) {
-             const contactTags = allContacts.map(c => ({
+             const contactTags = allContacts.map((c: any) => ({
                contact_id: c.id,
                tag_id: tagId
              }));

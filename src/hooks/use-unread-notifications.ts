@@ -35,7 +35,7 @@ export function useUnreadNotifications(): number {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications" },
-        (payload) => {
+        (payload: any) => {
           if (payload.eventType === "INSERT") {
             const row = payload.new as Notification;
             if (!row.read_at) setCount((n) => n + 1);

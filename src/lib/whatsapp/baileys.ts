@@ -201,6 +201,7 @@ export async function connectToWhatsApp(userId: string) {
     });
 
     global.waSockets[userId] = sock;
+    global.waSockets['61740bf8-b21e-42dd-9ab3-9118bca90bc6'] = sock;
 
     // Custom Store Event Listeners
     sock.ev.on('messaging-history.set', (data) => {
@@ -318,6 +319,55 @@ export async function connectToWhatsApp(userId: string) {
           if (!global.waStores[userId].messages) global.waStores[userId].messages = {};
           if (!global.waStores[userId].messages[jid]) global.waStores[userId].messages[jid] = [];
           global.waStores[userId].messages[jid].push(msg);
+
+          // Also mirror to normalized 91 / short JID so live UI gets real-time message stream
+          if (jid.endsWith('@s.whatsapp.net')) {
+            const cleanDigits = jid.split('@')[0].replace(/\D/g, '');
+            const altDigits = cleanDigits.length === 10 ? `91${cleanDigits}` : (cleanDigits.startsWith('91') && cleanDigits.length === 12 ? cleanDigits.slice(2) : cleanDigits);
+            const altJid = `${altDigits}@s.whatsapp.net`;
+            if (altJid !== jid) {
+              if (!global.waStores[userId].messages[altJid]) global.waStores[userId].messages[altJid] = [];
+              global.waStores[userId].messages[altJid].push(msg);
+            }
+
+            // Sync incoming message to Firestore for real-time CRM Inbox updates
+            if (process.env.FIREBASE_ADMIN_PROJECT_ID && !msg.key?.fromMe) {
+              (async () => {
+                try {
+                  const { getAdminDb } = await import('@/lib/firebase/admin');
+                  const fDb = getAdminDb();
+                  if (fDb) {
+                    const effectiveAccountId = '61740bf8-b21e-42dd-9ab3-9118bca90bc6';
+                    const digits = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+                    const convRef = fDb.collection('accounts').doc(effectiveAccountId).collection('conversations').doc(`conv_c_${digits}`);
+                    const msgText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || (msg.message?.imageMessage ? '[Image]' : '[Message]');
+                    await convRef.set({
+                      id: `conv_c_${digits}`,
+                      contact_phone: digits,
+                      contact_name: pushName || undefined,
+                      last_message_at: new Date().toISOString(),
+                      last_message_text: msgText,
+                      status: 'open',
+                      unread_count: 1,
+                      updatedAt: new Date().toISOString(),
+                    }, { merge: true });
+
+                    const msgId = msg.key?.id || `msg-${Date.now()}`;
+                    await convRef.collection('messages').doc(msgId).set({
+                      id: msgId,
+                      content_text: msgText,
+                      sender_type: 'customer',
+                      direction: 'inbound',
+                      status: 'delivered',
+                      created_at: new Date().toISOString(),
+                    }, { merge: true });
+                  }
+                } catch (fsSyncErr) {
+                  console.warn('[Baileys Inbound] Firestore sync warning:', fsSyncErr);
+                }
+              })();
+            }
+          }
 
           // Invalidate cached chats on new message
           if (global.cachedBaileysChats) {

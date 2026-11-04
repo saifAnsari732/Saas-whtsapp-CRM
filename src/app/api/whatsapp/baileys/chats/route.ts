@@ -11,6 +11,21 @@ declare global {
   var inFlightBaileysChatFetch: Record<string, Promise<any[]> | undefined> | undefined;
 }
 
+function toStandardJid(input: string): string {
+  const str = String(input).trim();
+  if (str.endsWith('@g.us') || str.endsWith('@broadcast')) {
+    return str;
+  }
+  let digits = str.split('@')[0].replace(/\D/g, '');
+  if (digits.startsWith('0') && digits.length === 11) {
+    digits = digits.slice(1);
+  }
+  if (digits.length === 10) {
+    digits = `91${digits}`;
+  }
+  return `${digits}@s.whatsapp.net`;
+}
+
 const CHAT_CACHE_TTL_MS = 20000; // 20s TTL for fast fresh retrieval
 
 export async function GET(request: Request) {
@@ -123,6 +138,7 @@ export async function GET(request: Request) {
           .filter((c: any) => c.id && (c.id.endsWith("@s.whatsapp.net") || c.id.endsWith("@g.us")))
           .map((c: any) => {
             const isGroup = c.id.endsWith("@g.us");
+            const finalId = toStandardJid(c.id);
             let ts = c.conversationTimestamp;
             if (ts && typeof ts === "object" && "low" in ts) {
               ts = ts.low;
@@ -131,8 +147,8 @@ export async function GET(request: Request) {
             }
 
             return {
-              id: c.id,
-              name: c.name || c.id.split("@")[0],
+              id: finalId,
+              name: c.name || (isGroup ? "WhatsApp Group" : finalId.split("@")[0]),
               unreadCount: c.unreadCount || 0,
               conversationTimestamp:
                 typeof ts === "number" && !isNaN(ts) ? ts : Math.floor(Date.now() / 1000),
@@ -174,23 +190,20 @@ export async function GET(request: Request) {
                 const contact = contactId ? contactsMap.get(contactId) : null;
                 const phone = contact?.phone || cData.contact_phone || (contactId ? String(contactId).replace(/^c_/, '') : null);
                 if (phone) {
-                  const cleanDigits = String(phone).replace(/\D/g, "");
-                  if (cleanDigits.length >= 7) {
-                    const jid = `${cleanDigits}@s.whatsapp.net`;
-                    if (!existingIds.has(jid)) {
-                      existingIds.add(jid);
-                      const lastAt = cData.last_message_at
-                        ? Math.floor(new Date(cData.last_message_at).getTime() / 1000)
-                        : Math.floor(Date.now() / 1000);
-                      chats.push({
-                        id: jid,
-                        name: contact?.name || cData.contact_name || `+${cleanDigits}`,
-                        unreadCount: cData.unread_count || 0,
-                        conversationTimestamp: lastAt,
-                        type: "direct",
-                        lastMessage: cData.last_message_text || undefined,
-                      });
-                    }
+                  const jid = toStandardJid(phone);
+                  if (!existingIds.has(jid)) {
+                    existingIds.add(jid);
+                    const lastAt = cData.last_message_at
+                      ? Math.floor(new Date(cData.last_message_at).getTime() / 1000)
+                      : Math.floor(Date.now() / 1000);
+                    chats.push({
+                      id: jid,
+                      name: contact?.name || cData.contact_name || `+${jid.split('@')[0]}`,
+                      unreadCount: cData.unread_count || 0,
+                      conversationTimestamp: lastAt,
+                      type: "direct",
+                      lastMessage: cData.last_message_text || undefined,
+                    });
                   }
                 }
               });
@@ -201,21 +214,18 @@ export async function GET(request: Request) {
               contactsSnap.forEach((doc: any) => {
                 const c = doc.data();
                 if (c && c.phone) {
-                  const cleanDigits = String(c.phone).replace(/\D/g, "");
-                  if (cleanDigits.length >= 7) {
-                    const jid = `${cleanDigits}@s.whatsapp.net`;
-                    if (!existingIds.has(jid)) {
-                      existingIds.add(jid);
-                      chats.push({
-                        id: jid,
-                        name: c.name || `+${cleanDigits}`,
-                        unreadCount: 0,
-                        conversationTimestamp: c.updatedAt
-                          ? Math.floor(new Date(c.updatedAt).getTime() / 1000)
-                          : Math.floor(Date.now() / 1000),
-                        type: "direct",
-                      });
-                    }
+                  const jid = toStandardJid(c.phone);
+                  if (!existingIds.has(jid)) {
+                    existingIds.add(jid);
+                    chats.push({
+                      id: jid,
+                      name: c.name || `+${jid.split('@')[0]}`,
+                      unreadCount: 0,
+                      conversationTimestamp: c.updatedAt
+                        ? Math.floor(new Date(c.updatedAt).getTime() / 1000)
+                        : Math.floor(Date.now() / 1000),
+                      type: "direct",
+                    });
                   }
                 }
               });
@@ -244,7 +254,7 @@ export async function GET(request: Request) {
         if (dbConversations && dbConversations.length > 0) {
           for (const conv of dbConversations as any[]) {
             const phone = conv.contacts?.phone;
-            const jid = phone ? `${phone.replace(/\D/g, "")}@s.whatsapp.net` : null;
+            const jid = phone ? toStandardJid(phone) : null;
             if (jid && !existingIds.has(jid)) {
               existingIds.add(jid);
               chats.push({

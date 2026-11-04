@@ -357,7 +357,7 @@ export function MessageThread({
           table: "message_reactions",
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (payload) => {
+        (payload: any) => {
           const row = payload.new as MessageReaction;
           setReactions((prev) => {
             if (prev.some((r) => r.id === row.id)) return prev;
@@ -387,7 +387,7 @@ export function MessageThread({
           table: "message_reactions",
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (payload) => {
+        (payload: any) => {
           const row = payload.new as MessageReaction;
           setReactions((prev) => prev.map((r) => (r.id === row.id ? row : r)));
         },
@@ -400,7 +400,7 @@ export function MessageThread({
           table: "message_reactions",
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (payload) => {
+        (payload: any) => {
           const old = payload.old as Partial<MessageReaction>;
           if (!old?.id) return;
           setReactions((prev) => prev.filter((r) => r.id !== old.id));
