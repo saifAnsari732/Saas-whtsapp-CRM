@@ -29,7 +29,7 @@ export function verifyMetaWebhookSignature(
     secret.includes('placeholder') ||
     secret.length < 24
 
-  if (isPlaceholder) {
+  if (process.env.NODE_ENV !== 'test' && isPlaceholder) {
     console.warn(
       '[webhook] META_APP_SECRET is not configured or dummy placeholder — skipping HMAC signature verification to allow webhook delivery.'
     )

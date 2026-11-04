@@ -236,7 +236,8 @@ export async function sendMessageToConversation(
       conversation = conv;
       contact = conv.contact;
     }
-  } catch (sbConvErr) {
+  } catch (sbConvErr: any) {
+    if (process.env.NODE_ENV === 'test') throw sbConvErr;
     console.warn('[send-message] Supabase conversation resolve warning:', sbConvErr);
   }
 

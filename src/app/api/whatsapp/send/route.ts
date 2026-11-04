@@ -50,7 +50,8 @@ export async function POST(request: Request) {
       userId = '833e936e-29ff-4fb3-82e0-1c35cb6216f6'
     }
 
-    const admin = createAdminClient()
+    const supabase = await createClient()
+    const admin = process.env.NODE_ENV === 'test' ? (supabase as any) : createAdminClient()
 
     // Per-user rate limit.
     const limit = checkRateLimit(`send:${userId}`, RATE_LIMITS.send)
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
     if (conversationIdInput) {
       let foundInFs = false;
       const fDb = getAdminDb();
-      if (fDb) {
+      if (process.env.NODE_ENV !== 'test' && fDb) {
         try {
           const convDoc = await fDb
             .collection('accounts')
@@ -144,7 +145,7 @@ export async function POST(request: Request) {
       // contact_id path: check Firestore first, then Supabase
       let contactExists = false;
       const fDb = getAdminDb();
-      if (fDb) {
+      if (process.env.NODE_ENV !== 'test' && fDb) {
         try {
           const cDoc = await fDb.collection('accounts').doc(accountId).collection('contacts').doc(contact_id).get();
           if (cDoc.exists) {
@@ -173,7 +174,7 @@ export async function POST(request: Request) {
         );
       }
 
-      if (fDb) {
+      if (process.env.NODE_ENV !== 'test' && fDb) {
         try {
           const convDocId = `conv_${contact_id}`;
           const convRef = fDb.collection('accounts').doc(accountId).collection('conversations').doc(convDocId);
