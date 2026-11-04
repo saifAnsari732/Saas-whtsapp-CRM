@@ -449,6 +449,16 @@ export default function CoexistenceSetupPage() {
   useEffect(() => { 
     if (isConnected && chats.length === 0) {
       fetchChatsAndGroups(false, false);
+      const timer1 = setTimeout(() => {
+        fetchChatsAndGroups(false, true);
+      }, 3500);
+      const timer2 = setTimeout(() => {
+        fetchChatsAndGroups(false, true);
+      }, 8000);
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
     }
   }, [isConnected, chats.length, fetchChatsAndGroups]);
 
@@ -463,28 +473,29 @@ export default function CoexistenceSetupPage() {
     }
   }, [filteredChats]);
 
-  // Fetch messages when active chat ID changes
+  // Fetch messages when active chat ID changes and keep real-time polling while active
   const fetchLiveMessages = useCallback(async (chatId: string) => {
-    setFetchingLiveMessages(true);
     try {
       const res = await fetch(`/api/whatsapp/baileys/chats/${encodeURIComponent(chatId)}/messages`);
       const data = await res.json();
       if (data.success && Array.isArray(data.messages)) {
         setActiveLiveMessages(data.messages);
-      } else {
-        setActiveLiveMessages([]);
       }
-    } catch {
-      setActiveLiveMessages([]);
-    } finally {
-      setFetchingLiveMessages(false);
-    }
+    } catch {}
   }, []);
 
   const activeChatId = activeLiveChat?.id;
   useEffect(() => {
     if (activeChatId) {
-      fetchLiveMessages(activeChatId);
+      setFetchingLiveMessages(true);
+      fetchLiveMessages(activeChatId).finally(() => setFetchingLiveMessages(false));
+
+      const interval = setInterval(() => {
+        if (typeof document !== "undefined" && document.visibilityState === "visible") {
+          fetchLiveMessages(activeChatId);
+        }
+      }, 4000);
+      return () => clearInterval(interval);
     }
   }, [activeChatId, fetchLiveMessages]);
 

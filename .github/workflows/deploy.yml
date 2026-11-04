@@ -20,15 +20,16 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             [ -s "$HOME/.bashrc" ] && source "$HOME/.bashrc"
             export PATH=$PATH:/usr/local/bin:/usr/bin:~/.nvm/versions/node/$(ls ~/.nvm/versions/node 2>/dev/null | tail -n 1)/bin
 
-            if [ -d "/home/ubuntu/Saas-whtsapp-CRM/wacrm" ]; then
-              cd /home/ubuntu/Saas-whtsapp-CRM/wacrm
-            elif [ -d "/home/ubuntu/Saas-whtsapp-CRM" ]; then
+            if [ -f "/home/ubuntu/Saas-whtsapp-CRM/package.json" ]; then
               cd /home/ubuntu/Saas-whtsapp-CRM
+            elif [ -f "/home/ubuntu/Saas-whtsapp-CRM/wacrm/package.json" ]; then
+              cd /home/ubuntu/Saas-whtsapp-CRM/wacrm
             fi
 
             echo "=== Deployment Working Directory: $(pwd) ==="
@@ -36,7 +37,10 @@ jobs:
             node -v || true
             which pm2 || echo "pm2 not in PATH"
 
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
+            git log -1 --oneline
+
             npm install --legacy-peer-deps
             NODE_OPTIONS="--max-old-space-size=2048" npm run build
 

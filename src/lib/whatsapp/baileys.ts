@@ -319,6 +319,11 @@ export async function connectToWhatsApp(userId: string) {
           if (!global.waStores[userId].messages[jid]) global.waStores[userId].messages[jid] = [];
           global.waStores[userId].messages[jid].push(msg);
 
+          // Invalidate cached chats on new message
+          if (global.cachedBaileysChats) {
+            delete global.cachedBaileysChats[userId];
+          }
+
           // Auto-Reply Chatbot Processor (Triggered for incoming direct customer messages)
           if (!msg.key?.fromMe && jid.endsWith('@s.whatsapp.net')) {
             const rawText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
@@ -417,6 +422,36 @@ export async function connectToWhatsApp(userId: string) {
 
         // Create fresh backup of confirmed active session
         backupSessionFolder(authFolder, backupFolder);
+
+        // Immediately pre-fetch participating groups in background and populate store
+        (async () => {
+          try {
+            if (typeof sock.groupFetchAllParticipating === 'function') {
+              const groups = await sock.groupFetchAllParticipating();
+              if (groups && typeof groups === 'object') {
+                if (!global.waStores[userId]) global.waStores[userId] = { chats: {}, messages: {} };
+                for (const [gid, gdata] of Object.entries(groups)) {
+                  global.waStores[userId].chats[gid] = {
+                    id: gid,
+                    name: (gdata as any).subject || gid,
+                    conversationTimestamp: (gdata as any).creation || Math.floor(Date.now() / 1000),
+                    unreadCount: 0,
+                    type: 'group',
+                  };
+                }
+                try {
+                  fs.writeFileSync(storeFile, JSON.stringify(global.waStores[userId]));
+                } catch {}
+                if (global.cachedBaileysChats) {
+                  delete global.cachedBaileysChats[userId];
+                }
+                console.log(`[Baileys] Successfully pre-fetched ${Object.keys(groups).length} groups for user ${userId}`);
+              }
+            }
+          } catch (gErr) {
+            console.warn('[Baileys] Background group pre-fetch warning:', gErr);
+          }
+        })();
 
       } else if (connection === 'connecting') {
         if (global.waStatuses[userId] !== 'waiting_scan') {

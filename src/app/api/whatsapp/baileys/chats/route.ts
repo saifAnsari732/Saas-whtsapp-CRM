@@ -1,21 +1,25 @@
 import { getCoexistenceUser } from '@/lib/whatsapp/coexistence-auth';
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { connectToWhatsApp } from "@/lib/whatsapp/baileys";
 import fs from "fs";
+
+export const dynamic = 'force-dynamic';
 
 declare global {
   var cachedBaileysChats: Record<string, { data: any[]; timestamp: number }> | undefined;
   var inFlightBaileysChatFetch: Record<string, Promise<any[]> | undefined> | undefined;
 }
 
-const CHAT_CACHE_TTL_MS = 45000; // 45 seconds TTL for instant retrieval
+const CHAT_CACHE_TTL_MS = 20000; // 20s TTL for fast fresh retrieval
 
 export async function GET(request: Request) {
   let currentUserId: string | null = null;
   try {
-    const { userId } = await getCoexistenceUser(request);
+    const { userId, accountId } = await getCoexistenceUser(request);
     currentUserId = userId;
     const user = { id: userId };
+    const effectiveAccountId = accountId || '61740bf8-b21e-42dd-9ab3-9118bca90bc6';
     const supabase = await createClient();
 
     const { searchParams } = new URL(request.url);
@@ -31,8 +35,8 @@ export async function GET(request: Request) {
     const cached = global.cachedBaileysChats[user.id];
     const isFresh = cached && (Date.now() - cached.timestamp < CHAT_CACHE_TTL_MS);
 
-    // Fast path: Return cached chats in <1ms unless force refresh requested
-    if (!force && isFresh) {
+    // Fast path: Return cached chats unless force refresh requested or cache is empty
+    if (!force && isFresh && cached.data && cached.data.length > 0) {
       return NextResponse.json({
         success: true,
         data: cached.data,
@@ -41,7 +45,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // Coalesce concurrent requests: If a sync is already running for this user, wait on the existing promise
+    // Coalesce concurrent requests: If a sync is already running for this user, wait on existing promise
     if (global.inFlightBaileysChatFetch[user.id]) {
       const coalescedData = await global.inFlightBaileysChatFetch[user.id]!;
       return NextResponse.json({
@@ -51,29 +55,25 @@ export async function GET(request: Request) {
       });
     }
 
-    // If user has neither an active socket nor registered session credentials, return empty chats immediately
     const authFolder = `baileys_auth_info_${user.id}`;
-    const hasCreds = fs.existsSync(`${authFolder}/creds.json`);
-    const userSocket = global.waSockets?.[user.id];
+    const backupFolder = `baileys_auth_info_backup_${user.id}`;
+    const hasCreds = fs.existsSync(`${authFolder}/creds.json`) || fs.existsSync(`${backupFolder}/creds.json`);
+    let userSocket = global.waSockets?.[user.id];
 
-    if (!userSocket && !hasCreds) {
-      return NextResponse.json({
-        success: true,
-        data: [],
-        count: 0,
-        connected: false,
-      });
+    // Auto-connect if credentials exist on disk but socket is not active yet
+    if (!userSocket && hasCreds) {
+      connectToWhatsApp(user.id);
+      userSocket = global.waSockets?.[user.id];
     }
 
     // Execute chat retrieval with concurrency guard
     const fetchPromise = (async () => {
-
-      // If socket is connected, actively fetch all participating groups from WhatsApp (with strict 2.5s timeout)
+      // 1. Fetch participating groups from live socket if connected
       if (userSocket && typeof userSocket.groupFetchAllParticipating === "function") {
         try {
           const groupFetchPromise = userSocket.groupFetchAllParticipating();
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("group_fetch_timeout")), 2500)
+            setTimeout(() => reject(new Error("group_fetch_timeout")), 6000)
           );
 
           const participatingGroups = (await Promise.race([
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
             }
           }
         } catch (groupErr) {
-          // Timeout or error reading groups from socket is safe, proceed with cached/stored chats
+          // Timeout or error fetching socket groups is handled gracefully
         }
       }
 
@@ -143,15 +143,91 @@ export async function GET(request: Request) {
 
       const existingIds = new Set(chats.map((c) => c.id));
 
-      // Merge DB contacts and conversations so direct phone numbers are fetched
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("account_id")
-        .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-        .maybeSingle();
-      const accountId = profile?.account_id;
+      // 2. Load active CRM conversations & contacts from Firebase Firestore
+      if (process.env.FIREBASE_ADMIN_PROJECT_ID && process.env.FIREBASE_ADMIN_CLIENT_EMAIL) {
+        try {
+          const { getAdminDb } = await import("@/lib/firebase/admin");
+          const fDb = getAdminDb();
+          if (fDb) {
+            const [convsSnap, contactsSnap] = await Promise.all([
+              Promise.race([
+                fDb.collection("accounts").doc(effectiveAccountId).collection("conversations").limit(150).get(),
+                new Promise<any>((_, reject) => setTimeout(() => reject(new Error("convs_timeout")), 3500))
+              ]).catch(() => null),
+              Promise.race([
+                fDb.collection("accounts").doc(effectiveAccountId).collection("contacts").limit(150).get(),
+                new Promise<any>((_, reject) => setTimeout(() => reject(new Error("contacts_timeout")), 3500))
+              ]).catch(() => null)
+            ]);
 
-      if (accountId) {
+            const contactsMap = new Map<string, any>();
+            if (contactsSnap && !contactsSnap.empty) {
+              contactsSnap.forEach((doc: any) => {
+                contactsMap.set(doc.id, doc.data());
+              });
+            }
+
+            if (convsSnap && !convsSnap.empty) {
+              convsSnap.forEach((doc: any) => {
+                const cData = doc.data();
+                const contactId = cData.contact_id || cData.contactId;
+                const contact = contactId ? contactsMap.get(contactId) : null;
+                const phone = contact?.phone || cData.contact_phone || (contactId ? String(contactId).replace(/^c_/, '') : null);
+                if (phone) {
+                  const cleanDigits = String(phone).replace(/\D/g, "");
+                  if (cleanDigits.length >= 7) {
+                    const jid = `${cleanDigits}@s.whatsapp.net`;
+                    if (!existingIds.has(jid)) {
+                      existingIds.add(jid);
+                      const lastAt = cData.last_message_at
+                        ? Math.floor(new Date(cData.last_message_at).getTime() / 1000)
+                        : Math.floor(Date.now() / 1000);
+                      chats.push({
+                        id: jid,
+                        name: contact?.name || cData.contact_name || `+${cleanDigits}`,
+                        unreadCount: cData.unread_count || 0,
+                        conversationTimestamp: lastAt,
+                        type: "direct",
+                        lastMessage: cData.last_message_text || undefined,
+                      });
+                    }
+                  }
+                }
+              });
+            }
+
+            // Also add any remaining contacts that may not have conversations yet
+            if (contactsSnap && !contactsSnap.empty && chats.length < 50) {
+              contactsSnap.forEach((doc: any) => {
+                const c = doc.data();
+                if (c && c.phone) {
+                  const cleanDigits = String(c.phone).replace(/\D/g, "");
+                  if (cleanDigits.length >= 7) {
+                    const jid = `${cleanDigits}@s.whatsapp.net`;
+                    if (!existingIds.has(jid)) {
+                      existingIds.add(jid);
+                      chats.push({
+                        id: jid,
+                        name: c.name || `+${cleanDigits}`,
+                        unreadCount: 0,
+                        conversationTimestamp: c.updatedAt
+                          ? Math.floor(new Date(c.updatedAt).getTime() / 1000)
+                          : Math.floor(Date.now() / 1000),
+                        type: "direct",
+                      });
+                    }
+                  }
+                }
+              });
+            }
+          }
+        } catch (fsErr) {
+          console.warn("[Baileys Chats] Firestore load warning:", fsErr);
+        }
+      }
+
+      // 3. Fallback: Merge Supabase conversations if available
+      try {
         const { data: dbConversations } = await supabase
           .from("conversations")
           .select(`
@@ -161,7 +237,7 @@ export async function GET(request: Request) {
             last_message_at,
             contacts ( phone, name )
           `)
-          .eq("account_id", accountId)
+          .eq("account_id", effectiveAccountId)
           .order("last_message_at", { ascending: false })
           .limit(100);
 
@@ -183,84 +259,7 @@ export async function GET(request: Request) {
             }
           }
         }
-      }
-
-      // Fetch contacts from Firebase Firestore if available (with 1500ms timeout guard)
-      if (process.env.FIREBASE_ADMIN_PROJECT_ID && process.env.FIREBASE_ADMIN_CLIENT_EMAIL) {
-        try {
-          const { getAdminDb } = await import("@/lib/firebase/admin");
-          const fDb = getAdminDb();
-          const contactsSnap = await Promise.race([
-            fDb.collection("contacts").limit(200).get(),
-            new Promise<any>((_, reject) =>
-              setTimeout(() => reject(new Error("firestore_contacts_timeout")), 1500)
-            ),
-          ]);
-
-          if (contactsSnap && !contactsSnap.empty) {
-            contactsSnap.forEach((doc: any) => {
-              const c = doc.data();
-              if (c && c.phone) {
-                const cleanPhone = String(c.phone).replace(/\D/g, "");
-                if (cleanPhone.length >= 7) {
-                  const jid = `${cleanPhone}@s.whatsapp.net`;
-                  if (!existingIds.has(jid)) {
-                    existingIds.add(jid);
-                    chats.push({
-                      id: jid,
-                      name: c.name || `+${cleanPhone}`,
-                      unreadCount: 0,
-                      conversationTimestamp: c.updated_at
-                        ? Math.floor(new Date(c.updated_at).getTime() / 1000)
-                        : c.created_at
-                          ? Math.floor(new Date(c.created_at).getTime() / 1000)
-                          : Math.floor(Date.now() / 1000),
-                      type: "direct",
-                    });
-                  }
-                }
-              }
-            });
-          }
-        } catch (fErr) {
-          // Firestore lookup optional
-        }
-      }
-
-      // Fallback: If few direct contacts, check Supabase contacts table strictly scoped to this account
-      if (accountId && chats.filter((c) => c.type === "direct").length < 50) {
-        const { data: dbContacts } = await supabase
-          .from("contacts")
-          .select("id, phone, name, updated_at, created_at")
-          .eq("account_id", accountId)
-          .order("created_at", { ascending: false })
-          .limit(100);
-
-        if (dbContacts && dbContacts.length > 0) {
-          for (const c of dbContacts) {
-            if (c.phone) {
-              const cleanPhone = c.phone.replace(/\D/g, "");
-              if (cleanPhone.length >= 7) {
-                const jid = `${cleanPhone}@s.whatsapp.net`;
-                if (!existingIds.has(jid)) {
-                  existingIds.add(jid);
-                  chats.push({
-                    id: jid,
-                    name: c.name || `+${cleanPhone}`,
-                    unreadCount: 0,
-                    conversationTimestamp: c.updated_at
-                      ? Math.floor(new Date(c.updated_at).getTime() / 1000)
-                      : c.created_at
-                        ? Math.floor(new Date(c.created_at).getTime() / 1000)
-                        : Math.floor(Date.now() / 1000),
-                    type: "direct",
-                  });
-                }
-              }
-            }
-          }
-        }
-      }
+      } catch {}
 
       // Sort all chats by timestamp descending
       chats.sort((a, b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0));

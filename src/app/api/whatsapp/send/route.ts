@@ -14,6 +14,8 @@ import {
   SendMessageError,
 } from '@/lib/whatsapp/send-message'
 
+export const dynamic = 'force-dynamic';
+
 // The dashboard's outbound-send endpoint. It owns auth, per-user rate
 // limiting, and the two ways the UI targets a thread — an existing
 // `conversation_id` (inbox) or a `contact_id` (Contact detail →
@@ -58,9 +60,6 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     const {
-      // `conversation_id` targets an existing thread (inbox). `contact_id`
-      // lets a caller initiate from a contact that may have no conversation
-      // yet (Contact detail → Send template) — we find-or-create one below.
       conversation_id: conversationIdInput,
       contact_id,
       message_type,
@@ -85,9 +84,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // Validate the message shape up front — before the contact_id path
-    // finds-or-creates a conversation — so an invalid payload 400s
-    // without leaving an orphan empty conversation behind.
     try {
       validateSendMessageParams({
         messageType: message_type,
@@ -103,10 +99,6 @@ export async function POST(request: Request) {
       throw err
     }
 
-    // Resolve the target conversation. With `conversation_id` we load the
-    // existing thread; with `contact_id` we find-or-create one for the
-    // contact so a business-initiated template send (Contact detail view)
-    // reuses the shared send core below.
     let conversationId: string | null = null
 
     if (conversationIdInput) {
@@ -130,7 +122,7 @@ export async function POST(request: Request) {
       }
 
       if (!foundInFs) {
-        const { data, error: convError } = await admin
+        const { data } = await admin
           .from('conversations')
           .select('id')
           .eq('id', conversationIdInput)
@@ -149,35 +141,73 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      // contact_id path: verify the contact is in this account first so a
-      // caller can't open a conversation against someone else's contact.
-      const { data: contactRow, error: contactErr } = await admin
-        .from('contacts')
-        .select('id')
-        .eq('id', contact_id)
-        .eq('account_id', accountId)
-        .maybeSingle()
+      // contact_id path: check Firestore first, then Supabase
+      let contactExists = false;
+      const fDb = getAdminDb();
+      if (fDb) {
+        try {
+          const cDoc = await fDb.collection('accounts').doc(accountId).collection('contacts').doc(contact_id).get();
+          if (cDoc.exists) {
+            contactExists = true;
+          }
+        } catch {}
+      }
 
-      if (contactErr || !contactRow) {
+      if (!contactExists) {
+        const { data: contactRow } = await admin
+          .from('contacts')
+          .select('id')
+          .eq('id', contact_id)
+          .eq('account_id', accountId)
+          .maybeSingle();
+
+        if (contactRow) {
+          contactExists = true;
+        }
+      }
+
+      if (!contactExists) {
         return NextResponse.json(
           { error: 'Contact not found' },
           { status: 404 }
-        )
+        );
       }
 
-      const resolved = await findOrCreateConversation(
-        admin as any,
-        accountId,
-        userId || 'system',
-        contact_id
-      )
-      if (!resolved) {
-        return NextResponse.json(
-          { error: 'Failed to open a conversation for this contact' },
-          { status: 500 }
-        )
+      if (fDb) {
+        try {
+          const convDocId = `conv_${contact_id}`;
+          const convRef = fDb.collection('accounts').doc(accountId).collection('conversations').doc(convDocId);
+          const convSnap = await convRef.get();
+          if (!convSnap.exists) {
+            await convRef.set({
+              id: convDocId,
+              accountId,
+              contact_id: contact_id,
+              status: 'open',
+              unread_count: 0,
+              created_at: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+          }
+          conversationId = convDocId;
+        } catch {}
       }
-      conversationId = resolved
+
+      if (!conversationId) {
+        const resolved = await findOrCreateConversation(
+          admin as any,
+          accountId,
+          userId || 'system',
+          contact_id
+        );
+        if (!resolved) {
+          return NextResponse.json(
+            { error: 'Failed to open a conversation for this contact' },
+            { status: 500 }
+          );
+        }
+        conversationId = resolved;
+      }
     }
 
     if (!conversationId) {
@@ -187,10 +217,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // Delegate to the shared send core (validates, sends to Meta with
-    // phone-variant retry, persists, pauses active flow runs). Its
-    // `SendMessageError` carries a machine code + HTTP status; the
-    // dashboard maps it to the internal `{ error }` shape.
     try {
       const result = await sendMessageToConversation(admin as any, accountId, {
         conversationId,
@@ -231,13 +257,6 @@ export async function POST(request: Request) {
 
 type SendSupabase = Awaited<ReturnType<typeof createClient>>
 
-/**
- * Return the contact's conversation id in this account, creating one if
- * it doesn't exist yet. Mirrors the webhook's find-or-create so an
- * inbound-then-outbound (or outbound-first) sequence converges on a single
- * thread per contact. Runs under the caller's RLS — the conversations_insert
- * policy requires account agent membership, which the caller already is.
- */
 async function findOrCreateConversation(
   supabase: SendSupabase,
   accountId: string,
