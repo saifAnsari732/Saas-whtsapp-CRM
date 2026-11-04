@@ -12,6 +12,8 @@ const PUBLIC_API_PATHS = [
   '/api/whatsapp/webhook',
   '/api/auth/session',
   '/api/invitations',
+  '/api/whatsapp/baileys',
+  '/api/whatsapp/coexistence',
 ];
 
 export async function proxy(req: NextRequest) {
@@ -37,16 +39,20 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check session cookie existence
+  // Check session cookie or Authorization header or Supabase auth token
   const sessionCookie = req.cookies.get('__session')?.value;
-  if (!sessionCookie) {
+  const authHeader = req.headers.get('authorization');
+  const hasBearer = authHeader && authHeader.startsWith('Bearer ');
+  const hasSupabaseCookie = Array.from(req.cookies.getAll()).some(c => c.name.includes('-auth-token'));
+
+  if (!sessionCookie && !hasBearer && !hasSupabaseCookie) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
-  // Session cookie is present — allow request
+  // Session authenticated — allow request
   return NextResponse.next();
 }
 
@@ -80,7 +86,6 @@ export const config = {
     '/api/whatsapp/send/:path*',
     '/api/whatsapp/templates/:path*',
     '/api/whatsapp/broadcast/:path*',
-    '/api/whatsapp/baileys/:path*',
     '/api/whatsapp/media/:path*',
   ],
 };
