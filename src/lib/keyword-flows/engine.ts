@@ -96,6 +96,7 @@ export async function dispatchKeywordFlow({
   const textWords = strippedText.split(' ').filter(Boolean);
 
   const matchedFlow = flows.find((flow) => {
+    if (flow.is_active !== true) return false;
     if (!Array.isArray(flow.keywords)) return false;
     for (const kw of flow.keywords) {
       const cleanKw = String(kw).trim().toLowerCase();

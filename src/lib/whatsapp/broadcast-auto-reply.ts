@@ -66,7 +66,9 @@ export async function handleBroadcastAutoReplyIfEligible(
 
       autoRepliesSnap.forEach((doc) => {
         const d = doc.data();
-        if (d.auto_reply_enabled && d.auto_reply_text?.trim()) {
+        const createdAt = d.created_at ? new Date(d.created_at).getTime() : 0;
+        const isRecent = createdAt > 0 && (Date.now() - createdAt) < 24 * 60 * 60 * 1000;
+        if (d.auto_reply_enabled === true && d.auto_reply_text?.trim() && isRecent) {
           candidateBcastIds.push(doc.id);
           autoReplyTextMap.set(doc.id, d.auto_reply_text.trim());
         }
@@ -87,7 +89,9 @@ export async function handleBroadcastAutoReplyIfEligible(
 
         bcSnap.forEach((doc) => {
           const d = doc.data();
-          if (d.auto_reply_enabled && d.auto_reply_text?.trim()) {
+          const createdAt = d.created_at ? new Date(d.created_at).getTime() : 0;
+          const isRecent = createdAt > 0 && (Date.now() - createdAt) < 24 * 60 * 60 * 1000;
+          if (d.auto_reply_enabled === true && d.auto_reply_text?.trim() && isRecent) {
             candidateBcastIds.push(doc.id);
             autoReplyTextMap.set(doc.id, d.auto_reply_text.trim());
           }
@@ -102,6 +106,26 @@ export async function handleBroadcastAutoReplyIfEligible(
     }
 
     const rawCleanPhone = contactPhone ? contactPhone.replace(/[^0-9]/g, '') : '';
+    const contactLockKey = contactId || rawCleanPhone;
+
+    // Strict account-wide deduplication: Max 1 broadcast auto-reply per contact per 24 hours
+    if (contactLockKey) {
+      try {
+        const globalSentDoc = await fDb
+          .collection('accounts')
+          .doc(accountId)
+          .collection('broadcast_auto_reply_locks')
+          .doc(contactLockKey)
+          .get();
+        if (globalSentDoc.exists) {
+          const lastSent = new Date(globalSentDoc.data()?.sent_at || 0).getTime();
+          if (Date.now() - lastSent < 24 * 60 * 60 * 1000) {
+            console.log(`[broadcast-auto-reply] Suppressed auto-reply for ${contactLockKey} - already sent in last 24h.`);
+            return { replied: false };
+          }
+        }
+      } catch {}
+    }
 
     // 2. Check if this contact received any of these broadcasts
     for (const bId of candidateBcastIds) {
@@ -184,6 +208,20 @@ export async function handleBroadcastAutoReplyIfEligible(
         phone: rawCleanPhone || null,
         sent_at: nowIso,
       }));
+
+    if (contactLockKey) {
+      await fDb
+        .collection('accounts')
+        .doc(accountId)
+        .collection('broadcast_auto_reply_locks')
+        .doc(contactLockKey)
+        .set(cleanForFirestore({
+          contact_id: contactId || null,
+          phone: rawCleanPhone || null,
+          sent_at: nowIso,
+        }))
+        .catch(() => {});
+    }
 
     // 4. Update recipient status in Firestore
     await matchedRecipientRef.set(cleanForFirestore({

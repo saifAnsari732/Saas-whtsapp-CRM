@@ -144,7 +144,8 @@ function formatJidDisplay(jid: string, name?: string | null): {
   for (let i = 0; i < rawPhone.length; i++) charSum += rawPhone.charCodeAt(i);
   const avatarBg = gradients[charSum % gradients.length];
 
-  if (name && name.trim() && name !== rawPhone && !name.includes("@")) {
+  const isPureDigits = /^\d+$/.test(name?.trim() || '');
+  if (name && name.trim() && !isPureDigits && name !== rawPhone && !name.includes("@")) {
     const parts = name.trim().split(/\s+/);
     const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
     return {
@@ -513,7 +514,11 @@ export default function CoexistenceSetupPage() {
           return normA === normB;
         };
         const match = filteredChats.find((c) => isSameChat(c.id, prev.id));
-        return match || prev;
+        if (!match) return filteredChats[0];
+        if (prev.id === match.id && prev.name === match.name && prev.lastMessage === match.lastMessage) {
+          return prev;
+        }
+        return match;
       });
     }
   }, [filteredChats]);
@@ -529,7 +534,14 @@ export default function CoexistenceSetupPage() {
           const prevLast = prev[prev.length - 1]?.key?.id;
           const newLast = data.messages[data.messages.length - 1]?.key?.id;
           if (prevLast !== newLast) return data.messages;
-          return prev;
+          let hasDiff = false;
+          for (let i = 0; i < data.messages.length; i++) {
+            if (prev[i]?.key?.id !== data.messages[i]?.key?.id || prev[i]?.status !== data.messages[i]?.status) {
+              hasDiff = true;
+              break;
+            }
+          }
+          return hasDiff ? data.messages : prev;
         });
       }
     } catch {}

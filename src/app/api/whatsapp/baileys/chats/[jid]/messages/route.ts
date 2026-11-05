@@ -44,8 +44,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ jid: str
             const isMatch = candidateJids.includes(storeJid) ||
                             candidateJids.includes(normStoreJid) ||
                             (!isGroup && (normStoreJid === `${fullPhone}@s.whatsapp.net` || normStoreJid === `${shortPhone}@s.whatsapp.net`));
-            if (isMatch) {
-              for (const m of list) {
+            for (const m of list) {
+              const alt = (m?.key as any)?.remoteJidAlt;
+              const pn = (m?.key as any)?.senderPn;
+              const mJid = m?.key?.remoteJid ? jidNormalizedUser(m.key.remoteJid) : '';
+              const altJid = alt ? jidNormalizedUser(alt) : '';
+              const pnJid = pn ? jidNormalizedUser(pn) : '';
+
+              const messageMatches = isMatch ||
+                candidateJids.includes(mJid) ||
+                candidateJids.includes(altJid) ||
+                candidateJids.includes(pnJid) ||
+                (!isGroup && (
+                  altJid === `${fullPhone}@s.whatsapp.net` ||
+                  pnJid === `${fullPhone}@s.whatsapp.net` ||
+                  mJid === `${fullPhone}@s.whatsapp.net`
+                ));
+
+              if (messageMatches) {
                 const id = m?.key?.id || `${m.messageTimestamp}-${Math.random()}`;
                 msgMap.set(id, m);
               }
@@ -78,8 +94,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ jid: str
               const isMatch = candidateJids.includes(storeJid) ||
                               candidateJids.includes(normStoreJid) ||
                               (!isGroup && (normStoreJid === `${fullPhone}@s.whatsapp.net` || normStoreJid === `${shortPhone}@s.whatsapp.net`));
-              if (isMatch) {
-                for (const m of list) {
+              for (const m of list) {
+                const alt = (m?.key as any)?.remoteJidAlt;
+                const pn = (m?.key as any)?.senderPn;
+                const mJid = m?.key?.remoteJid ? jidNormalizedUser(m.key.remoteJid) : '';
+                const altJid = alt ? jidNormalizedUser(alt) : '';
+                const pnJid = pn ? jidNormalizedUser(pn) : '';
+
+                const messageMatches = isMatch ||
+                  candidateJids.includes(mJid) ||
+                  candidateJids.includes(altJid) ||
+                  candidateJids.includes(pnJid) ||
+                  (!isGroup && (
+                    altJid === `${fullPhone}@s.whatsapp.net` ||
+                    pnJid === `${fullPhone}@s.whatsapp.net` ||
+                    mJid === `${fullPhone}@s.whatsapp.net`
+                  ));
+
+                if (messageMatches) {
                   const id = m?.key?.id || `${m.messageTimestamp}-${Math.random()}`;
                   if (!msgMap.has(id)) msgMap.set(id, m);
                 }

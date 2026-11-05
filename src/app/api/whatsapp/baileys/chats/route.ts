@@ -133,29 +133,46 @@ export async function GET(request: Request) {
 
       let chats: any[] = [];
       if (rawStoreChats && Object.keys(rawStoreChats).length > 0) {
-        const allChats = Object.values(rawStoreChats);
-        chats = allChats
-          .filter((c: any) => c.id && (c.id.endsWith("@s.whatsapp.net") || c.id.endsWith("@g.us")))
-          .map((c: any) => {
-            const isGroup = c.id.endsWith("@g.us");
-            const finalId = toStandardJid(c.id);
-            let ts = c.conversationTimestamp;
-            if (ts && typeof ts === "object" && "low" in ts) {
-              ts = ts.low;
-            } else if (typeof ts === "string") {
-              ts = parseInt(ts, 10);
-            }
+        const chatMap = new Map<string, any>();
+        for (const c of Object.values(rawStoreChats) as any[]) {
+          if (!c?.id) continue;
+          let id = c.id;
+          if (id.endsWith('@lid') && (userSocket as any)?.signalRepository?.lidMapping?.getPNForLID) {
+            try {
+              const pn = await (userSocket as any).signalRepository.lidMapping.getPNForLID(id);
+              if (pn) id = pn;
+            } catch {}
+          }
+          const isGroup = id.endsWith("@g.us");
+          const finalId = toStandardJid(id);
+          if (!finalId.endsWith("@s.whatsapp.net") && !isGroup) continue;
 
-            return {
+          let ts = c.conversationTimestamp;
+          if (ts && typeof ts === "object" && "low" in ts) {
+            ts = ts.low;
+          } else if (typeof ts === "string") {
+            ts = parseInt(ts, 10);
+          }
+          const finalTs = typeof ts === "number" && !isNaN(ts) ? ts : Math.floor(Date.now() / 1000);
+
+          const existing = chatMap.get(finalId);
+          if (!existing || finalTs >= (existing.conversationTimestamp || 0)) {
+            const rawName = c.name || existing?.name;
+            const cleanDigits = finalId.split('@')[0].replace(/\D/g, '');
+            const isPureDigits = rawName ? /^\d+$/.test(rawName.trim()) : true;
+            const displayName = isPureDigits ? (isGroup ? "WhatsApp Group" : `+${cleanDigits}`) : rawName;
+
+            chatMap.set(finalId, {
               id: finalId,
-              name: c.name || (isGroup ? "WhatsApp Group" : finalId.split("@")[0]),
-              unreadCount: c.unreadCount || 0,
-              conversationTimestamp:
-                typeof ts === "number" && !isNaN(ts) ? ts : Math.floor(Date.now() / 1000),
+              name: displayName,
+              unreadCount: (existing?.unreadCount || 0) + (c.unreadCount || 0),
+              conversationTimestamp: Math.max(finalTs, existing?.conversationTimestamp || 0),
               type: isGroup ? "group" : "direct",
-              lastMessage: c.lastMessage || c.last_message_text || undefined,
-            };
-          });
+              lastMessage: c.lastMessage || c.last_message_text || existing?.lastMessage || undefined,
+            });
+          }
+        }
+        chats = Array.from(chatMap.values());
       }
 
       const existingIds = new Set(chats.map((c) => c.id));

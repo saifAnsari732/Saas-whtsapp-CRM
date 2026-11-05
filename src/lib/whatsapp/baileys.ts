@@ -224,6 +224,21 @@ export async function connectToWhatsApp(userId: string) {
       retryRequestDelayMs: 2000,
       generateHighQualityLinkPreview: true,
       markOnlineOnConnect: true,
+      getMessage: async (key: any) => {
+        const msgId = key?.id;
+        if (!msgId) return undefined;
+        for (const s of Object.values(global.waStores || {})) {
+          if (s?.messages) {
+            for (const list of Object.values(s.messages)) {
+              if (Array.isArray(list)) {
+                const found = list.find((m: any) => m?.key?.id === msgId);
+                if (found?.message) return found.message;
+              }
+            }
+          }
+        }
+        return undefined;
+      },
     });
 
     global.waSockets[userId] = sock;
@@ -322,7 +337,34 @@ export async function connectToWhatsApp(userId: string) {
       for (const msg of messages || []) {
         const rawJid = msg.key?.remoteJid;
         if (!rawJid || rawJid === 'status@broadcast') continue;
-        const jid = jidNormalizedUser(rawJid);
+
+        // Resolve LID to PN (Phone Number) JID in Baileys v7
+        let jid = jidNormalizedUser(rawJid);
+        if (jid.endsWith('@lid')) {
+          const alt = (msg.key as any).remoteJidAlt;
+          if (alt && (alt.endsWith('@s.whatsapp.net') || alt.endsWith('@g.us'))) {
+            jid = jidNormalizedUser(alt);
+          } else if ((msg.key as any).senderPn) {
+            jid = jidNormalizedUser((msg.key as any).senderPn);
+          } else if ((msg.key as any).participantPn) {
+            jid = jidNormalizedUser((msg.key as any).participantPn);
+          } else if ((sock as any)?.signalRepository?.lidMapping?.getPNForLID) {
+            try {
+              const pn = await (sock as any).signalRepository.lidMapping.getPNForLID(jid);
+              if (pn && (pn.endsWith('@s.whatsapp.net') || pn.endsWith('@g.us'))) {
+                jid = jidNormalizedUser(pn);
+              }
+            } catch {}
+          }
+        }
+
+        if (jid.endsWith('@lid') && (msg.key as any).participant) {
+          const pJid = jidNormalizedUser((msg.key as any).participant);
+          if (pJid.endsWith('@s.whatsapp.net')) {
+            jid = pJid;
+          }
+        }
+
         if (msg.key) msg.key.remoteJid = jid;
 
         if (jid && (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@g.us'))) {
@@ -409,8 +451,8 @@ export async function connectToWhatsApp(userId: string) {
             }
           }
 
-          // Sync incoming message to Firestore for real-time CRM Inbox updates
-          if (process.env.FIREBASE_ADMIN_PROJECT_ID && !msg.key?.fromMe && !isGroup) {
+          // Sync message to Firestore for real-time CRM Inbox updates (both inbound customer and phone-sent outbound)
+          if (process.env.FIREBASE_ADMIN_PROJECT_ID && !isGroup && cleanDigits.length >= 7) {
             (async () => {
               try {
                 const { getAdminDb } = await import('@/lib/firebase/admin');
@@ -419,6 +461,8 @@ export async function connectToWhatsApp(userId: string) {
                   const effectiveAccountId = '61740bf8-b21e-42dd-9ab3-9118bca90bc6';
                   const digits = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
                   const convRef = fDb.collection('accounts').doc(effectiveAccountId).collection('conversations').doc(`conv_c_${digits}`);
+                  const isAgent = Boolean(msg.key?.fromMe);
+
                   await convRef.set({
                     id: `conv_c_${digits}`,
                     contact_phone: digits,
@@ -426,50 +470,134 @@ export async function connectToWhatsApp(userId: string) {
                     last_message_at: new Date().toISOString(),
                     last_message_text: msgText,
                     status: 'open',
-                    unread_count: 1,
                     updatedAt: new Date().toISOString(),
+                    ...(isAgent ? {} : { unread_count: 1 }),
                   }, { merge: true });
 
                   const msgId = msg.key?.id || `msg-${Date.now()}`;
                   await convRef.collection('messages').doc(msgId).set({
                     id: msgId,
                     content_text: msgText,
-                    sender_type: 'customer',
-                    direction: 'inbound',
-                    status: 'delivered',
+                    sender_type: isAgent ? 'agent' : 'customer',
+                    direction: isAgent ? 'outbound' : 'inbound',
+                    status: isAgent ? 'sent' : 'delivered',
                     created_at: new Date().toISOString(),
                   }, { merge: true });
                 }
               } catch (fsSyncErr) {
-                console.warn('[Baileys Inbound] Firestore sync warning:', fsSyncErr);
+                console.warn('[Baileys Message] Firestore sync warning:', fsSyncErr);
               }
             })();
           }
 
-          // Auto-Reply Chatbot Processor (Triggered for incoming direct customer messages)
+          // Auto-Reply Chatbot & Keyword Flow Processor (Triggered for incoming direct customer messages)
           if (!msg.key?.fromMe && jid.endsWith('@s.whatsapp.net')) {
             const rawText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-            if (rawText.trim()) {
+            const cleanInbound = rawText.trim();
+            if (cleanInbound) {
               (async () => {
-                try {
-                  const { processIncomingMessage } = await import('@/lib/chatbot/processor');
-                  const result = await processIncomingMessage({
-                    accountId: userId,
-                    userId: userId,
-                    senderJid: jid,
-                    messageText: rawText,
-                    senderName: pushName || undefined,
-                  });
+                const effectiveAccountId = '61740bf8-b21e-42dd-9ab3-9118bca90bc6';
+                let keywordFlowConsumed = false;
 
-                  if (result.shouldReply && result.replyText) {
-                    if (result.delayMs > 0) {
-                      await new Promise((resolve) => setTimeout(resolve, result.delayMs));
+                // 1. PRIMARY: Keyword Flow Dispatch for Baileys WhatsApp Coexistence
+                try {
+                  const { getAdminDb } = await import('@/lib/firebase/admin');
+                  const fDb = getAdminDb();
+                  if (fDb) {
+                    const flows: any[] = [];
+                    // Check accounts/{accountId}/keyword_flows
+                    const snap = await fDb
+                      .collection('accounts')
+                      .doc(effectiveAccountId)
+                      .collection('keyword_flows')
+                      .where('is_active', '==', true)
+                      .get();
+                    snap.forEach((d) => flows.push({ id: d.id, ...d.data() }));
+
+                    // Also check top-level keyword_flows
+                    if (flows.length === 0) {
+                      const topSnap = await fDb
+                        .collection('keyword_flows')
+                        .where('account_id', '==', effectiveAccountId)
+                        .where('is_active', '==', true)
+                        .get();
+                      topSnap.forEach((d) => flows.push({ id: d.id, ...d.data() }));
                     }
-                    await sock.sendMessage(jid, { text: result.replyText });
-                    console.log(`[Auto-Reply Chatbot] Dispatched to ${jid} (${result.source}): "${result.replyText.substring(0, 40)}..."`);
+
+                    const lowerText = cleanInbound.toLowerCase();
+                    const strippedText = lowerText.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?!]/g, ' ').replace(/\s+/g, ' ').trim();
+                    const textWords = strippedText.split(' ').filter(Boolean);
+
+                    const matchedFlow = flows.find((flow) => {
+                      if (flow.is_active !== true) return false;
+                      if (!Array.isArray(flow.keywords)) return false;
+                      for (const kw of flow.keywords) {
+                        const cleanKw = String(kw).trim().toLowerCase();
+                        if (!cleanKw) continue;
+                        if (lowerText === cleanKw || strippedText === cleanKw) return true;
+                        if (textWords.includes(cleanKw)) return true;
+                        const escaped = cleanKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const regex = new RegExp(`(^|\\s)${escaped}(\\s|$)`, 'i');
+                        if (regex.test(lowerText) || regex.test(strippedText)) return true;
+                      }
+                      return false;
+                    });
+
+                    if (matchedFlow) {
+                      const replyText = matchedFlow.text_message || '';
+                      if (replyText.trim()) {
+                        keywordFlowConsumed = true;
+                        await sock.sendMessage(jid, { text: replyText.trim() });
+                        console.log(`[Baileys Keyword Flow] Dispatched flow "${matchedFlow.name || matchedFlow.id}" to ${jid}: "${replyText.substring(0, 40)}..."`);
+
+                        // Sync bot reply to memory store and Firestore
+                        const replyMsgId = `bot_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+                        const nowIso = new Date().toISOString();
+                        const digits = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+                        const convRef = fDb.collection('accounts').doc(effectiveAccountId).collection('conversations').doc(`conv_c_${digits}`);
+                        await convRef.set({
+                          last_message_at: nowIso,
+                          last_message_text: replyText.trim(),
+                          status: 'open',
+                          updatedAt: nowIso,
+                        }, { merge: true }).catch(() => {});
+                        await convRef.collection('messages').doc(replyMsgId).set({
+                          id: replyMsgId,
+                          content_text: replyText.trim(),
+                          sender_type: 'bot',
+                          direction: 'outbound',
+                          status: 'sent',
+                          created_at: nowIso,
+                        }, { merge: true }).catch(() => {});
+                      }
+                    }
                   }
-                } catch (botErr) {
-                  console.error('[Auto-Reply Chatbot] Error generating reply:', botErr);
+                } catch (kfErr) {
+                  console.warn('[Baileys Keyword Flow] check warning:', kfErr);
+                }
+
+                // 2. Chatbot Processor (only if no keyword flow consumed and chatbot is active)
+                if (!keywordFlowConsumed) {
+                  try {
+                    const { processIncomingMessage } = await import('@/lib/chatbot/processor');
+                    const result = await processIncomingMessage({
+                      accountId: effectiveAccountId,
+                      userId: userId,
+                      senderJid: jid,
+                      messageText: cleanInbound,
+                      senderName: pushName || undefined,
+                    });
+
+                    if (result.shouldReply && result.replyText) {
+                      if (result.delayMs > 0) {
+                        await new Promise((resolve) => setTimeout(resolve, result.delayMs));
+                      }
+                      await sock.sendMessage(jid, { text: result.replyText });
+                      console.log(`[Auto-Reply Chatbot] Dispatched to ${jid} (${result.source}): "${result.replyText.substring(0, 40)}..."`);
+                    }
+                  } catch (botErr) {
+                    console.error('[Auto-Reply Chatbot] Error generating reply:', botErr);
+                  }
                 }
               })();
             }

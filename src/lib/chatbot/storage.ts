@@ -1,33 +1,30 @@
-import { createClient as createServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/ai/admin-client';
 import { 
   ChatbotSettings, 
-  DEFAULT_KEYWORD_RULES, 
-  DEFAULT_FOLLOW_UP_STEPS, 
   PERSONA_PROMPTS,
   FollowUpQueueItem 
 } from './types';
 
 const DEFAULT_SETTINGS: ChatbotSettings = {
-  is_active: true,
+  is_active: false,
   bot_mode: 'hybrid',
   persona: 'sales',
   system_prompt: PERSONA_PROMPTS.sales.prompt,
-  welcome_enabled: true,
-  welcome_message: 'Hi {name}! Welcome to our WhatsApp service. How can we assist you today?',
-  fallback_message: 'Thank you for your message! Our team has received your query and will reply shortly.',
+  welcome_enabled: false,
+  welcome_message: '',
+  fallback_message: '',
   away_enabled: false,
-  away_message: 'Thank you for reaching out! We are currently outside our standard business hours, but we have recorded your message and will get back to you first thing.',
+  away_message: '',
   typing_delay_seconds: 2,
   max_replies_per_conv: 6,
-  keyword_rules: DEFAULT_KEYWORD_RULES,
+  keyword_rules: [],
   follow_up_sequence: {
     id: 'seq-default',
     name: 'Lead Re-engagement Follow-up',
-    is_active: true,
+    is_active: false,
     trigger_event: 'no_reply_inbound',
     cancel_on_reply: true,
-    steps: DEFAULT_FOLLOW_UP_STEPS,
+    steps: [],
   },
 };
 

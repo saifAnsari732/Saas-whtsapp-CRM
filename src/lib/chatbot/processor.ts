@@ -104,7 +104,9 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
             if (docSnap.exists) {
               const fbData = docSnap.data();
-              autoReplyEnabled = Boolean(fbData?.auto_reply_enabled);
+              const createdAt = fbData?.created_at ? new Date(fbData.created_at).getTime() : 0;
+              const isRecent = createdAt > 0 && (Date.now() - createdAt) < 24 * 60 * 60 * 1000;
+              autoReplyEnabled = Boolean(fbData?.auto_reply_enabled) && isRecent;
               autoReplyText = fbData?.auto_reply_text || '';
             }
           }
