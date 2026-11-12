@@ -158,10 +158,15 @@ export function getAdminAuth(): Auth {
 /**
  * Returns the Firebase Admin Storage instance.
  */
-export function getAdminStorage(): Storage {
+export function getAdminStorage(): Storage | null {
   if (!_adminStorage) {
-    const app = getAdminApp();
-    _adminStorage = getStorage(app);
+    try {
+      const app = getAdminApp();
+      _adminStorage = getStorage(app);
+    } catch (err: any) {
+      console.warn('[Firebase Admin] Storage initialization notice (missing @google-cloud/storage):', err?.message);
+      return null;
+    }
   }
   return _adminStorage;
 }

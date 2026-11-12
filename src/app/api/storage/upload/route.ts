@@ -44,30 +44,36 @@ export async function POST(request: Request) {
 
     // 1. Try Firebase Admin Storage SDK
     let uploadedSuccessfully = false;
+    let lastError: string | null = null;
     try {
       const fbStorage = getAdminStorage();
-      const fbBucket = fbStorage.bucket(targetBucketName);
-      const fileRef = fbBucket.file(storagePath);
+      if (fbStorage) {
+        const fbBucket = fbStorage.bucket(targetBucketName);
+        const fileRef = fbBucket.file(storagePath);
 
-      await fileRef.save(fileBuffer, {
-        metadata: {
-          contentType: file.type || 'application/octet-stream',
-          cacheControl: 'public, max-age=31536000',
+        await fileRef.save(fileBuffer, {
           metadata: {
-            firebaseStorageDownloadTokens: downloadToken,
+            contentType: file.type || 'application/octet-stream',
+            cacheControl: 'public, max-age=31536000',
+            metadata: {
+              firebaseStorageDownloadTokens: downloadToken,
+            },
           },
-        },
-        public: true,
-      });
+          public: true,
+        });
 
-      await fileRef.makePublic().catch(() => {});
-      const encodedPath = encodeURIComponent(fileRef.name);
-      publicUrl = `https://firebasestorage.googleapis.com/v0/b/${fbBucket.name}/o/${encodedPath}?alt=media&token=${downloadToken}`;
-      uploadedSuccessfully = true;
-      console.log('[POST /api/storage/upload] Uploaded via Firebase Admin SDK:', publicUrl);
+        await fileRef.makePublic().catch(() => {});
+        const encodedPath = encodeURIComponent(fileRef.name);
+        publicUrl = `https://firebasestorage.googleapis.com/v0/b/${fbBucket.name}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+        uploadedSuccessfully = true;
+        console.log('[POST /api/storage/upload] Uploaded via Firebase Admin SDK:', publicUrl);
+      }
     } catch (fbErr: any) {
-      console.warn('[POST /api/storage/upload] Admin SDK upload notice, attempting REST API fallback:', fbErr?.message);
+      lastError = fbErr?.message;
+      console.warn('[POST /api/storage/upload] Admin SDK upload notice, trying REST API fallback:', fbErr?.message);
+    }
 
+    if (!uploadedSuccessfully) {
       // 2. Resilient REST API fallback using Google Service Account Access Token
       try {
         const { getApps } = await import('firebase-admin/app');
@@ -107,7 +113,7 @@ export async function POST(request: Request) {
       } catch (restErr: any) {
         console.error('[POST /api/storage/upload] Both Admin SDK and REST fallback failed:', restErr);
         return NextResponse.json({ 
-          error: `Storage upload failed: ${fbErr?.message || restErr?.message || 'Unknown error'}` 
+          error: `Storage upload failed: ${lastError || restErr?.message || 'Unknown error'}` 
         }, { status: 500 });
       }
     }
@@ -159,9 +165,11 @@ export async function DELETE(request: Request) {
     // Delete from Firebase Storage
     try {
       const fbStorage = getAdminStorage();
-      const targetBucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'whatsapp-saas-7ab44.firebasestorage.app';
-      const fbBucket = fbStorage.bucket(targetBucketName);
-      await fbBucket.file(`chat-media/${path}`).delete({ ignoreNotFound: true });
+      if (fbStorage) {
+        const targetBucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'whatsapp-saas-7ab44.firebasestorage.app';
+        const fbBucket = fbStorage.bucket(targetBucketName);
+        await fbBucket.file(`chat-media/${path}`).delete({ ignoreNotFound: true });
+      }
     } catch (delErr) {
       console.warn('[DELETE /api/storage/upload] File delete notice:', delErr);
     }

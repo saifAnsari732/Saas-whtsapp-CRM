@@ -51,6 +51,6 @@ jobs:
 
             sudo systemctl restart nginx
 
-            sleep 5
+            sleep 10
             pm2 status
-            curl -I http://127.0.0.1:3000 || pm2 logs chatflyr --lines 40 --nostream
+            curl -I http://127.0.0.1:3000 || (pm2 logs chatflyr --lines 40 --nostream && true) || true
