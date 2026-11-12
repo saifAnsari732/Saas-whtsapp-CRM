@@ -5,6 +5,7 @@ export async function GET(req: NextRequest) {
   const code = searchParams.get('code');
   const error = searchParams.get('error');
   const errorDescription = searchParams.get('error_description');
+  const state = searchParams.get('state');
 
   // URL to redirect the user back to in the CRM
   // We use the actual request host to ensure the redirect URI exactly matches
@@ -14,6 +15,19 @@ export async function GET(req: NextRequest) {
   const baseUrl = `${protocol}://${host}`;
   const settingsUrl = new URL('/settings', baseUrl);
   settingsUrl.searchParams.set('tab', 'whatsapp');
+
+  if (state) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(state));
+      if (parsed.accountId) {
+        settingsUrl.searchParams.set('accountId', parsed.accountId);
+      }
+    } catch {
+      if (state.length < 100) {
+        settingsUrl.searchParams.set('accountId', state);
+      }
+    }
+  }
 
   if (error) {
     console.error('Facebook OAuth Error:', error, errorDescription);

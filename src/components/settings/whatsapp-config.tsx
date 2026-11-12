@@ -15,6 +15,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { getClientAuth } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
@@ -180,9 +181,14 @@ export function WhatsAppConfig() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (window.location.hash === '#_=_') {
+      window.history.replaceState({}, '', window.location.pathname + window.location.search);
+    }
+
     const url = new URL(window.location.href);
     const tokenParam = url.searchParams.get('accessToken');
     const errorParam = url.searchParams.get('oauth_error');
+    const accountIdParam = url.searchParams.get('accountId');
 
     if (errorParam) {
       toast.error(`Facebook Login Error: ${errorParam}`);
@@ -193,14 +199,34 @@ export function WhatsAppConfig() {
     if (tokenParam) {
       setFbLoading(true);
       url.searchParams.delete('accessToken');
+      if (accountIdParam) {
+        url.searchParams.delete('accountId');
+      }
       window.history.replaceState({}, '', url.toString());
 
       (async () => {
         try {
+          const auth = getClientAuth();
+          let idToken: string | undefined;
+          try {
+            idToken = await auth.currentUser?.getIdToken();
+          } catch {}
+
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (idToken) {
+            headers['Authorization'] = `Bearer ${idToken}`;
+          }
+
+          const targetAcct = accountIdParam || accountId || (user ? `acct-${user.id}` : '61740bf8-b21e-42dd-9ab3-9118bca90bc6');
+
           const res = await fetch('/api/whatsapp/auth/exchange', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accessToken: tokenParam }),
+            headers,
+            credentials: 'include',
+            body: JSON.stringify({
+              accessToken: tokenParam,
+              accountId: targetAcct,
+            }),
           });
           
           const data = await res.json();
@@ -211,42 +237,23 @@ export function WhatsAppConfig() {
           
           setWabaId(data.wabaId);
           setPhoneNumberId(data.phoneNumberId);
-          setAccessToken(data.accessToken);
-          setTokenEdited(true);
-          setShowAdvanced(true);
+          setAccessToken(MASKED_TOKEN);
+          setTokenEdited(false);
+          setConnectionStatus('connected');
+          setResetReason(null);
+          setStatusMessage('');
 
-          // Auto-save configuration with default/env verify token for instant connection
-          try {
-            const saveRes = await fetch('/api/whatsapp/config', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                phone_number_id: data.phoneNumberId,
-                waba_id: data.wabaId || null,
-                access_token: data.accessToken,
-                verify_token: 'saifansari123',
-              }),
-            });
+          toast.success('🎉 WhatsApp Connected Successfully!', { duration: 3000 });
 
-            const saveData = await saveRes.json();
-            if (saveRes.ok) {
-              setConnectionStatus('connected');
-              toast.success('🎉 WhatsApp Connected Successfully! Redirecting to Dashboard...', { duration: 3000 });
-              setTimeout(() => {
-                window.location.href = '/dashboard';
-              }, 1200);
-              return;
-            }
-          } catch (autoSaveErr) {
-            console.warn('Auto-save attempt failed, falling back to manual save:', autoSaveErr);
-          }
-
-          toast.success('Connected to Facebook. Click "Save Changes" below to finalize.');
+          // Refresh configuration in UI
+          loadedAccountIdRef.current = targetAcct;
+          await fetchConfig(targetAcct);
         } catch (err: any) {
           console.error('Exchange error:', err);
           toast.error(err.message || 'Failed to fetch WhatsApp account details.');
         } finally {
           setFbLoading(false);
+          setLoading(false);
         }
       })();
     }
@@ -454,8 +461,10 @@ export function WhatsAppConfig() {
 
     setFbLoading(true);
     const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/api/whatsapp/auth/callback` : '';
+    const targetAccountId = accountId || (user ? `acct-${user.id}` : '61740bf8-b21e-42dd-9ab3-9118bca90bc6');
+    const statePayload = JSON.stringify({ accountId: targetAccountId });
     const extras = JSON.stringify({ setup: {}, featureType: 'whatsapp_business_app_onboarding', sessionInfoVersion: '3' });
-    const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&config_id=${fbConfigId}&response_type=code&extras=${encodeURIComponent(extras)}`;
+    const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&config_id=${fbConfigId}&response_type=code&state=${encodeURIComponent(statePayload)}&extras=${encodeURIComponent(extras)}`;
     
     // Redirect to Facebook OAuth to bypass Meta's buggy JSSDK toggle requirement
     window.location.href = oauthUrl;
