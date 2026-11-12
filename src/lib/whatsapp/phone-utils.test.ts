@@ -118,5 +118,9 @@ describe('sanitizeTemplatePhoneNumber', () => {
     expect(sanitizeTemplatePhoneNumber('+919511450914')).toBe('+919511450914');
     expect(sanitizeTemplatePhoneNumber('+91 95114 50914')).toBe('+919511450914');
     expect(sanitizeTemplatePhoneNumber('+1 (555) 802-3973')).toBe('+15558023973');
+    // US / North American numbers (including 800 and 860 area codes) must retain +1 and not become +91
+    expect(sanitizeTemplatePhoneNumber('+1 (800) 555-1234')).toBe('+18005551234');
+    expect(sanitizeTemplatePhoneNumber('+18008890860')).toBe('+18008890860');
+    expect(sanitizeTemplatePhoneNumber('+18601234567')).toBe('+18601234567');
   });
 });

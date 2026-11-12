@@ -20,8 +20,9 @@ export async function POST(
     const { id } = await context.params
     const accCtx = await getAccountContext(request as any)
     const accountId = accCtx?.accountId
+    const user = accCtx?.user
 
-    if (!accCtx?.user || !accountId) {
+    if (!user || !accountId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -52,7 +53,10 @@ export async function POST(
         } else {
           const topDoc = await fDb.collection('flows').doc(id).get()
           if (topDoc.exists) {
-            existingFlow = { id: topDoc.id, ...topDoc.data() }
+            const d = topDoc.data()
+            if (d?.account_id === accountId || d?.accountId === accountId || d?.user_id === user.uid) {
+              existingFlow = { id: topDoc.id, ...d }
+            }
           }
         }
       } catch (e) {
@@ -68,7 +72,7 @@ export async function POST(
           .select('*')
           .eq('id', id)
           .maybeSingle()
-        if (data) {
+        if (data && (data.account_id === accountId || data.user_id === user.uid)) {
           existingFlow = data
         }
       } catch {}
@@ -79,7 +83,39 @@ export async function POST(
     }
 
     if (status === 'active') {
-      const nodes = existingFlow.nodes || []
+      let nodes = existingFlow.nodes || []
+      if (!Array.isArray(nodes) || nodes.length === 0) {
+        if (fDb) {
+          try {
+            const nodesSnap = await fDb
+              .collection('accounts')
+              .doc(accountId)
+              .collection('flows')
+              .doc(id)
+              .collection('nodes')
+              .get()
+            if (!nodesSnap.empty) {
+              nodes = nodesSnap.docs.map((d) => ({
+                id: d.id,
+                ...d.data(),
+              }))
+            }
+          } catch {}
+        }
+        if (!Array.isArray(nodes) || nodes.length === 0) {
+          try {
+            const admin = supabaseAdmin()
+            const { data: sbNodes } = await admin
+              .from('flow_nodes')
+              .select('*')
+              .eq('flow_id', id)
+            if (sbNodes && sbNodes.length > 0) {
+              nodes = sbNodes
+            }
+          } catch {}
+        }
+      }
+
       const issues = validateFlowForActivation(
         existingFlow as {
           name: string

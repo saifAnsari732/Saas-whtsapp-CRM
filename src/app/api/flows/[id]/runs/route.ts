@@ -19,8 +19,9 @@ export async function GET(
     const { id } = await context.params
     const accCtx = await getAccountContext(request as any)
     const accountId = accCtx?.accountId
+    const user = accCtx?.user
 
-    if (!accCtx?.user || !accountId) {
+    if (!user || !accountId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -42,7 +43,10 @@ export async function GET(
         } else {
           const topDoc = await fDb.collection('flows').doc(id).get()
           if (topDoc.exists) {
-            flow = { id: topDoc.id, name: topDoc.data()?.name || '' }
+            const d = topDoc.data()
+            if (d?.account_id === accountId || d?.accountId === accountId || d?.user_id === user.uid) {
+              flow = { id: topDoc.id, name: d?.name || '' }
+            }
           }
         }
       } catch {}
@@ -68,10 +72,12 @@ export async function GET(
         if (!flow) {
           const { data: sf } = await admin
             .from('flows')
-            .select('id, name')
+            .select('id, name, account_id, user_id')
             .eq('id', id)
             .maybeSingle()
-          if (sf) flow = sf
+          if (sf && (sf.account_id === accountId || sf.user_id === user.uid)) {
+            flow = sf
+          }
         }
         if (runs.length === 0) {
           const { data: sRuns } = await admin

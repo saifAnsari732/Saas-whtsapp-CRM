@@ -130,7 +130,11 @@ export function normalizeTemplateRecord(docId: string, data: any) {
     footerText: footer_text,
     header_content,
     headerContent: header_content,
-    buttons: data.buttons || [],
+    buttons: (data.buttons || []).map((b: any) =>
+      b?.type === 'PHONE_NUMBER' && b?.phone_number
+        ? { ...b, phone_number: sanitizeTemplatePhoneNumber(b.phone_number) }
+        : b,
+    ),
     status: (data.status || 'APPROVED').toUpperCase(),
   };
 }

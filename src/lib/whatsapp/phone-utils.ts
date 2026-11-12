@@ -107,38 +107,48 @@ export function sanitizeTemplatePhoneNumber(phone: string): string {
 
   if (!digits) return '';
 
-  // 1. Indian Toll-free with 91 prefix: 911800... or 911860...
+  // If phone explicitly starts with '+', respect the country code
+  if (cleaned.startsWith('+')) {
+    // 1. Explicit Indian country code +91
+    if (cleaned.startsWith('+91')) {
+      if (/^9191\d{8,10}$/.test(digits)) {
+        return `+${digits.slice(2)}`;
+      }
+      return `+${digits}`;
+    }
+    // 2. Explicit North American or other country code (e.g. +1 800..., +1 860..., +44...)
+    // Keep exactly as provided so North American (+1) toll-free or international numbers are not corrupted!
+    return `+${digits}`;
+  }
+
+  // Input does NOT have a leading '+':
+  // 3. Indian Toll-free with 91 prefix: 911800... or 911860...
   if (/^91(1800|1860)\d{6,8}$/.test(digits)) {
     return `+${digits}`;
   }
 
-  // 2. Indian Toll-free with leading trunk 0: 01800... or 01860...
+  // 4. Indian Toll-free with leading trunk 0: 01800... or 01860...
   if (/^0(1800|1860)\d{6,8}$/.test(digits)) {
     return `+91${digits.slice(1)}`;
   }
 
-  // 3. Indian Toll-free clean: 1800... or 1860...
-  // Must have +91 so mobile dialers don't dial +1 (USA)
+  // 5. Bare Indian Toll-free without country code: 1800... or 1860...
+  // CRITICAL: Must prepend +91 so mobile dialers don't dial +1 (USA)!
   if (/^(1800|1860)\d{6,8}$/.test(digits)) {
     return `+91${digits}`;
   }
 
-  // 4. Regular number with existing '+'
-  if (cleaned.startsWith('+')) {
-    return `+${digits}`;
-  }
-
-  // 5. Domestic 10-digit Indian mobile (starts with 6-9)
+  // 6. Domestic 10-digit Indian mobile (starts with 6-9)
   if (/^[6-9]\d{9}$/.test(digits)) {
     return `+91${digits}`;
   }
 
-  // 6. 12-digit Indian number starting with 91
+  // 7. 12-digit Indian number starting with 91
   if (/^91[6-9]\d{9}$/.test(digits)) {
     return `+${digits}`;
   }
 
-  // 7. General international number
+  // 8. General international number
   return `+${digits}`;
 }
 

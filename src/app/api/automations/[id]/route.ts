@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/automations/admin-client'
 import {
   loadStepsTree,
   replaceSteps,
+  seedsToTree,
   type BuilderStepInput,
 } from '@/lib/automations/steps-tree'
 import {
@@ -14,7 +15,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-async function resolveAutomation(id: string, accountId: string) {
+async function resolveAutomation(id: string, accountId: string, userId?: string) {
   const fDb = getAdminDb()
   if (fDb) {
     try {
@@ -33,7 +34,7 @@ async function resolveAutomation(id: string, accountId: string) {
       const doc = await fDb.collection('automations').doc(id).get()
       if (doc.exists) {
         const d = doc.data()
-        if (d?.account_id === accountId || d?.accountId === accountId) {
+        if (d?.account_id === accountId || d?.accountId === accountId || (userId && d?.user_id === userId)) {
           return { source: 'firestore-top' as const, doc }
         }
       }
@@ -51,12 +52,13 @@ export async function GET(
     const { id } = await params
     const accCtx = await getAccountContext(_request as any)
     const accountId = accCtx?.accountId
+    const user = accCtx?.user
 
-    if (!accCtx?.user || !accountId) {
+    if (!user || !accountId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const resolved = await resolveAutomation(id, accountId)
+    const resolved = await resolveAutomation(id, accountId, user.uid)
     if (resolved) {
       const data = resolved.doc.data() || {}
       let steps = data.steps || []
@@ -64,6 +66,8 @@ export async function GET(
         try {
           steps = await loadStepsTree(id)
         } catch {}
+      } else if (steps.some((s: any) => s.branch !== undefined || s.parent_index !== undefined)) {
+        steps = seedsToTree(steps)
       }
       return NextResponse.json({
         automation: { id: resolved.doc.id, ...data },
@@ -115,7 +119,8 @@ export async function PATCH(
     const body = await request.json().catch(() => null)
     if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
 
-    const resolved = await resolveAutomation(id, accountId)
+    const user = accCtx.user
+    const resolved = await resolveAutomation(id, accountId, user.uid)
     let existingData: any = resolved?.doc?.data()
 
     if (!existingData) {
@@ -127,7 +132,7 @@ export async function PATCH(
           .select('id, user_id, is_active, trigger_type, trigger_config, account_id')
           .eq('id', id)
           .maybeSingle()
-        if (data && (data.account_id === accountId || data.user_id === accCtx.user.uid)) {
+        if (data && (data.account_id === accountId || data.user_id === user.uid)) {
           existingData = data
         }
       } catch {}
@@ -156,20 +161,34 @@ export async function PATCH(
     if (willBeActive) {
       const mergedTriggerType = (update.trigger_type ?? existingData.trigger_type) as string
       const mergedTriggerConfig = update.trigger_config ?? existingData.trigger_config
-      const mergedSteps = Array.isArray(body.steps)
+      const rawSteps = Array.isArray(body.steps)
         ? (body.steps as { step_type: string; step_config: Record<string, unknown> }[])
         : Array.isArray(existingData.steps)
           ? existingData.steps
           : await loadStepsTree(id).catch(() => [])
+
+      // Prune unconfigured dummy tag steps that have an empty tag_id
+      const mergedSteps = (rawSteps || []).filter(
+        (s: any) =>
+          !(
+            (s.step_type === 'add_tag' || s.step_type === 'remove_tag') &&
+            (!s.step_config?.tag_id || String(s.step_config.tag_id).trim() === '')
+          ),
+      )
+
+      if (Array.isArray(existingData.steps) && mergedSteps.length !== existingData.steps.length) {
+        update.steps = mergedSteps
+      }
 
       const issues = [
         ...validateTriggerForActivation(mergedTriggerType, mergedTriggerConfig),
         ...validateStepsForActivation(mergedSteps),
       ]
       if (issues.length > 0) {
+        const detail = issues.map((i) => i.message).join(', ')
         return NextResponse.json(
           {
-            error: 'Cannot keep automation active with invalid configuration',
+            error: `Cannot activate automation: ${detail}`,
             issues,
           },
           { status: 400 },
@@ -223,9 +242,27 @@ export async function DELETE(
     const { id } = await params
     const accCtx = await getAccountContext(_request as any)
     const accountId = accCtx?.accountId
+    const user = accCtx?.user
 
-    if (!accCtx?.user || !accountId) {
+    if (!user || !accountId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const resolved = await resolveAutomation(id, accountId, user.uid)
+    if (!resolved) {
+      try {
+        const admin = supabaseAdmin()
+        const { data: sf } = await admin
+          .from('automations')
+          .select('id, account_id, user_id')
+          .eq('id', id)
+          .maybeSingle()
+        if (!sf || (sf.account_id !== accountId && sf.user_id !== user.uid)) {
+          return NextResponse.json({ error: 'Not found' }, { status: 404 })
+        }
+      } catch {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      }
     }
 
     const fDb = getAdminDb()

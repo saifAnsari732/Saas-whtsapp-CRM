@@ -49,10 +49,14 @@ export async function GET(request: Request) {
 
       // 2. Top-level collection: flows
       try {
-        const [top1, top2] = await Promise.all([
+        const queries = [
           fDb.collection('flows').where('account_id', '==', accountId).get(),
           fDb.collection('flows').where('accountId', '==', accountId).get(),
-        ])
+        ]
+        if (accCtx.user?.uid) {
+          queries.push(fDb.collection('flows').where('user_id', '==', accCtx.user.uid).get())
+        }
+        const topSnaps = await Promise.all(queries)
 
         const mergeDoc = (doc: any) => {
           if (!flowsMap.has(doc.id)) {
@@ -65,8 +69,7 @@ export async function GET(request: Request) {
           }
         }
 
-        top1.docs.forEach(mergeDoc)
-        top2.docs.forEach(mergeDoc)
+        topSnaps.forEach((snap) => snap.docs.forEach(mergeDoc))
       } catch (topErr) {
         console.warn('[flows GET] top fetch error:', topErr)
       }
@@ -181,7 +184,7 @@ export async function POST(request: Request) {
           id: 'start_1',
           node_key: 'start_1',
           node_type: 'start',
-          config: {},
+          config: { next_node_key: '' },
           position_x: 250,
           position_y: 50,
         },

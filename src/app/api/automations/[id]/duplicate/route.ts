@@ -35,7 +35,10 @@ export async function POST(
         } else {
           const topDoc = await fDb.collection('automations').doc(id).get()
           if (topDoc.exists) {
-            original = { id: topDoc.id, ...topDoc.data() }
+            const d = topDoc.data()
+            if (d?.account_id === accountId || d?.accountId === accountId || d?.user_id === user.uid) {
+              original = { id: topDoc.id, ...d }
+            }
           }
         }
       } catch {}
@@ -48,7 +51,9 @@ export async function POST(
           .select('*')
           .eq('id', id)
           .maybeSingle()
-        if (data) original = data
+        if (data && (data.account_id === accountId || data.user_id === user.uid)) {
+          original = data
+        }
       } catch {}
     }
 

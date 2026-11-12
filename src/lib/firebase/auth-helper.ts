@@ -67,25 +67,47 @@ export async function getFirebaseUser(req: any): Promise<FirebaseUser | null> {
       token = match ? decodeURIComponent(match[1]) : undefined;
     }
 
-    if (!token) return null;
-
-    // 1. Try verifyIdToken
-    try {
-      const decoded = await auth.verifyIdToken(token);
-      return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
-    } catch {}
-
-    // 2. Try verifySessionCookie
-    try {
-      const decoded = await auth.verifySessionCookie(token, false);
-      return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
-    } catch {}
-
-    // 3. Fallback: parse Firebase JWT if token signature/issuer is for this project
-    const parsed = parseFirebaseJwt(token);
-    if (parsed) {
-      return parsed;
+    if (!token) {
+      try {
+        const { cookies } = await import('next/headers');
+        const cookieStore = await cookies();
+        token = cookieStore.get('__session')?.value;
+      } catch {}
     }
+
+    if (token) {
+      // 1. Try verifyIdToken
+      try {
+        const decoded = await auth.verifyIdToken(token);
+        return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
+      } catch {}
+
+      // 2. Try verifySessionCookie
+      try {
+        const decoded = await auth.verifySessionCookie(token, false);
+        return { uid: decoded.uid, email: decoded.email, displayName: decoded.name };
+      } catch {}
+
+      // 3. Fallback: parse Firebase JWT if token signature/issuer is for this project
+      const parsed = parseFirebaseJwt(token);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    // 4. Fallback to Supabase Auth if pure Firebase auth token is not in header/cookie
+    try {
+      const { createClient } = await import('@/lib/supabase/server');
+      const supabase = await createClient();
+      const { data: { user: sbUser } } = await supabase.auth.getUser();
+      if (sbUser) {
+        return {
+          uid: sbUser.id,
+          email: sbUser.email || undefined,
+          displayName: sbUser.user_metadata?.full_name || sbUser.email || undefined,
+        };
+      }
+    } catch {}
 
     return null;
   } catch (err) {
@@ -98,20 +120,58 @@ export async function getFirebaseUser(req: any): Promise<FirebaseUser | null> {
  * Get user + their account context (accountId, role).
  * Replaces the Supabase profile lookup pattern.
  */
-export async function getAccountContext(req: NextRequest): Promise<AccountContext | null> {
+export async function getAccountContext(req?: NextRequest | Request | any): Promise<AccountContext | null> {
   const user = await getFirebaseUser(req);
   if (!user) return null;
 
-  const db = getAdminDb();
-  const profileDoc = await db.collection('users').doc(user.uid).get();
-  
-  let accountId = profileDoc.exists ? (profileDoc.data()?.accountId || profileDoc.data()?.account_id) : null;
-  let accountRole = profileDoc.exists ? (profileDoc.data()?.accountRole || profileDoc.data()?.account_role || 'owner') : 'owner';
+  let accountId: string | null = null;
+  let accountRole = 'owner';
+
+  try {
+    const db = getAdminDb();
+    if (db) {
+      const profileDoc = await db.collection('users').doc(user.uid).get();
+      if (profileDoc.exists) {
+        const data = profileDoc.data();
+        accountId = data?.accountId || data?.account_id || null;
+        accountRole = data?.accountRole || data?.account_role || 'owner';
+      }
+    }
+  } catch (dbErr) {
+    console.warn('[getAccountContext] Firestore profile lookup warning:', dbErr);
+  }
+
+  // Supabase profile fallback if not found in Firestore
+  if (!accountId) {
+    try {
+      const { createClient } = await import('@/lib/supabase/server');
+      const supabase = await createClient();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('account_id, role')
+        .eq('user_id', user.uid)
+        .maybeSingle();
+      if (profile?.account_id) {
+        accountId = profile.account_id;
+        accountRole = profile.role || 'owner';
+      }
+    } catch {}
+  }
 
   if (!accountId) {
     accountId = `acct-${user.uid}`;
-    await db.collection('users').doc(user.uid).set({ accountId, accountRole: 'owner', email: user.email }, { merge: true }).catch(() => {});
   }
+
+  // Best-effort ensure user document exists in Firestore
+  try {
+    const db = getAdminDb();
+    if (db) {
+      await db.collection('users').doc(user.uid).set(
+        { accountId, accountRole, email: user.email },
+        { merge: true },
+      ).catch(() => {});
+    }
+  } catch {}
 
   return {
     user,

@@ -3,7 +3,7 @@ import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin'
 import { getAccountContext } from '@/lib/firebase/auth-helper'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { getTemplate } from '@/lib/automations/templates'
-import { insertSteps, type BuilderStepInput } from '@/lib/automations/steps-tree'
+import { insertSteps, seedsToTree, type BuilderStepInput } from '@/lib/automations/steps-tree'
 import {
   validateStepsForActivation,
   validateTriggerForActivation,
@@ -15,8 +15,9 @@ export async function GET(request: Request) {
   try {
     const accCtx = await getAccountContext(request as any)
     const accountId = accCtx?.accountId
+    const user = accCtx?.user
 
-    if (!accCtx?.user || !accountId) {
+    if (!user || !accountId) {
       return NextResponse.json({ automations: [] }, { status: 401 })
     }
 
@@ -46,10 +47,14 @@ export async function GET(request: Request) {
 
       // 2. Top-level: automations
       try {
-        const [top1, top2] = await Promise.all([
+        const queries = [
           fDb.collection('automations').where('account_id', '==', accountId).get(),
           fDb.collection('automations').where('accountId', '==', accountId).get(),
-        ])
+        ]
+        if (user.uid) {
+          queries.push(fDb.collection('automations').where('user_id', '==', user.uid).get())
+        }
+        const topSnaps = await Promise.all(queries)
 
         const mergeDoc = (doc: any) => {
           if (!autoMap.has(doc.id)) {
@@ -62,8 +67,7 @@ export async function GET(request: Request) {
           }
         }
 
-        top1.docs.forEach(mergeDoc)
-        top2.docs.forEach(mergeDoc)
+        topSnaps.forEach((snap) => snap.docs.forEach(mergeDoc))
       } catch (topErr) {
         console.warn('[automations GET] top fetch warning:', topErr)
       }
@@ -133,8 +137,19 @@ export async function POST(request: Request) {
         effectiveDescription = effectiveDescription ?? t.description
         effectiveTriggerType = effectiveTriggerType ?? t.trigger_type
         effectiveTriggerConfig = effectiveTriggerConfig ?? t.trigger_config
-        effectiveSteps = t.steps as unknown as BuilderStepInput[]
+        effectiveSteps = seedsToTree(t.steps as unknown as BuilderStepInput[])
       }
+    }
+
+    // Prune unconfigured dummy tag steps
+    if (Array.isArray(effectiveSteps)) {
+      effectiveSteps = effectiveSteps.filter(
+        (s: any) =>
+          !(
+            (s.step_type === 'add_tag' || s.step_type === 'remove_tag') &&
+            (!s.step_config?.tag_id || String(s.step_config.tag_id).trim() === '')
+          ),
+      )
     }
 
     if (!effectiveName || !effectiveTriggerType) {

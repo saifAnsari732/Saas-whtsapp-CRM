@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
  * DELETE /api/flows/[id] — delete flow and its nodes.
  */
 
-async function resolveFlow(id: string, accountId: string) {
+async function resolveFlow(id: string, accountId: string, userId?: string) {
   const fDb = getAdminDb()
   if (fDb) {
     // 1. Direct in accounts/{accountId}/flows/{id}
@@ -34,7 +34,7 @@ async function resolveFlow(id: string, accountId: string) {
       const doc = await fDb.collection('flows').doc(id).get()
       if (doc.exists) {
         const d = doc.data()
-        if (d?.account_id === accountId || d?.accountId === accountId) {
+        if (d?.account_id === accountId || d?.accountId === accountId || (userId && d?.user_id === userId)) {
           return { source: 'firestore-top' as const, doc }
         }
       }
@@ -59,7 +59,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const resolved = await resolveFlow(id, accountId)
+    const resolved = await resolveFlow(id, accountId, accCtx.user.uid)
 
     if (resolved) {
       const flowData = resolved.doc.data() || {}
@@ -159,6 +159,19 @@ export async function PUT(
       return NextResponse.json({ error: 'name cannot be empty' }, { status: 400 })
     }
 
+    const existing = await resolveFlow(id, accountId, accCtx.user.uid)
+    if (!existing) {
+      try {
+        const admin = supabaseAdmin()
+        const { data: sf } = await admin.from('flows').select('id, account_id, user_id').eq('id', id).maybeSingle()
+        if (!sf || (sf.account_id !== accountId && sf.user_id !== accCtx.user.uid)) {
+          return NextResponse.json({ error: 'Not found' }, { status: 404 })
+        }
+      } catch {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      }
+    }
+
     const nowIso = new Date().toISOString()
     const flowPatch: Record<string, unknown> = {
       updated_at: nowIso,
@@ -240,7 +253,7 @@ export async function PUT(
     }
 
     // Return updated state
-    const resolved = await resolveFlow(id, accountId)
+    const resolved = await resolveFlow(id, accountId, accCtx.user.uid)
     const flowData = resolved?.doc?.data() || cleanPatch
     return NextResponse.json({
       flow: { id, ...flowData },
@@ -266,6 +279,19 @@ export async function DELETE(
 
     if (!accCtx?.user || !accountId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const existing = await resolveFlow(id, accountId, accCtx.user.uid)
+    if (!existing) {
+      try {
+        const admin = supabaseAdmin()
+        const { data: sf } = await admin.from('flows').select('id, account_id, user_id').eq('id', id).maybeSingle()
+        if (!sf || (sf.account_id !== accountId && sf.user_id !== accCtx.user.uid)) {
+          return NextResponse.json({ error: 'Not found' }, { status: 404 })
+        }
+      } catch {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      }
     }
 
     const fDb = getAdminDb()

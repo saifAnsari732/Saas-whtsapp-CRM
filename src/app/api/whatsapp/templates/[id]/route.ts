@@ -103,11 +103,17 @@ async function resolveExistingTemplate(
 
       // 4. Query accounts/{accountId}/templates by meta_template_id or name
       try {
-        const [byMeta, byName] = await Promise.all([
+        const queries = [
           db.collection('accounts').doc(accountId).collection('templates').where('meta_template_id', '==', term).limit(1).get(),
           db.collection('accounts').doc(accountId).collection('templates').where('name', '==', term).limit(1).get(),
-        ])
-        const match = byMeta.docs[0] || byName.docs[0]
+        ]
+        if (/^\d+$/.test(term)) {
+          queries.push(
+            db.collection('accounts').doc(accountId).collection('templates').where('meta_template_id', '==', Number(term)).limit(1).get(),
+          )
+        }
+        const results = await Promise.all(queries)
+        const match = results.find((r) => !r.empty)?.docs[0]
         if (match) {
           return { id: match.id, docId: match.id, ...match.data() } as ResolvedTemplate
         }
@@ -117,11 +123,17 @@ async function resolveExistingTemplate(
 
       // 5. Query message_templates by meta_template_id or name
       try {
-        const [byMeta, byName] = await Promise.all([
+        const queries = [
           db.collection('message_templates').where('meta_template_id', '==', term).limit(1).get(),
           db.collection('message_templates').where('name', '==', term).limit(1).get(),
-        ])
-        const match = byMeta.docs[0] || byName.docs[0]
+        ]
+        if (/^\d+$/.test(term)) {
+          queries.push(
+            db.collection('message_templates').where('meta_template_id', '==', Number(term)).limit(1).get(),
+          )
+        }
+        const results = await Promise.all(queries)
+        const match = results.find((r) => !r.empty)?.docs[0]
         if (match) {
           return { id: match.id, docId: match.id, ...match.data() } as ResolvedTemplate
         }
@@ -130,7 +142,7 @@ async function resolveExistingTemplate(
       }
     }
 
-    // 6. Look up by collectionGroup for numeric Meta IDs
+    // 6. Look up by collectionGroup for numeric Meta IDs (with index error safety)
     if (/^\d{10,25}$/.test(id)) {
       try {
         const groupSnap = await db
@@ -322,7 +334,14 @@ export async function PATCH(
           const accessToken = config.decrypted_access_token
           try {
             await ensureImageHeaderHandle(payload, accessToken)
-            const metaPayload = buildMetaTemplatePayload(payload)
+          } catch (e) {
+            return NextResponse.json(
+              { error: e instanceof Error ? e.message : 'Header image upload failed.' },
+              { status: 400 },
+            )
+          }
+          const metaPayload = buildMetaTemplatePayload(payload)
+          try {
             const created = await submitMessageTemplate({
               wabaId: config.waba_id,
               accessToken,
@@ -330,7 +349,31 @@ export async function PATCH(
             })
             effectiveMetaTemplateId = created.id
           } catch (createErr: any) {
-            console.warn('[whatsapp/templates/[id] PATCH] Initial submit on Meta warning:', createErr)
+            const message = createErr instanceof Error ? createErr.message : 'Meta submission failed.'
+            const isRateLimit = message.toLowerCase().includes('rate limit') || message.includes('133016')
+            const db = getAdminDb()
+            if (db) {
+              const docId = existing.docId || existing.id || targetId
+              await db
+                .collection('message_templates')
+                .doc(docId)
+                .set(
+                  cleanForFirestore({
+                    submission_error: message,
+                    last_submitted_at: new Date().toISOString(),
+                  }),
+                  { merge: true },
+                )
+                .catch(() => {})
+            }
+            return NextResponse.json(
+              {
+                error: isRateLimit
+                  ? 'Rate limit exceeded: Meta limits template creations to 100 per hour. Please wait and try again.'
+                  : message,
+              },
+              { status: isRateLimit ? 429 : 502 },
+            )
           }
         } else {
           // If WhatsApp isn't fully configured, treat as local template
