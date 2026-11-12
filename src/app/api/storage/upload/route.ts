@@ -38,13 +38,16 @@ export async function POST(request: Request) {
     const fileBuffer = Buffer.from(await file.arrayBuffer());
     let publicUrl = '';
 
-    // Upload to Firebase Storage with permanent download token
+    const targetBucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'whatsapp-saas-7ab44.firebasestorage.app';
+    const downloadToken = crypto.randomUUID();
+    const storagePath = `chat-media/${path}`;
+
+    // 1. Try Firebase Admin Storage SDK
+    let uploadedSuccessfully = false;
     try {
       const fbStorage = getAdminStorage();
-      const targetBucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'whatsapp-saas-7ab44.firebasestorage.app';
       const fbBucket = fbStorage.bucket(targetBucketName);
-      const fileRef = fbBucket.file(`chat-media/${path}`);
-      const downloadToken = crypto.randomUUID();
+      const fileRef = fbBucket.file(storagePath);
 
       await fileRef.save(fileBuffer, {
         metadata: {
@@ -57,17 +60,56 @@ export async function POST(request: Request) {
         public: true,
       });
 
-      // Best effort public read for legacy public access if allowed
       await fileRef.makePublic().catch(() => {});
-
       const encodedPath = encodeURIComponent(fileRef.name);
       publicUrl = `https://firebasestorage.googleapis.com/v0/b/${fbBucket.name}/o/${encodedPath}?alt=media&token=${downloadToken}`;
-      console.log('[POST /api/storage/upload] Uploaded to Firebase Storage:', publicUrl);
+      uploadedSuccessfully = true;
+      console.log('[POST /api/storage/upload] Uploaded via Firebase Admin SDK:', publicUrl);
     } catch (fbErr: any) {
-      console.error('[POST /api/storage/upload] Firebase Storage upload error:', fbErr);
-      return NextResponse.json({ 
-        error: `Firebase Storage upload failed: ${fbErr?.message || 'Unknown error'}` 
-      }, { status: 500 });
+      console.warn('[POST /api/storage/upload] Admin SDK upload notice, attempting REST API fallback:', fbErr?.message);
+
+      // 2. Resilient REST API fallback using Google Service Account Access Token
+      try {
+        const { getApps } = await import('firebase-admin/app');
+        const app = getApps()[0];
+        let accessToken = '';
+
+        if (app?.options?.credential && typeof (app.options.credential as any).getAccessToken === 'function') {
+          const tokenRes = await (app.options.credential as any).getAccessToken();
+          accessToken = tokenRes?.access_token || '';
+        }
+
+        const encodedPath = encodeURIComponent(storagePath);
+        const restUploadUrl = `https://firebasestorage.googleapis.com/v0/b/${targetBucketName}/o?uploadType=media&name=${encodedPath}`;
+
+        const headers: Record<string, string> = {
+          'Content-Type': file.type || 'application/octet-stream',
+          'x-goog-meta-firebasestoragedownloadtokens': downloadToken,
+        };
+        if (accessToken) {
+          headers['Authorization'] = `Bearer ${accessToken}`;
+        }
+
+        const uploadRes = await fetch(restUploadUrl, {
+          method: 'POST',
+          headers,
+          body: fileBuffer,
+        });
+
+        if (uploadRes.ok) {
+          publicUrl = `https://firebasestorage.googleapis.com/v0/b/${targetBucketName}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+          uploadedSuccessfully = true;
+          console.log('[POST /api/storage/upload] Uploaded via Firebase REST API fallback:', publicUrl);
+        } else {
+          const errText = await uploadRes.text();
+          throw new Error(`REST API responded with ${uploadRes.status}: ${errText}`);
+        }
+      } catch (restErr: any) {
+        console.error('[POST /api/storage/upload] Both Admin SDK and REST fallback failed:', restErr);
+        return NextResponse.json({ 
+          error: `Storage upload failed: ${fbErr?.message || restErr?.message || 'Unknown error'}` 
+        }, { status: 500 });
+      }
     }
 
     // Store permanent header_media_url for template ID if provided
