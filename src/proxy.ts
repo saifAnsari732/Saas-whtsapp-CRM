@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
 
 const PUBLIC_API_PATHS = [
   '/api/whatsapp/webhook',
+  '/api/whatsapp/auth',
   '/api/auth/session',
   '/api/invitations',
   '/api/whatsapp/baileys',
