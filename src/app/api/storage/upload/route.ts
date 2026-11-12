@@ -86,30 +86,45 @@ export async function POST(request: Request) {
         }
 
         const encodedPath = encodeURIComponent(storagePath);
-        const restUploadUrl = `https://firebasestorage.googleapis.com/v0/b/${targetBucketName}/o?uploadType=media&name=${encodedPath}`;
+        const restUploadUrl = `https://storage.googleapis.com/upload/storage/v1/b/${targetBucketName}/o?uploadType=media&name=${encodedPath}`;
 
-        const headers: Record<string, string> = {
+        const uploadHeaders: Record<string, string> = {
           'Content-Type': file.type || 'application/octet-stream',
-          'x-goog-meta-firebasestoragedownloadtokens': downloadToken,
         };
         if (accessToken) {
-          headers['Authorization'] = `Bearer ${accessToken}`;
+          uploadHeaders['Authorization'] = `Bearer ${accessToken}`;
         }
 
         const uploadRes = await fetch(restUploadUrl, {
           method: 'POST',
-          headers,
+          headers: uploadHeaders,
           body: fileBuffer,
         });
 
-        if (uploadRes.ok) {
-          publicUrl = `https://firebasestorage.googleapis.com/v0/b/${targetBucketName}/o/${encodedPath}?alt=media&token=${downloadToken}`;
-          uploadedSuccessfully = true;
-          console.log('[POST /api/storage/upload] Uploaded via Firebase REST API fallback:', publicUrl);
-        } else {
+        if (!uploadRes.ok) {
           const errText = await uploadRes.text();
-          throw new Error(`REST API responded with ${uploadRes.status}: ${errText}`);
+          throw new Error(`GCS REST upload responded with ${uploadRes.status}: ${errText}`);
         }
+
+        // Set permanent Firebase download token metadata via GCS JSON API
+        const patchUrl = `https://storage.googleapis.com/storage/v1/b/${targetBucketName}/o/${encodedPath}`;
+        await fetch(patchUrl, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({
+            metadata: {
+              firebaseStorageDownloadTokens: downloadToken,
+            },
+            cacheControl: 'public, max-age=31536000',
+          }),
+        }).catch((pErr) => console.warn('[POST /api/storage/upload] GCS metadata patch warning:', pErr));
+
+        publicUrl = `https://firebasestorage.googleapis.com/v0/b/${targetBucketName}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+        uploadedSuccessfully = true;
+        console.log('[POST /api/storage/upload] Uploaded via GCS REST API fallback:', publicUrl);
       } catch (restErr: any) {
         console.error('[POST /api/storage/upload] Both Admin SDK and REST fallback failed:', restErr);
         return NextResponse.json({ 
