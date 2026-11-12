@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { Suspense, useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -54,6 +54,20 @@ import {
 } from 'lucide-react';
 
 export default function NewBroadcastPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[50vh] items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <NewBroadcastPageInner />
+    </Suspense>
+  );
+}
+
+function NewBroadcastPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { accountId } = useAuth();

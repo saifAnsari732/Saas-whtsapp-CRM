@@ -268,6 +268,21 @@ export async function POST(req: NextRequest) {
       const firestore = getAdminDb();
       await firestore.collection('whatsapp_configs').doc(accountId).set(baseRow, { merge: true });
       await firestore.doc(`accounts/${accountId}/whatsapp_config/config`).set(baseRow, { merge: true });
+
+      if (user?.uid && user.uid !== accountId) {
+        await firestore.collection('whatsapp_configs').doc(user.uid).set(baseRow, { merge: true });
+        await firestore.doc(`accounts/${user.uid}/whatsapp_config/config`).set(baseRow, { merge: true });
+      }
+
+      if (user?.uid) {
+        const userDoc = await firestore.collection('users').doc(user.uid).get();
+        const profileAccountId = userDoc.exists ? (userDoc.data()?.accountId || userDoc.data()?.account_id) : null;
+        if (profileAccountId && profileAccountId !== accountId) {
+          const profileRow = { ...baseRow, account_id: profileAccountId };
+          await firestore.collection('whatsapp_configs').doc(profileAccountId).set(profileRow, { merge: true });
+          await firestore.doc(`accounts/${profileAccountId}/whatsapp_config/config`).set(profileRow, { merge: true });
+        }
+      }
       console.log(`[exchange] Saved WhatsApp config to Firestore for account ${accountId}`);
     } catch (fsErr) {
       console.error('[exchange] Firestore save error:', fsErr);

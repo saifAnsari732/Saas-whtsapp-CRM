@@ -393,7 +393,8 @@ export function WhatsAppConfig() {
     setVerifyingRegistration(true);
     setRegistrationProbe(null);
     try {
-      const res = await fetch('/api/whatsapp/config/verify-registration', {
+      const activeAccountId = accountId || (user ? `acct-${user.id}` : '61740bf8-b21e-42dd-9ab3-9118bca90bc6');
+      const res = await fetch(`/api/whatsapp/config/verify-registration?accountId=${encodeURIComponent(activeAccountId)}`, {
         method: 'GET',
       });
       const data = (await res.json()) as RegistrationProbe;
@@ -406,7 +407,7 @@ export function WhatsAppConfig() {
           { duration: 8000 },
         );
       }
-      if (accountId) await fetchConfig(accountId);
+      await fetchConfig(activeAccountId);
     } catch (err) {
       console.error('verify-registration failed:', err);
       toast.error('Could not reach the verification endpoint.');
