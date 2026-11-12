@@ -6,6 +6,7 @@ import {
   isValidE164,
   validatePhone,
   phoneVariants,
+  sanitizeTemplatePhoneNumber,
 } from './phone-utils';
 
 describe('sanitizePhoneForMeta', () => {
@@ -93,5 +94,28 @@ describe('phoneVariants', () => {
     const variants = phoneVariants('919511450914');
     expect(variants[0]).toBe('919511450914');
     expect(variants.length).toBeGreaterThan(1);
+  });
+});
+
+describe('sanitizeTemplatePhoneNumber', () => {
+  it('strips +91 or 91 prefix from Indian toll-free numbers (1800 / 1860)', () => {
+    expect(sanitizeTemplatePhoneNumber('+9118008890860')).toBe('18008890860');
+    expect(sanitizeTemplatePhoneNumber('9118008890860')).toBe('18008890860');
+    expect(sanitizeTemplatePhoneNumber('+91 1800 8890 860')).toBe('18008890860');
+    expect(sanitizeTemplatePhoneNumber('+91-1800-889-0860')).toBe('18008890860');
+    expect(sanitizeTemplatePhoneNumber('018008890860')).toBe('18008890860');
+    expect(sanitizeTemplatePhoneNumber('18008890860')).toBe('18008890860');
+    expect(sanitizeTemplatePhoneNumber('1800 8890 860')).toBe('18008890860');
+
+    // 1860 series
+    expect(sanitizeTemplatePhoneNumber('+9118601234567')).toBe('18601234567');
+    expect(sanitizeTemplatePhoneNumber('9118601234567')).toBe('18601234567');
+  });
+
+  it('preserves and formats international code for normal mobile numbers', () => {
+    expect(sanitizeTemplatePhoneNumber('9511450914')).toBe('+919511450914');
+    expect(sanitizeTemplatePhoneNumber('+919511450914')).toBe('+919511450914');
+    expect(sanitizeTemplatePhoneNumber('+91 95114 50914')).toBe('+919511450914');
+    expect(sanitizeTemplatePhoneNumber('+1 (555) 802-3973')).toBe('+15558023973');
   });
 });

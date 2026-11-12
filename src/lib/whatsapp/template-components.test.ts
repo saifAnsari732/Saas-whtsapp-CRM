@@ -108,6 +108,19 @@ describe('buildMetaTemplatePayload', () => {
     ]);
   });
 
+  it('strips +91 from toll-free numbers in PHONE_NUMBER buttons', () => {
+    const payload = buildMetaTemplatePayload({
+      ...base,
+      buttons: [
+        { type: 'PHONE_NUMBER', text: 'Call Toll Free', phone_number: '+9118008890860' },
+      ],
+    });
+    const buttons = payload.components.find((c) => c.type === 'BUTTONS');
+    expect(buttons?.buttons).toEqual([
+      { type: 'PHONE_NUMBER', text: 'Call Toll Free', phone_number: '18008890860' },
+    ]);
+  });
+
   it('orders components HEADER → BODY → FOOTER → BUTTONS', () => {
     const payload = buildMetaTemplatePayload({
       ...base,

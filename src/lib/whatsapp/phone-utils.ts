@@ -86,6 +86,59 @@ export function normalizePhone(phone: string): string {
 }
 
 /**
+ * Sanitize phone number for WhatsApp message template PHONE_NUMBER buttons.
+ *
+ * CRITICAL RULE:
+ * Indian toll-free numbers (1800xxxxxxx, 1860xxxxxxx) must NEVER have a "+91"
+ * or "91" country code prepended. When dialed with "+91", Indian telecom carriers
+ * (Jio, Airtel, Vi, BSNL) reject the call as invalid / non-existent.
+ * Toll-free numbers must be clean national digits (e.g. "18008890860" or "18601234567").
+ *
+ * For regular landlines and mobile numbers, standard international E.164 with "+"
+ * is preserved or prepended (e.g. "+919511450914", "+15558023973").
+ */
+export function sanitizeTemplatePhoneNumber(phone: string): string {
+  if (!phone) return '';
+  const cleaned = cleanRawPhone(phone).replace(/[\s\-\(\)]/g, '').trim();
+  const digits = cleaned.replace(/\D/g, '');
+
+  if (!digits) return '';
+
+  // 1. Indian Toll-free with accidental 91 prefix: 911800... or 911860...
+  if (/^91(1800|1860)\d{6,8}$/.test(digits)) {
+    return digits.slice(2);
+  }
+
+  // 2. Indian Toll-free with leading trunk 0: 01800... or 01860...
+  if (/^0(1800|1860)\d{6,8}$/.test(digits)) {
+    return digits.slice(1);
+  }
+
+  // 3. Indian Toll-free clean: 1800... or 1860...
+  if (/^(1800|1860)\d{6,8}$/.test(digits)) {
+    return digits;
+  }
+
+  // 4. Regular number with existing '+'
+  if (cleaned.startsWith('+')) {
+    return `+${digits}`;
+  }
+
+  // 5. Domestic 10-digit Indian mobile (starts with 6-9)
+  if (/^[6-9]\d{9}$/.test(digits)) {
+    return `+91${digits}`;
+  }
+
+  // 6. 12-digit Indian number starting with 91
+  if (/^91[6-9]\d{9}$/.test(digits)) {
+    return `+${digits}`;
+  }
+
+  // 7. General international number
+  return `+${digits}`;
+}
+
+/**
  * Compare two phone numbers accounting for prefix and format differences.
  * Returns true if both normalize to the exact same digits,
  * or if their last 10 digits match (for domestic mobile matching).

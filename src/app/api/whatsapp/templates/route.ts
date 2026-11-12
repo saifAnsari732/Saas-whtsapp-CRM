@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin';
 import { getAccountContext } from '@/lib/firebase/auth-helper';
+import { sanitizeTemplatePhoneNumber } from '@/lib/whatsapp/phone-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -282,7 +283,13 @@ export async function POST(request: Request) {
       header_media_url: resolvedHeaderMedia,
       body_text,
       footer_text: footer_text || null,
-      buttons: Array.isArray(buttons) ? buttons : [],
+      buttons: Array.isArray(buttons)
+        ? buttons.map((b: any) =>
+            b.type === 'PHONE_NUMBER' && b.phone_number
+              ? { ...b, phone_number: sanitizeTemplatePhoneNumber(b.phone_number) }
+              : b,
+          )
+        : [],
       status: 'Approved',
       account_id: accountId,
       accountId: accountId,
@@ -337,7 +344,15 @@ export async function PUT(request: Request) {
     }
     if (body_text) updatePayload.body_text = body_text;
     if (footer_text !== undefined) updatePayload.footer_text = footer_text || null;
-    if (buttons !== undefined) updatePayload.buttons = Array.isArray(buttons) ? buttons : [];
+    if (buttons !== undefined) {
+      updatePayload.buttons = Array.isArray(buttons)
+        ? buttons.map((b: any) =>
+            b.type === 'PHONE_NUMBER' && b.phone_number
+              ? { ...b, phone_number: sanitizeTemplatePhoneNumber(b.phone_number) }
+              : b,
+          )
+        : [];
+    }
 
     const cleanedUpdate = cleanForFirestore(updatePayload);
     const db = getAdminDb();

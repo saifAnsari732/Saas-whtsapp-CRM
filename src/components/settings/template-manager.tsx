@@ -50,6 +50,7 @@ import type {
   TemplateSampleValues,
 } from '@/types';
 import { templateStatusConfig } from '@/lib/template-status';
+import { sanitizeTemplatePhoneNumber } from '@/lib/whatsapp/phone-utils';
 import {
   extractVariableIndices,
   TEMPLATE_LIMITS,
@@ -245,7 +246,14 @@ export function TemplateManager() {
           : undefined,
       body_text: form.body_text.trim(),
       footer_text: form.template_type === 'CAROUSEL' ? undefined : (form.footer_text.trim() || undefined),
-      buttons: form.buttons.length > 0 ? form.buttons : undefined,
+      buttons:
+        form.buttons.length > 0
+          ? form.buttons.map((b) =>
+              b.type === 'PHONE_NUMBER' && b.phone_number
+                ? { ...b, phone_number: sanitizeTemplatePhoneNumber(b.phone_number) }
+                : b,
+            )
+          : undefined,
       cards: form.template_type === 'CAROUSEL' && form.cards.length > 0 ? form.cards.map(c => ({
         header_format: c.header_format,
         header_media_url: c.header_media_url.trim() || undefined,
@@ -270,7 +278,11 @@ export function TemplateManager() {
       body_text: template.body_text,
       body_samples: template.sample_values?.body ?? [],
       footer_text: template.footer_text ?? '',
-      buttons: template.buttons ?? [],
+      buttons: (template.buttons ?? []).map((b) =>
+        b.type === 'PHONE_NUMBER' && b.phone_number
+          ? { ...b, phone_number: sanitizeTemplatePhoneNumber(b.phone_number) }
+          : b,
+      ),
       cards: (template.cards as { header_format: 'IMAGE' | 'VIDEO'; header_media_url: string; body_text: string }[]) ?? [],
       ui_template_type: template.header_type === 'CAROUSEL' ? 'Text + Carousel' : (template.header_type === 'image' ? 'Text + Image' : template.header_type === 'video' ? 'Text + Video' : template.header_type === 'document' ? 'Text + Document' : 'Text Template'),
     });
@@ -1249,14 +1261,30 @@ export function TemplateManager() {
                         </div>
                       )}
                       {btn.type === 'PHONE_NUMBER' && (
-                        <Input
-                          placeholder={t('phonePlaceholder')}
-                          value={btn.phone_number}
-                          onChange={(e) =>
-                            updateButton(i, { phone_number: e.target.value })
-                          }
-                          className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-8 text-xs"
-                        />
+                        <div className="space-y-1">
+                          <Input
+                            placeholder={t('phonePlaceholder') || '+91XXXXXXXXXX or 1800XXXXXXX'}
+                            value={btn.phone_number}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const digits = val.replace(/\D/g, '');
+                              if (/^91(1800|1860)\d*$/.test(digits)) {
+                                updateButton(i, { phone_number: digits.slice(2) });
+                              } else {
+                                updateButton(i, { phone_number: val });
+                              }
+                            }}
+                            onBlur={(e) => {
+                              updateButton(i, {
+                                phone_number: sanitizeTemplatePhoneNumber(e.target.value),
+                              });
+                            }}
+                            className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-8 text-xs font-mono"
+                          />
+                          <p className="text-[10px] text-muted-foreground">
+                            Toll-Free (1800 / 1860): no +91 needed (dialed as 1800xxxxxxx). Mobile: +91xxxxxxxxxx.
+                          </p>
+                        </div>
                       )}
                       {btn.type === 'COPY_CODE' && (
                         <Input

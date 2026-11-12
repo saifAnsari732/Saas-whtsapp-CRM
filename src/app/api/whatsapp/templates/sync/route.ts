@@ -5,6 +5,7 @@ import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
 import { getAdminDb } from '@/lib/firebase/admin'
 import { getAccountContext } from '@/lib/firebase/auth-helper'
 import type { TemplateButton, TemplateSampleValues } from '@/types'
+import { sanitizeTemplatePhoneNumber } from '@/lib/whatsapp/phone-utils'
 
 /**
  * Sync message templates from Meta → local message_templates table.
@@ -94,7 +95,7 @@ function parseButtons(metaButtons: MetaButton[] | undefined): TemplateButton[] {
         out.push({
           type: 'PHONE_NUMBER',
           text: b.text,
-          phone_number: b.phone_number ?? '',
+          phone_number: sanitizeTemplatePhoneNumber(b.phone_number ?? ''),
         })
         break
       case 'COPY_CODE':
@@ -322,7 +323,10 @@ function toValidUUID(str: string): string {
       // 1. Dual-write to Firestore
       try {
         const docId = `${accountId}_${t.name}_${t.language}`.replace(/[^a-zA-Z0-9_-]/g, '_')
-        await db.collection('message_templates').doc(docId).set(row, { merge: true })
+        await Promise.allSettled([
+          db.collection('message_templates').doc(docId).set({ id: docId, ...row }, { merge: true }),
+          db.collection('accounts').doc(accountId).collection('templates').doc(docId).set({ id: docId, ...row }, { merge: true }),
+        ])
       } catch (fsErr) {
         console.warn('Firestore template sync write warning:', fsErr)
       }

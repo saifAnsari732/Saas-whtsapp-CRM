@@ -11,6 +11,7 @@
  */
 
 import type { TemplatePayload } from './template-validators';
+import { sanitizeTemplatePhoneNumber } from './phone-utils';
 import type { TemplateButton } from '@/types';
 
 export interface MetaComponent {
@@ -105,7 +106,11 @@ function buildButtonPayload(b: TemplateButton): MetaButtonPayload {
       return payload;
     }
     case 'PHONE_NUMBER':
-      return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone_number };
+      return {
+        type: 'PHONE_NUMBER',
+        text: b.text,
+        phone_number: sanitizeTemplatePhoneNumber(b.phone_number),
+      };
     case 'COPY_CODE':
       return { type: 'COPY_CODE', text: b.text, example: [b.example] };
   }

@@ -3,7 +3,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { submitMessageTemplate } from '@/lib/whatsapp/meta-api'
+import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin'
 import { getAccountContext } from '@/lib/firebase/auth-helper'
+import { getWhatsAppConfigForAccount } from '@/lib/whatsapp/get-config'
 import {
   validateTemplatePayload,
   type TemplatePayload,
@@ -11,11 +13,10 @@ import {
 import { buildMetaTemplatePayload } from '@/lib/whatsapp/template-components'
 import { ensureImageHeaderHandle } from '@/lib/whatsapp/template-header-handle'
 import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
+import { sanitizeTemplatePhoneNumber } from '@/lib/whatsapp/phone-utils'
 
 /**
- * Shared upsert payload builder — both the Meta-failure path and the
- * Meta-success path write nearly identical rows; dropping the shared
- * fields here means adding a column later only touches one spot.
+ * Shared upsert payload builder for Supabase.
  */
 function buildUpsertRow(
   accountId: string,
@@ -28,13 +29,7 @@ function buildUpsertRow(
   },
 ) {
   return {
-    // Account tenancy — required NOT NULL on message_templates as
-    // of migration 017. Without this an INSERT throws on the
-    // not-null constraint.
     account_id: accountId,
-    // Original author — kept as audit only. The unique index is
-    // still on (user_id, name, language) — see the upsert helper
-    // for the cross-teammate dedup follow-up.
     user_id: userId,
     name: payload.name,
     category: payload.category,
@@ -50,9 +45,7 @@ function buildUpsertRow(
     status: extras.status,
     meta_template_id: extras.metaTemplateId,
     submission_error: extras.submissionError,
-    // Clear stale rejection_reason whenever we re-submit; the
-    // webhook will set it again if Meta still rejects.
-    rejection_reason: extras.submissionError ? null : null,
+    rejection_reason: null,
     last_submitted_at: new Date().toISOString(),
   }
 }
@@ -61,31 +54,19 @@ async function upsertTemplateRow(
   supabase: SupabaseClient,
   row: ReturnType<typeof buildUpsertRow>,
 ) {
-  // TODO(account-sharing): conflict target is still scoped to
-  // user_id. Once a follow-up migration drops the legacy unique
-  // index on (user_id, name, language) and adds (account_id,
-  // name, language), switch `onConflict` here so two teammates
-  // can't shadow each other's same-named template.
-  return supabase
-    .from('message_templates')
-    .upsert(row, { onConflict: 'user_id,name,language' })
-    .select()
-    .single()
+  try {
+    return await supabase
+      .from('message_templates')
+      .upsert(row, { onConflict: 'user_id,name,language' })
+      .select()
+      .single()
+  } catch (err) {
+    return { data: null, error: err as any }
+  }
 }
 
 /**
  * Submit a template to Meta for approval AND persist it locally.
- *
- * Auth → fetch whatsapp_config → validate → (DRY_RUN short-circuit) →
- * POST to Meta → upsert local row by (user_id, name, language) with
- * status, meta_template_id, sample_values, last_submitted_at.
- *
- * When WHATSAPP_TEMPLATES_DRY_RUN=true, we skip the network call and
- * insert a row with a synthetic `dry-run-<uuid>` meta_template_id so
- * CI / local dev can exercise the full UI without a real Meta App.
- *
- * On the Meta side this is a one-way trip — a row can only be
- * submitted; editing or deleting requires hsm_id and lives in PR 4.
  */
 export async function POST(request: Request) {
   try {
@@ -128,6 +109,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
     }
 
+    // Sanitize any toll-free or regular phone numbers in buttons
+    if (payload.buttons && Array.isArray(payload.buttons)) {
+      payload.buttons = payload.buttons.map((b) => {
+        if (b.type === 'PHONE_NUMBER' && b.phone_number) {
+          return {
+            ...b,
+            phone_number: sanitizeTemplatePhoneNumber(b.phone_number),
+          }
+        }
+        return b
+      })
+    }
+
     if (payload.category === 'Authentication') {
       return NextResponse.json(
         {
@@ -158,68 +152,117 @@ export async function POST(request: Request) {
       metaTemplateId = `dry-run-${crypto.randomUUID()}`
       metaStatus = 'PENDING'
     } else {
-      const { data: config, error: configError } = await supabase
-        .from('whatsapp_config')
-        .select('*')
-        .eq('account_id', accountId)
-        .single()
-        
-      if (configError || !config || !config.waba_id) {
-        // Bypass Meta API for users using Native Baileys Connection
-        // Save template locally as an approved snippet
+      let config = await getWhatsAppConfigForAccount(accountId)
+      if (!config) {
+        try {
+          const { data: sbConfig } = await supabase
+            .from('whatsapp_config')
+            .select('*')
+            .eq('account_id', accountId)
+            .maybeSingle()
+          if (sbConfig) {
+            config = {
+              account_id: accountId,
+              phone_number_id: sbConfig.phone_number_id,
+              waba_id: sbConfig.waba_id,
+              access_token: sbConfig.access_token,
+              decrypted_access_token: decrypt(sbConfig.access_token),
+              verify_token: sbConfig.verify_token,
+              status: sbConfig.status || 'connected',
+            }
+          }
+        } catch {}
+      }
+
+      if (!config || !config.waba_id || !config.decrypted_access_token) {
+        // Fallback for native connection without Cloud API credentials
         metaTemplateId = `native-${crypto.randomUUID()}`
         metaStatus = 'APPROVED'
       } else {
-        const accessToken = decrypt(config.access_token)
+        const accessToken = config.decrypted_access_token
 
-      // Image headers need a Resumable-Upload handle (Meta rejects a
-      // plain URL at creation). Derive it from header_media_url before
-      // building the payload. Surfaces a 400 with an actionable message
-      // (missing META_APP_ID, unreachable URL, wrong type/size).
-      try {
-        await ensureImageHeaderHandle(payload, accessToken)
-      } catch (e) {
-        return NextResponse.json(
-          { error: e instanceof Error ? e.message : 'Header image upload failed.' },
-          { status: 400 },
-        )
-      }
+        // Image headers need a Resumable-Upload handle
+        try {
+          await ensureImageHeaderHandle(payload, accessToken)
+        } catch (e) {
+          return NextResponse.json(
+            { error: e instanceof Error ? e.message : 'Header image upload failed.' },
+            { status: 400 },
+          )
+        }
 
-      const metaPayload = buildMetaTemplatePayload(payload)
-      try {
-        const meta = await submitMessageTemplate({
-          wabaId: config.waba_id,
-          accessToken,
-          payload: metaPayload,
-        })
-        metaTemplateId = meta.id
-        metaStatus = meta.status
-      } catch (e) {
-        const message = e instanceof Error ? e.message : 'Meta submit failed.'
-        // Persist the failure so the user can retry; row stays DRAFT
-        // until they fix and re-submit.
-        await upsertTemplateRow(
-          supabase,
-          buildUpsertRow(accountId, user.uid, payload, {
-            status: 'DRAFT',
-            metaTemplateId: null,
-            submissionError: message,
-          }),
-        )
-        const isRateLimit = /\b429\b/.test(message)
-        return NextResponse.json(
-          {
-            error: isRateLimit
-              ? 'Meta rate limit hit (100 template creates per hour). Try again later.'
-              : message,
-          },
-          { status: isRateLimit ? 429 : 502 },
-        )
+        const metaPayload = buildMetaTemplatePayload(payload)
+        try {
+          const meta = await submitMessageTemplate({
+            wabaId: config.waba_id,
+            accessToken,
+            payload: metaPayload,
+          })
+          metaTemplateId = meta.id
+          metaStatus = meta.status
+        } catch (e) {
+          const message = e instanceof Error ? e.message : 'Meta submit failed.'
+          // Persist the failure as DRAFT in Supabase
+          await upsertTemplateRow(
+            supabase,
+            buildUpsertRow(accountId, user.uid, payload, {
+              status: 'DRAFT',
+              metaTemplateId: null,
+              submissionError: message,
+            }),
+          )
+          const isRateLimit = /\b429\b/.test(message)
+          return NextResponse.json(
+            {
+              error: isRateLimit
+                ? 'Meta rate limit hit (100 template creates per hour). Try again later.'
+                : message,
+            },
+            { status: isRateLimit ? 429 : 502 },
+          )
+        }
       }
     }
-  }
 
-    const { data: row, error: upsertErr } = await upsertTemplateRow(
+    // Save to Firestore
+    const cleanName = payload.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+    const docId = `${accountId}_${cleanName}_${payload.language || 'en_US'}`.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const nowIso = new Date().toISOString()
+    const fsRecord = cleanForFirestore({
+      id: docId,
+      name: cleanName,
+      category: payload.category,
+      language: payload.language || 'en_US',
+      header_type: payload.header_type ?? null,
+      header_content: payload.header_content ?? null,
+      header_media_url: payload.header_media_url ?? null,
+      header_handle: payload.header_handle ?? null,
+      body_text: payload.body_text,
+      footer_text: payload.footer_text ?? null,
+      buttons: payload.buttons ?? null,
+      sample_values: payload.sample_values ?? null,
+      status: normalizeStatus(metaStatus),
+      meta_template_id: metaTemplateId,
+      submission_error: null,
+      rejection_reason: null,
+      account_id: accountId,
+      accountId: accountId,
+      user_id: user.uid,
+      created_at: nowIso,
+      updated_at: nowIso,
+      last_submitted_at: nowIso,
+    })
+
+    const db = getAdminDb()
+    if (db) {
+      await Promise.allSettled([
+        db.collection('message_templates').doc(docId).set(fsRecord, { merge: true }),
+        db.collection('accounts').doc(accountId).collection('templates').doc(docId).set(fsRecord, { merge: true }),
+      ])
+    }
+
+    // Supabase best-effort write
+    const { data: row } = await upsertTemplateRow(
       supabase,
       buildUpsertRow(accountId, user.uid, payload, {
         status: normalizeStatus(metaStatus),
@@ -228,22 +271,9 @@ export async function POST(request: Request) {
       }),
     )
 
-    if (upsertErr) {
-      // The submit succeeded on Meta's side but we failed to persist
-      // locally. That's a data-drift state — surface the meta_template_id
-      // so the user can recover via "Sync from Meta".
-      return NextResponse.json(
-        {
-          error: `Submitted to Meta but failed to save locally: ${upsertErr.message}. Run "Sync from Meta" to recover.`,
-          meta_template_id: metaTemplateId,
-        },
-        { status: 500 },
-      )
-    }
-
     return NextResponse.json({
       success: true,
-      template: row,
+      template: fsRecord || row,
       dry_run: dryRun,
     })
   } catch (error) {
