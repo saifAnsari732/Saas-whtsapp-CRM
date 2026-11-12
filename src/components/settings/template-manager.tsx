@@ -232,6 +232,7 @@ export function TemplateManager() {
     }
 
     return {
+      id: editingId || undefined,
       name: form.name.trim(),
       category: form.category,
       language: form.language.trim() || 'en_US',
@@ -265,7 +266,8 @@ export function TemplateManager() {
   }
 
   function openEdit(template: MessageTemplate) {
-    setEditingId(template.id);
+    const validId = template.id || template.meta_template_id || (template as any).docId || template.name;
+    setEditingId(validId ? String(validId) : null);
     setForm({
       name: template.name,
       category: template.category,
@@ -301,9 +303,9 @@ export function TemplateManager() {
     if (form.category === 'Authentication') return;
     try {
       setSubmitting(true);
-      const isEdit = editingId !== null;
+      const isEdit = Boolean(editingId && editingId !== 'null' && editingId !== 'undefined');
       const url = isEdit
-        ? `/api/whatsapp/templates/${editingId}`
+        ? `/api/whatsapp/templates/${encodeURIComponent(editingId!)}`
         : '/api/whatsapp/templates/submit';
       const res = await fetch(url, {
         method: isEdit ? 'PATCH' : 'POST',

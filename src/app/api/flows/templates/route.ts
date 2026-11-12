@@ -1,27 +1,22 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getAccountContext } from '@/lib/firebase/auth-helper'
 import { listFlowTemplates } from '@/lib/flows/templates'
+
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/flows/templates
  *
  * Returns the static template gallery (slug + name + description +
  * icon hint + node_count) so the New-flow dialog can render cards
- * without bundling the full template payloads client-side. Bodies
- * are fetched only on actual clone via POST /api/flows.
- *
- * Available to any signed-in user. Flows is in soft-GA.
+ * without bundling the full template payloads client-side.
  */
-export async function GET() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
+export async function GET(request: Request) {
+  const accCtx = await getAccountContext(request as any)
+  if (!accCtx?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  // Shallow shape so the client gallery doesn't have to know about
-  // the full node tree.
+
   const templates = listFlowTemplates().map((t) => ({
     slug: t.slug,
     name: t.name,

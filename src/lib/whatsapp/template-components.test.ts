@@ -108,7 +108,7 @@ describe('buildMetaTemplatePayload', () => {
     ]);
   });
 
-  it('strips +91 from toll-free numbers in PHONE_NUMBER buttons', () => {
+  it('formats toll-free numbers with +91 in PHONE_NUMBER buttons', () => {
     const payload = buildMetaTemplatePayload({
       ...base,
       buttons: [
@@ -117,7 +117,7 @@ describe('buildMetaTemplatePayload', () => {
     });
     const buttons = payload.components.find((c) => c.type === 'BUTTONS');
     expect(buttons?.buttons).toEqual([
-      { type: 'PHONE_NUMBER', text: 'Call Toll Free', phone_number: '18008890860' },
+      { type: 'PHONE_NUMBER', text: 'Call Toll Free', phone_number: '+9118008890860' },
     ]);
   });
 

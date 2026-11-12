@@ -98,18 +98,19 @@ describe('phoneVariants', () => {
 });
 
 describe('sanitizeTemplatePhoneNumber', () => {
-  it('strips +91 or 91 prefix from Indian toll-free numbers (1800 / 1860)', () => {
-    expect(sanitizeTemplatePhoneNumber('+9118008890860')).toBe('18008890860');
-    expect(sanitizeTemplatePhoneNumber('9118008890860')).toBe('18008890860');
-    expect(sanitizeTemplatePhoneNumber('+91 1800 8890 860')).toBe('18008890860');
-    expect(sanitizeTemplatePhoneNumber('+91-1800-889-0860')).toBe('18008890860');
-    expect(sanitizeTemplatePhoneNumber('018008890860')).toBe('18008890860');
-    expect(sanitizeTemplatePhoneNumber('18008890860')).toBe('18008890860');
-    expect(sanitizeTemplatePhoneNumber('1800 8890 860')).toBe('18008890860');
+  it('formats Indian toll-free numbers (1800 / 1860) with +91 international prefix so dialer does not mistake for US +1', () => {
+    expect(sanitizeTemplatePhoneNumber('+9118008890860')).toBe('+9118008890860');
+    expect(sanitizeTemplatePhoneNumber('9118008890860')).toBe('+9118008890860');
+    expect(sanitizeTemplatePhoneNumber('+91 1800 8890 860')).toBe('+9118008890860');
+    expect(sanitizeTemplatePhoneNumber('+91-1800-889-0860')).toBe('+9118008890860');
+    expect(sanitizeTemplatePhoneNumber('018008890860')).toBe('+9118008890860');
+    expect(sanitizeTemplatePhoneNumber('18008890860')).toBe('+9118008890860');
+    expect(sanitizeTemplatePhoneNumber('1800 8890 860')).toBe('+9118008890860');
 
     // 1860 series
-    expect(sanitizeTemplatePhoneNumber('+9118601234567')).toBe('18601234567');
-    expect(sanitizeTemplatePhoneNumber('9118601234567')).toBe('18601234567');
+    expect(sanitizeTemplatePhoneNumber('+9118601234567')).toBe('+9118601234567');
+    expect(sanitizeTemplatePhoneNumber('9118601234567')).toBe('+9118601234567');
+    expect(sanitizeTemplatePhoneNumber('18601234567')).toBe('+9118601234567');
   });
 
   it('preserves and formats international code for normal mobile numbers', () => {

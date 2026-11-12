@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { getAdminDb, cleanForFirestore } from '@/lib/firebase/admin'
+import { getAccountContext } from '@/lib/firebase/auth-helper'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import {
   loadStepsTree,
@@ -12,147 +12,241 @@ import {
   validateTriggerForActivation,
 } from '@/lib/automations/validate'
 
-async function requireUser() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  return user
+export const dynamic = 'force-dynamic'
+
+async function resolveAutomation(id: string, accountId: string) {
+  const fDb = getAdminDb()
+  if (fDb) {
+    try {
+      const doc = await fDb
+        .collection('accounts')
+        .doc(accountId)
+        .collection('automations')
+        .doc(id)
+        .get()
+      if (doc.exists) {
+        return { source: 'firestore-account' as const, doc }
+      }
+    } catch {}
+
+    try {
+      const doc = await fDb.collection('automations').doc(id).get()
+      if (doc.exists) {
+        const d = doc.data()
+        if (d?.account_id === accountId || d?.accountId === accountId) {
+          return { source: 'firestore-top' as const, doc }
+        }
+      }
+    } catch {}
+  }
+
+  return null
 }
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params
-  const user = await requireUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const { id } = await params
+    const accCtx = await getAccountContext(_request as any)
+    const accountId = accCtx?.accountId
 
-  const admin = supabaseAdmin()
-  const { data: automation, error } = await admin
-    .from('automations')
-    .select('*')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .maybeSingle()
+    if (!accCtx?.user || !accountId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!automation) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const resolved = await resolveAutomation(id, accountId)
+    if (resolved) {
+      const data = resolved.doc.data() || {}
+      let steps = data.steps || []
+      if (!Array.isArray(steps) || steps.length === 0) {
+        try {
+          steps = await loadStepsTree(id)
+        } catch {}
+      }
+      return NextResponse.json({
+        automation: { id: resolved.doc.id, ...data },
+        steps,
+      })
+    }
 
-  const steps = await loadStepsTree(id)
-  return NextResponse.json({ automation, steps })
+    // Supabase fallback
+    try {
+      const admin = supabaseAdmin()
+      const { data: automation, error } = await admin
+        .from('automations')
+        .select('*')
+        .eq('id', id)
+        .eq('account_id', accountId)
+        .maybeSingle()
+
+      if (automation && !error) {
+        const steps = await loadStepsTree(id).catch(() => [])
+        return NextResponse.json({ automation, steps })
+      }
+    } catch (sbErr) {
+      console.warn('[automations/[id] GET] Supabase fallback error:', sbErr)
+    }
+
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  } catch (err: any) {
+    console.error('[automations/[id] GET] Error:', err)
+    return NextResponse.json(
+      { error: err?.message || 'Failed to load automation' },
+      { status: 500 },
+    )
+  }
 }
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params
-
-  // Editing an automation is a write — the RLS automations_update policy
-  // requires `agent`, but this route mutates via the service-role client
-  // which bypasses RLS, so enforce the role here.
   try {
-    await requireRole('agent')
-  } catch (err) {
-    return toErrorResponse(err)
-  }
+    const { id } = await params
+    const accCtx = await getAccountContext(request as any)
+    const accountId = accCtx?.accountId
 
-  const user = await requireUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const body = await request.json().catch(() => null)
-  if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-
-  const admin = supabaseAdmin()
-
-  // Ownership check before we touch anything. Load the fields we need
-  // to compute the post-patch "effective" state for validation.
-  const { data: existing } = await admin
-    .from('automations')
-    .select('id, user_id, is_active, trigger_type, trigger_config')
-    .eq('id', id)
-    .maybeSingle()
-  if (!existing || existing.user_id !== user.id) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
-  const update: Record<string, unknown> = {}
-  for (const k of [
-    'name',
-    'description',
-    'trigger_type',
-    'trigger_config',
-    'is_active',
-  ] as const) {
-    if (k in body) update[k] = body[k]
-  }
-
-  // If this PATCH leaves the automation active (either explicitly
-  // activating it OR editing an already-active one), validate the
-  // merged configuration first. Activation is the natural gate — drafts
-  // are still allowed to be incomplete.
-  const willBeActive =
-    typeof update.is_active === 'boolean' ? update.is_active : existing.is_active
-  if (willBeActive) {
-    const mergedTriggerType = (update.trigger_type ?? existing.trigger_type) as string
-    const mergedTriggerConfig = update.trigger_config ?? existing.trigger_config
-    const mergedSteps = Array.isArray(body.steps)
-      ? (body.steps as { step_type: string; step_config: Record<string, unknown> }[])
-      : await loadStepsTree(id)
-    const issues = [
-      ...validateTriggerForActivation(mergedTriggerType, mergedTriggerConfig),
-      ...validateStepsForActivation(mergedSteps),
-    ]
-    if (issues.length > 0) {
-      return NextResponse.json(
-        {
-          error: 'Cannot keep automation active with invalid configuration',
-          issues,
-        },
-        { status: 400 },
-      )
+    if (!accCtx?.user || !accountId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-  }
 
-  if (Object.keys(update).length > 0) {
-    const { error: updErr } = await admin
-      .from('automations')
-      .update(update)
-      .eq('id', id)
-    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 })
-  }
+    const body = await request.json().catch(() => null)
+    if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
 
-  if (Array.isArray(body.steps)) {
-    const err = await replaceSteps(id, body.steps as BuilderStepInput[])
-    if (err) return NextResponse.json({ error: err }, { status: 500 })
-  }
+    const resolved = await resolveAutomation(id, accountId)
+    let existingData: any = resolved?.doc?.data()
 
-  return NextResponse.json({ ok: true })
+    if (!existingData) {
+      // Supabase fallback lookup
+      try {
+        const admin = supabaseAdmin()
+        const { data } = await admin
+          .from('automations')
+          .select('id, user_id, is_active, trigger_type, trigger_config, account_id')
+          .eq('id', id)
+          .maybeSingle()
+        if (data && (data.account_id === accountId || data.user_id === accCtx.user.uid)) {
+          existingData = data
+        }
+      } catch {}
+    }
+
+    if (!existingData) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+
+    const update: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+    for (const k of [
+      'name',
+      'description',
+      'trigger_type',
+      'trigger_config',
+      'is_active',
+      'steps',
+    ] as const) {
+      if (k in body) update[k] = body[k]
+    }
+
+    const willBeActive =
+      typeof update.is_active === 'boolean' ? update.is_active : existingData.is_active
+    if (willBeActive) {
+      const mergedTriggerType = (update.trigger_type ?? existingData.trigger_type) as string
+      const mergedTriggerConfig = update.trigger_config ?? existingData.trigger_config
+      const mergedSteps = Array.isArray(body.steps)
+        ? (body.steps as { step_type: string; step_config: Record<string, unknown> }[])
+        : Array.isArray(existingData.steps)
+          ? existingData.steps
+          : await loadStepsTree(id).catch(() => [])
+
+      const issues = [
+        ...validateTriggerForActivation(mergedTriggerType, mergedTriggerConfig),
+        ...validateStepsForActivation(mergedSteps),
+      ]
+      if (issues.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'Cannot keep automation active with invalid configuration',
+            issues,
+          },
+          { status: 400 },
+        )
+      }
+    }
+
+    const fDb = getAdminDb()
+    if (fDb) {
+      const cleanUpdate = cleanForFirestore(update)
+      await Promise.allSettled([
+        fDb
+          .collection('accounts')
+          .doc(accountId)
+          .collection('automations')
+          .doc(id)
+          .set(cleanUpdate, { merge: true }),
+        fDb.collection('automations').doc(id).set(cleanUpdate, { merge: true }),
+      ])
+    }
+
+    // Dual-write Supabase (best-effort)
+    try {
+      const admin = supabaseAdmin()
+      const { steps: _s, ...sbUpdate } = update
+      if (Object.keys(sbUpdate).length > 0) {
+        await admin.from('automations').update(sbUpdate).eq('id', id)
+      }
+      if (Array.isArray(body.steps)) {
+        await replaceSteps(id, body.steps as BuilderStepInput[])
+      }
+    } catch (sbErr) {
+      console.warn('[automations/[id] PATCH] Supabase dual-write warning:', sbErr)
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    console.error('[automations/[id] PATCH] Error:', err)
+    return NextResponse.json(
+      { error: err?.message || 'Failed to update automation' },
+      { status: 500 },
+    )
+  }
 }
 
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params
-
-  // Deleting an automation is a write — enforce `agent` (the service-role
-  // client below bypasses the agent-gated automations_delete RLS).
   try {
-    await requireRole('agent')
-  } catch (err) {
-    return toErrorResponse(err)
+    const { id } = await params
+    const accCtx = await getAccountContext(_request as any)
+    const accountId = accCtx?.accountId
+
+    if (!accCtx?.user || !accountId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const fDb = getAdminDb()
+    if (fDb) {
+      await Promise.allSettled([
+        fDb.collection('accounts').doc(accountId).collection('automations').doc(id).delete(),
+        fDb.collection('automations').doc(id).delete(),
+      ])
+    }
+
+    // Best-effort delete from Supabase
+    try {
+      await supabaseAdmin().from('automations').delete().eq('id', id)
+    } catch {}
+
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    console.error('[automations/[id] DELETE] Error:', err)
+    return NextResponse.json(
+      { error: err?.message || 'Failed to delete automation' },
+      { status: 500 },
+    )
   }
-
-  const user = await requireUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { error } = await supabaseAdmin()
-    .from('automations')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', user.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
 }

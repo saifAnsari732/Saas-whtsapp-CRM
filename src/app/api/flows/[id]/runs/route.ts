@@ -1,86 +1,116 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getAdminDb } from '@/lib/firebase/admin'
+import { getAccountContext } from '@/lib/firebase/auth-helper'
+import { supabaseAdmin } from '@/lib/flows/admin-client'
+
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/flows/[id]/runs
  *
  * Newest-first list of flow runs for a single flow, with the latest
- * event timeline embedded for each. Used by the run-history viewer
- * page (`/flows/[id]/runs`) to give the owner end-to-end visibility
- * into what the bot did with each customer.
- *
- * RLS does the ownership check (flow_runs has a `user_id` policy);
- * we also gate on the per-account beta flag so the route 404s for
- * non-beta accounts matching the rest of /api/flows.
- *
- * Limited to the 50 most recent runs. Pagination can come later;
- * the dashboard surface here is for debugging, not heavy querying.
+ * event timeline embedded for each.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await context.params
+  try {
+    const { id } = await context.params
+    const accCtx = await getAccountContext(request as any)
+    const accountId = accCtx?.accountId
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  // Confirm flow exists + caller owns it (RLS does this) before doing
-  // the run query — gives us a clean 404 instead of empty array.
-  const { data: flow } = await supabase
-    .from('flows')
-    .select('id, name')
-    .eq('id', id)
-    .maybeSingle()
-  if (!flow) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
-  // Pull runs + each run's contact name + each run's events. Two
-  // joined selects keep the round-trip count to the runs query + one
-  // per-run events query.
-  const { data: runs, error: runsErr } = await supabase
-    .from('flow_runs')
-    .select(
-      'id, status, current_node_key, started_at, last_advanced_at, ended_at, end_reason, vars, reprompt_count, contact:contacts(id, name, phone)',
-    )
-    .eq('flow_id', id)
-    .order('started_at', { ascending: false })
-    .limit(50)
-  if (runsErr) {
-    return NextResponse.json({ error: runsErr.message }, { status: 500 })
-  }
-
-  const runIds = (runs ?? []).map((r: any) => (r as { id: string }).id)
-  let events: Array<{
-    flow_run_id: string
-    event_type: string
-    node_key: string | null
-    payload: Record<string, unknown>
-    created_at: string
-  }> = []
-  if (runIds.length > 0) {
-    const { data: evs, error: evsErr } = await supabase
-      .from('flow_run_events')
-      .select('flow_run_id, event_type, node_key, payload, created_at')
-      .in('flow_run_id', runIds)
-      .order('created_at', { ascending: true })
-    if (evsErr) {
-      // Non-fatal — the page can still show runs without timelines.
-      console.error('[flows-runs] events fetch failed:', evsErr.message)
-    } else if (evs) {
-      events = evs as typeof events
+    if (!accCtx?.user || !accountId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-  }
 
-  return NextResponse.json({
-    flow,
-    runs: runs ?? [],
-    events,
-  })
+    const fDb = getAdminDb()
+    let flow: any = null
+    let runs: any[] = []
+    let events: any[] = []
+
+    if (fDb) {
+      try {
+        const flowDoc = await fDb
+          .collection('accounts')
+          .doc(accountId)
+          .collection('flows')
+          .doc(id)
+          .get()
+        if (flowDoc.exists) {
+          flow = { id: flowDoc.id, name: flowDoc.data()?.name || '' }
+        } else {
+          const topDoc = await fDb.collection('flows').doc(id).get()
+          if (topDoc.exists) {
+            flow = { id: topDoc.id, name: topDoc.data()?.name || '' }
+          }
+        }
+      } catch {}
+
+      try {
+        const runsSnap = await fDb
+          .collection('accounts')
+          .doc(accountId)
+          .collection('flows')
+          .doc(id)
+          .collection('runs')
+          .orderBy('started_at', 'desc')
+          .limit(50)
+          .get()
+        runs = runsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      } catch {}
+    }
+
+    // Supabase fallback if empty
+    if (!flow || runs.length === 0) {
+      try {
+        const admin = supabaseAdmin()
+        if (!flow) {
+          const { data: sf } = await admin
+            .from('flows')
+            .select('id, name')
+            .eq('id', id)
+            .maybeSingle()
+          if (sf) flow = sf
+        }
+        if (runs.length === 0) {
+          const { data: sRuns } = await admin
+            .from('flow_runs')
+            .select(
+              'id, status, current_node_key, started_at, last_advanced_at, ended_at, end_reason, vars, reprompt_count, contact:contacts(id, name, phone)',
+            )
+            .eq('flow_id', id)
+            .order('started_at', { ascending: false })
+            .limit(50)
+          if (sRuns) runs = sRuns
+
+          const runIds = runs.map((r: any) => r.id)
+          if (runIds.length > 0) {
+            const { data: evs } = await admin
+              .from('flow_run_events')
+              .select('flow_run_id, event_type, node_key, payload, created_at')
+              .in('flow_run_id', runIds)
+              .order('created_at', { ascending: true })
+            if (evs) events = evs
+          }
+        }
+      } catch {}
+    }
+
+    if (!flow) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({
+      flow,
+      runs: runs ?? [],
+      events: events ?? [],
+    })
+  } catch (err: any) {
+    console.error('[flows/[id]/runs GET] Error:', err)
+    return NextResponse.json(
+      { error: err?.message || 'Failed to load flow runs' },
+      { status: 500 },
+    )
+  }
 }

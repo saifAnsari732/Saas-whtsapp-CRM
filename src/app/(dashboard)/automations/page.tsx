@@ -69,13 +69,12 @@ export default function AutomationsPage() {
 
   async function load() {
     try {
-      const supabase = createClient()
-      const { data, error: fetchErr } = await supabase
-        .from("automations")
-        .select("*")
-        .order("created_at", { ascending: false })
-      if (fetchErr) throw fetchErr
-      setAutomations((data ?? []) as Automation[])
+      const res = await fetch("/api/automations")
+      if (!res.ok) {
+        throw new Error(`Failed to load automations: ${res.status}`)
+      }
+      const data = await res.json()
+      setAutomations((data.automations ?? []) as Automation[])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load automations")
     }

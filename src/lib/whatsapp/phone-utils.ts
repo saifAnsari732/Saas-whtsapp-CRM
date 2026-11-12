@@ -89,10 +89,13 @@ export function normalizePhone(phone: string): string {
  * Sanitize phone number for WhatsApp message template PHONE_NUMBER buttons.
  *
  * CRITICAL RULE:
- * Indian toll-free numbers (1800xxxxxxx, 1860xxxxxxx) must NEVER have a "+91"
- * or "91" country code prepended. When dialed with "+91", Indian telecom carriers
- * (Jio, Airtel, Vi, BSNL) reject the call as invalid / non-existent.
- * Toll-free numbers must be clean national digits (e.g. "18008890860" or "18601234567").
+ * Meta template PHONE_NUMBER buttons require full international format (E.164)
+ * with a leading '+' and country code.
+ *
+ * Leaving a bare "1800..." or "1860..." without "+91" causes Android and WhatsApp
+ * dialers to interpret the leading '1' as the North American (+1) country code,
+ * formatting it as "+1 800-889-0860" and attempting to dial via the US!
+ * Prepending "+91" ensures it dials India properly without telecom or dialer confusion.
  *
  * For regular landlines and mobile numbers, standard international E.164 with "+"
  * is preserved or prepended (e.g. "+919511450914", "+15558023973").
@@ -104,19 +107,20 @@ export function sanitizeTemplatePhoneNumber(phone: string): string {
 
   if (!digits) return '';
 
-  // 1. Indian Toll-free with accidental 91 prefix: 911800... or 911860...
+  // 1. Indian Toll-free with 91 prefix: 911800... or 911860...
   if (/^91(1800|1860)\d{6,8}$/.test(digits)) {
-    return digits.slice(2);
+    return `+${digits}`;
   }
 
   // 2. Indian Toll-free with leading trunk 0: 01800... or 01860...
   if (/^0(1800|1860)\d{6,8}$/.test(digits)) {
-    return digits.slice(1);
+    return `+91${digits.slice(1)}`;
   }
 
   // 3. Indian Toll-free clean: 1800... or 1860...
+  // Must have +91 so mobile dialers don't dial +1 (USA)
   if (/^(1800|1860)\d{6,8}$/.test(digits)) {
-    return digits;
+    return `+91${digits}`;
   }
 
   // 4. Regular number with existing '+'
