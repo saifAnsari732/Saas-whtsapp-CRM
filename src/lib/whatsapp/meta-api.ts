@@ -434,7 +434,7 @@ export async function sendTemplateMessage(
     body.context = { message_id: contextMessageId }
   }
 
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -442,6 +442,39 @@ export async function sendTemplateMessage(
     },
     body: JSON.stringify(body),
   })
+  if (!response.ok) {
+    let errBody: any = null
+    try {
+      const cloned = response.clone()
+      errBody = await cloned.json()
+    } catch {}
+
+    const errCode = errBody?.error?.code
+    const errMsg = errBody?.error?.message || ''
+
+    // If phone number is not registered (#133010), attempt on-the-fly registration with default PIN and retry
+    if (errCode === 133010 || /not\s+registered/i.test(errMsg)) {
+      console.warn(`[sendTemplateMessage] Account ${phoneNumberId} not registered (#133010). Attempting auto-registration...`)
+      try {
+        await registerPhoneNumber({
+          phoneNumberId,
+          accessToken,
+          pin: '123456',
+        })
+        console.log(`[sendTemplateMessage] Successfully auto-registered ${phoneNumberId}. Retrying template send...`)
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(body),
+        })
+      } catch (regErr) {
+        console.error('[sendTemplateMessage] Auto-registration retry failed:', regErr)
+      }
+    }
+  }
   if (!response.ok) {
     await throwMetaError(response, `Meta API error: ${response.status}`)
   }

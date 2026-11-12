@@ -5,6 +5,7 @@ import {
   getSubscribedApps,
   verifyPhoneNumber,
   subscribeWabaToApp,
+  registerPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
 import { getAdminDb } from '@/lib/firebase/admin'
 import { getAccountContext, getFirebaseUser } from '@/lib/firebase/auth-helper'
@@ -170,13 +171,24 @@ export async function GET(request: Request) {
   }
   const errors: string[] = []
 
-  // 1. Phone metadata
+  // 1. Phone metadata & Cloud API registration
   try {
     await verifyPhoneNumber({
       phoneNumberId,
       accessToken,
     })
     checks.phone_metadata_ok = true
+
+    // Ensure phone number is actively registered with Meta
+    try {
+      await registerPhoneNumber({
+        phoneNumberId,
+        accessToken,
+        pin: '123456',
+      })
+    } catch (regNotice: any) {
+      console.warn('[verify-registration] registerPhoneNumber check notice:', regNotice?.message || regNotice)
+    }
   } catch (err) {
     errors.push(
       `Phone metadata check failed: ${err instanceof Error ? err.message : String(err)}`,

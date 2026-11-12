@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getAccountContext, getFirebaseUser } from "@/lib/firebase/auth-helper";
 import { encrypt } from "@/lib/whatsapp/encryption";
-import { subscribeWabaToApp, verifyPhoneNumber } from "@/lib/whatsapp/meta-api";
+import { subscribeWabaToApp, verifyPhoneNumber, registerPhoneNumber } from "@/lib/whatsapp/meta-api";
 
 export async function POST(req: NextRequest) {
   try {
@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Subscribe WABA to app's webhook
+    // 5. Subscribe WABA to app's webhook & register phone number
     let subscribedAppsAt: string | null = null;
     try {
       await subscribeWabaToApp({
@@ -219,6 +219,17 @@ export async function POST(req: NextRequest) {
       subscribedAppsAt = new Date().toISOString();
     } catch (subErr) {
       console.warn('[exchange] subscribeWabaToApp warning (continuing):', subErr);
+    }
+
+    try {
+      await registerPhoneNumber({
+        phoneNumberId,
+        accessToken: tokenToPersist,
+        pin: '123456',
+      });
+      console.log('[exchange] Phone number auto-registered successfully with Meta Cloud API');
+    } catch (regErr: any) {
+      console.warn('[exchange] registerPhoneNumber notice (continuing):', regErr?.message || regErr);
     }
 
     // 6. Verify and retrieve full phone metadata
